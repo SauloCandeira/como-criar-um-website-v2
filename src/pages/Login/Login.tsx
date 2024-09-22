@@ -1,10 +1,20 @@
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { signInWithPopup } from "firebase/auth"; 
+import { signInWithPopup, onAuthStateChanged } from "firebase/auth"; 
 import { auth, provider } from '../../lib/init-firebase'; 
 import "./Login.css";
 
 const Login = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        navigate('/como-criar-um-website-v2/dashboard');
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
 
   const handleBack = () => {
     navigate("/como-criar-um-website-v2/");
