@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInWithPopup, onAuthStateChanged } from "firebase/auth"; 
 import { auth, provider } from '../../lib/init-firebase'; 
