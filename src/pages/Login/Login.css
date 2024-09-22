@@ -1,0 +1,114 @@
+* {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    font-family: 'Roboto', sans-serif;
+  }
+  
+  .login-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: linear-gradient(135deg, #092554, #00aaff); 
+    color: white; 
+    padding: 20px;
+  }
+  
+  .back-button {
+    position: absolute; /* Posição absoluta para ficar no topo */
+    top: 20px; /* Distância do topo */
+    left: 20px; /* Distância da esquerda */
+    background: transparent;
+    border: none;
+    color: #00aaff; 
+    cursor: pointer;
+    font-size: 16px;
+    transition: color 0.3s;
+  }
+  
+  .back-button:hover {
+    color: #0088cc; 
+  }
+  
+  .login-form {
+    background-color: rgba(255, 255, 255, 0.2); 
+    border-radius: 10px;
+    padding: 30px;
+    width: 100%;
+    max-width: 400px; 
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); 
+    backdrop-filter: blur(10px); 
+    transition: transform 0.3s ease;
+  }
+  
+  .login-form:hover {
+    transform: scale(1.02); 
+  }
+  
+  h2 {
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 600;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  
+  .login-with-google-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #db4437; 
+    border: none;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+  }
+  
+  .login-with-google-btn:hover {
+    background-color: #c13525; 
+  }
+  
+  .user-info {
+    margin-top: 20px;
+    text-align: center;
+  }
+  
+  .user-info img {
+    border-radius: 50%;
+    width: 80px; 
+    height: 80px; 
+    object-fit: cover; 
+    margin-top: 10px;
+  }
+  
+  .signup-link {
+    text-align: center;
+    margin-top: 15px;
+    color: #00aaff; 
+  }
+  
+  .signup-link a {
+    color: #00aaff;
+    text-decoration: underline; 
+    transition: color 0.3s;
+  }
+  
+  .signup-link a:hover {
+    color: #0088cc; 
+  }
+  
+  @media (max-width: 600px) {
+    .login-form {
+      padding: 20px;
+      width: 90%; 
+    }
+  
+    .back-button {
+      font-size: 14px; 
+    }
+  }
+  
