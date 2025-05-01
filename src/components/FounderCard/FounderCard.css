@@ -1,7 +1,7 @@
 /* FounderCard.css */
 
 .founder-card {
-  background-color: #ffffff;
+  background-color: #007bff;
   border-radius: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   width: 100%; /* Ocupa 100% da largura disponível */
@@ -11,6 +11,26 @@
   text-align: center;
   transition: transform 0.3s ease;
 }
+
+/* Certifique-se de que este arquivo esteja no caminho correto */
+.founder-section {
+  background-color: #092554; /* Cor de fundo igual ao SCSS */
+  background-image: url('../../assets/img/stars.png'); /* Imagem de fundo igual ao SCSS */
+  background-size: cover; /* Ajusta a imagem de fundo para cobrir todo o fundo */
+  background-repeat: no-repeat; /* Evita repetição da imagem de fundo */
+  background-position: center; /* Ajusta a posição da imagem de fundo */
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh; /* Garante que ocupe pelo menos 100% da altura da viewport */
+  position: relative; /* Necessário para posicionar a linha de conexão */
+  padding: 2rem; /* Adiciona um padding para a seção */
+  overflow: hidden; /* Garante que nenhum conteúdo ultrapasse os limites da seção */
+}
+
+
 
 .founder-card:hover {
   transform: translateY(-5px);

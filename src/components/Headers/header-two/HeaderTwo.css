@@ -1,7 +1,7 @@
 /* HeaderTwo.css */
 header {
-  background-color: rgba(9, 37, 84, 0.9) !important; /* Azul escuro com 90% de opacidade */
-  padding: 10px 20px;
+  background-color: rgba(9, 37, 84, 0.9) !important;
+  padding: 20px 20px; /* Ajuste o padding para o cabeçalho */
   position: fixed;
   width: 100%;
   top: 0;
@@ -10,6 +10,7 @@ header {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
+  height: 60px; /* Defina a altura do cabeçalho */
 }
 
 .container {
@@ -18,8 +19,8 @@ header {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  justify-content: space-between; /* Distribui o espaço entre os itens */
-  padding: 0 20px; /* Adiciona padding horizontal para garantir que o conteúdo não fique colado nas bordas */
+  justify-content: space-between;
+  padding: 0 20px;
 }
 
 .language-switcher {

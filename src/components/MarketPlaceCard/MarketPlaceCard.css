@@ -1,0 +1,126 @@
+.marketplace-container {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 20px;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background: #1c2c4c;
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.sidebar h2 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  border-bottom: 2px solid white;
+  padding-bottom: 5px;
+}
+
+/* Filtros */
+.filter-category {
+  margin-bottom: 15px;
+}
+
+.filter-category h3 {
+  font-size: 16px;
+  margin-bottom: 5px;
+  color: #f0f0f0;
+}
+
+.filter-subcategory {
+  margin-left: 10px;
+}
+
+.filter-subcategory strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.filter-subcategory label {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 5px 0;
+}
+
+.filter-subcategory input {
+  margin-right: 10px;
+}
+
+/* Produtos */
+.products-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  flex: 1;
+}
+
+.product-card {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 15px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  height: 100%;
+}
+
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.product-image {
+  width: 100%;
+  max-width: 200px;
+  height: 150px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.product-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.product-category {
+  font-size: 14px;
+  color: #555;
+}
+
+.product-price {
+  font-size: 18px;
+  font-weight: bold;
+  color: #0077b6;
+}
+
+.view-product-btn {
+  padding: 8px 15px;
+  background-color: #0077b6;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  width: 100%;
+  max-width: 150px;
+}
+
+.view-product-btn:hover {
+  background-color: #005f8d;
+}

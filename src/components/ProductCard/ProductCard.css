@@ -1,43 +1,204 @@
-/* src/components/ProductCard/ProductCard.css */
+/* Estilo para o título, descrição e botão */
+/* Certifique-se de que este arquivo esteja no caminho correto */
+.product-section {
+  background-color: #092554; /* Cor de fundo igual ao SCSS */
+  background-image: url('../../assets/img/stars.png'); /* Imagem de fundo igual ao SCSS */
+  background-size: cover; /* Ajusta a imagem de fundo para cobrir todo o fundo */
+  background-repeat: no-repeat; /* Evita repetição da imagem de fundo */
+  background-position: center; /* Ajusta a posição da imagem de fundo */
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh; /* Garante que ocupe pelo menos 100% da altura da viewport */
+  position: relative; /* Necessário para posicionar a linha de conexão */
+  padding: 2rem; /* Adiciona um padding para a seção */
+  overflow: hidden; /* Garante que nenhum conteúdo ultrapasse os limites da seção */
+}
 
-.product-card {
-  background-color: #ffffff;
+
+.product-header {
+  display: flex;
+  justify-content: space-between; /* Alinha título e descrição à esquerda e botão à direita */
+  align-items: center;
+  margin-bottom: 20px;
+  background-color: rgba(9, 37, 84, 0.9); /* Fundo com opacidade para o header */
+  padding: 20px;
   border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  max-width: 300px;
-  margin: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* Sombra suave para um visual mais moderno */
+}
+
+.product-header .text-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 75%; /* Limita a largura do título e descrição */
+}
+
+.product-header h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px; /* Aumenta o espaçamento entre letras */
+}
+
+.product-header .product-description {
+  font-size: 1rem;
+  color: #ccc;
+  text-align: justify;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.product-header .view-all-button {
+  background-color: #3b7a57;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  font-size: 1rem;
+  border-radius: 30px; /* Bordas mais arredondadas para o botão */
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.3s ease; /* Efeito de hover mais suave */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-header .view-all-button:hover {
+  background-color: #2e5d45;
+  transform: scale(1.05); /* Pequeno efeito de ampliação no hover */
+}
+
+.product-header .view-all-button:active {
+  transform: scale(1); /* Anula o efeito de ampliação ao clicar */
+}
+
+/* Slider */
+.product-slider {
+  width: 90%;
+  margin: 0 auto;
+  padding: 20px 0;
+  background-color: #092554;
+  background-image: url('../../assets/img/stars.png');
+  background-size: cover;
+  background-position: center;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Wrapper dos cards */
+.product-card-wrapper {
+  padding: 0 10px;
+}
+
+/* Configuração fixa dos cards */
+.product-card {
+  background: rgba(45, 45, 45, 0.9);
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   padding: 20px;
   text-align: center;
   transition: transform 0.3s ease;
+  width: 100%;
+  height: 400px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
 }
 
+/* Hover */
 .product-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-10px);
 }
 
+/* Imagem */
 .product-image {
   width: 100%;
-  height: 200px;
+  max-width: 180px;
+  height: 120px;
+  margin: 0 auto 10px;
+  border-radius: 6px;
   object-fit: cover;
-  border-radius: 10px;
-  margin-bottom: 20px;
 }
 
+/* Informações */
+.product-info {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+/* Nome do Produto */
 .product-info h2 {
-  font-size: 1.5em;
-  margin-bottom: 10px;
-  color: #333;
-}
-
-.product-info p {
-  font-size: 1em;
-  color: #555;
-}
-
-.product-price {
+  font-size: 1.2rem;
   font-weight: bold;
-  color: #007bff;
-  font-size: 1.2em;
-  margin-top: 10px;
+  margin-bottom: 10px;
+  color: #ffffff;
+}
+
+/* Descrição */
+.product-description {
+  font-size: 1rem;
+  color: #ccc;
+  margin-bottom: 10px;
+  height: 80px;
+  overflow-y: auto;
+  padding: 5px;
+  text-align: justify;
+}
+
+/* Preço */
+.product-price {
+  font-size: 1.125rem;
+  font-weight: bold;
+  color: #3b7a57;
+  margin-top: auto;
+}
+
+/* Barra de rolagem mais discreta */
+.product-description::-webkit-scrollbar {
+  width: 5px;
+}
+
+.product-description::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+.product-description::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Ajustes de responsividade */
+@media (max-width: 1024px) {
+  .product-slider {
+    width: 100%;
+  }
+  .product-header h1 {
+    font-size: 1.8rem;
+  }
+  .view-all-button {
+    font-size: 0.9rem;
+    padding: 8px 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .product-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 15px;
+  }
+  .product-header h1 {
+    font-size: 1.6rem;
+  }
+  .product-header .view-all-button {
+    font-size: 0.8rem;
+    padding: 6px 14px;
+    margin-top: 10px;
+  }
 }

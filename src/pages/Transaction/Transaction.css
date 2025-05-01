@@ -1,0 +1,88 @@
+.product-container {
+    max-width: 900px;
+    margin: auto;
+    padding: 40px 20px;
+    text-align: center;
+    font-family: 'Arial', sans-serif;
+  }
+  
+  .product-header {
+    background: linear-gradient(135deg, #092554, #1e90ff);
+    color: white;
+    padding: 50px 20px;
+    border-radius: 10px;
+  }
+  
+  .product-subtitle {
+    font-size: 18px;
+    margin-top: 10px;
+  }
+  
+  .product-content {
+    margin-top: 40px;
+    text-align: left;
+  }
+  
+  h2 {
+    color: #092554;
+    margin-bottom: 20px;
+  }
+  
+  .course-plan {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .course-plan li {
+    background: #f8f8f8;
+    padding: 12px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    font-size: 16px;
+  }
+  
+  .benefits {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .benefit-item {
+    text-align: center;
+    width: 30%;
+    padding: 10px;
+  }
+  
+  .benefit-item img {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .cta-section {
+    margin-top: 40px;
+    background: #1e90ff;
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+  }
+  
+  .price {
+    font-size: 22px;
+    margin-bottom: 20px;
+  }
+  
+  .enroll-button {
+    background: white;
+    color: #1e90ff;
+    border: none;
+    padding: 12px 20px;
+    font-size: 18px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  
+  .enroll-button:hover {
+    background: #f8f8f8;
+  }
+  

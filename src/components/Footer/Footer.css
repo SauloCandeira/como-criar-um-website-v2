@@ -1,0 +1,162 @@
+/* Estilos gerais */
+body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+footer {
+  background-color: #2d2d2d;
+  color: white;
+  padding: 30px 0;
+  font-size: 14px;
+}
+
+.footer-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.footer-logo {
+  flex: 1;
+  min-width: 250px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.footer-logo .logo {
+  width: 150px;
+  margin-bottom: 10px;
+}
+
+.footer-logo .description {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.social-links {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.social-icon {
+  text-decoration: none;
+  color: #999;
+  font-size: 14px;
+}
+
+.social-icon:hover {
+  color: #fff;
+}
+
+/* Links */
+.footer-links {
+  flex: 1;
+  min-width: 200px;
+  margin-bottom: 20px;
+}
+
+.footer-links h4 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.footer-links ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.footer-links ul li {
+  margin: 5px 0;
+}
+
+.footer-links ul li a {
+  text-decoration: none;
+  color: #999;
+}
+
+.footer-links ul li a:hover {
+  color: #fff;
+}
+
+/* Newsletter */
+.newsletter {
+  flex: 1;
+  min-width: 250px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.newsletter h4 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.newsletter-form {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.email-input {
+  padding: 10px;
+  font-size: 14px;
+  border: none;
+  border-radius: 5px;
+  width: 200px;
+}
+
+.subscribe-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.subscribe-btn:hover {
+  background-color: #0056b3;
+}
+
+/* Footer Bottom */
+.footer-bottom {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 12px;
+}
+
+.footer-bottom p {
+  margin: 0;
+}
+
+/* Responsividade */
+@media screen and (max-width: 768px) {
+  .footer-container {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .footer-logo, .footer-links, .newsletter {
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .newsletter-form {
+    flex-direction: column;
+  }
+
+  .email-input {
+    margin-bottom: 10px;
+    width: 100%;
+  }
+}
