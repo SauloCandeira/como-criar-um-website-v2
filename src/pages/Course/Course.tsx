@@ -3,6 +3,7 @@ import './Course.css';
 import CodeRunner from '../../components/CodeRunner/CodeRunner';
 import ContentCourse from '../../components/ContentCourse/ContentCourse';
 import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
+import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
 
 const Course: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -15,6 +16,7 @@ const Course: React.FC = () => {
 
   return (
     <div className="admin-container">
+      <HeaderTwo/>
       <Breadcrumble crumbs={filter} />
 
       {/* Sidebar */}
