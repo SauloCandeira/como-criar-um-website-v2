@@ -1,13 +1,23 @@
 import React, { useState } from 'react';
 import './Dashboard.css';
+import { useNavigate } from 'react-router-dom'; // Certifique-se de importar o useNavigate
+import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
 
+  const navigate = useNavigate(); // Inicialize o hook useNavigate
+
+  const handleViewAllClick = () => {
+    // Ao clicar no botão, navegar para a página de marketplace
+    navigate('/como-criar-um-website-v2/course');
+  };
+
+
   // Dados de cursos e projetos
   const courses = [
-    { id: 1, title: 'React Avançado', status: 'Disponível' },
-    { id: 2, title: 'Node.js para Iniciantes', status: 'Disponível' },
+    { id: 1, title: 'Desenvolvimento web basico', status: 'Disponível' },
+    { id: 2, title: 'Desenvolvimento web intermediario', status: 'Indisponível' },
   ];
 
   const enrolledCourses = [
@@ -19,8 +29,12 @@ const Dashboard: React.FC = () => {
     { id: 2, repository: 'outro-projeto', domain: 'outrosite.com', hosting: 'AWS' }
   ];
 
+  const [filter] = useState<string[]>([]);
+
   return (
     <div className="admin-container">
+      <Breadcrumble crumbs={filter} />
+
       <aside className="admin-sidebar">
         <h2>Admin</h2>
         <ul>
@@ -65,13 +79,17 @@ const Dashboard: React.FC = () => {
                     <h3>{course.title}</h3>
                     <span className="course-status">{course.status}</span>
                   </div>
+                  <button className="view-all-button" onClick={handleViewAllClick}>
+                    Iniciar
+                  </button>
+
                 </li>
               ))}
             </ul>
           </section>
         )}
 
-        {activeTab === 'myCourses' && (
+{activeTab === 'myCourses' && (
           <section>
             <h2>Meus Cursos</h2>
             <ul className="courses-list">
@@ -126,7 +144,7 @@ const Dashboard: React.FC = () => {
                       )}
                     </td>
                     <td>
-                    <button class="action-button" onClick={() => alert('Indo para admin do site')}>Admin</button>
+                    <button className="action-button" onClick={() => alert('Indo para admin do site')}>Admin</button>
                   </td>
 
                   </tr>

@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './CodeRunner.css';
 
 export default function CodeRunner() {
   const [activeTab, setActiveTab] = useState('html');
   const [selectedCdnType, setSelectedCdnType] = useState('js'); // Estado para controlar o tipo de CDN selecionado
-  const editorRef = useRef(null);
-  const aceRef = useRef(null);
 
   // Função para carregar os scripts dinamicamente
   const loadScript = (src: string) => {
@@ -116,7 +114,7 @@ export default function CodeRunner() {
                     </td>
                   </tr>
                   <tr>
-                    <td colSpan="2">
+                  <td colSpan={2}>
                       <input type="button" value="ADD CDN LINK" style={{ fontSize: '17px', backgroundColor: '#4caf50', width: '100%', height: '75px' }} />
                     </td>
                   </tr>

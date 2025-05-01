@@ -1,124 +1,98 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './Course.css';
+import CodeRunner from '../../components/CodeRunner/CodeRunner';
+import ContentCourse from '../../components/ContentCourse/ContentCourse';
+import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
 
 const Course: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('home');
+
+  const enrolledCourses = [
+    { id: 1, title: 'React Avançado', progress: 70 },
+  ];
+
+  const [filter] = useState<string[]>([]);
+
   return (
-    <div>
-      <div id="topBar">
-        <h1 id="logo">Javascript Code Runner</h1>
-        <div id="set">
-          <button className="toggleB" onClick={() => changeTab(1)}>HTML</button>
-          <button className="toggleB" onClick={() => changeTab(2)}>CSS</button>
-          <button className="toggleB" onClick={() => changeTab(3)}>JavaScript</button>
-          <button className="toggleB" onClick={() => changeTab(4)}>CDN</button>
-        </div>
-      </div>
+    <div className="admin-container">
+      <Breadcrumble crumbs={filter} />
 
-      <div id="editor-output-container">
-        <div id="editors-section">
-          <h2>CODE EDITOR</h2>
-          <div id="editors">
-            <div id="editorHTML" className="editorArea active" style={{ fontSize: 13 }}></div>
-            <div id="editorCSS" className="editorArea" style={{ fontSize: 13 }}></div>
-            <div id="editorJS" className="editorArea" style={{ fontSize: 13 }}></div>
-            <div id="editorCDN" className="editorArea">
-              <table className="cdnList" id="list" style={{ display: 'none' }}>
-                <thead>
-                  <tr>
-                    <th className="cell">TYPE</th>
-                    <th className="cell">CDN LINK</th>
-                    <th className="cell">REMOVE</th>
-                  </tr>
-                </thead>
-              </table>
-              <br /><br />
-              <table className="cdnList">
-                <thead>
-                  <tr>
-                    <th className="cell">TYPE</th>
-                    <th className="cell">CDN LINK</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="cell">
-                      <label style={{ fontSize: 25 }}>
-                        <input type="radio" name="cdnType" defaultChecked /> JS
-                      </label><br /><br />
-                      <label style={{ fontSize: 25 }}>
-                        <input type="radio" name="cdnType" /> CSS
-                      </label>
-                    </td>
-                    <td className="cell">
-                      <input type="text" placeholder="ENTER CDN LINK HERE" id="cdnLink" style={{ width: '100%', height: 50, fontSize: 20 }} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={2}>
-                      <input
-                        type="button"
-                        value="ADD CDN LINK"
-                        onClick={addCDN}
-                        style={{ fontSize: 17, backgroundColor: '#4caf50', width: '100%', height: 75 }}
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+      {/* Sidebar */}
+      <aside className="admin-sidebar">
+        <h2>Admin</h2>
+        <ul>
+          <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
+            HOME
+          </li>
+          <li className={activeTab === 'content' ? 'active' : ''} onClick={() => setActiveTab('content')}>
+            CONTEÚDO
+          </li>
+          <li className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
+            EDITOR
+          </li>
+        </ul>
+      </aside>
 
-        <div id="preview-section">
-          <h2>OUTPUT</h2>
-          <div id="preview">
-            <iframe id="output" title="preview" />
-          </div>
-        </div>
-      </div>
+      {/* Main Content */}
+      <main className="admin-content">
 
-      <br /><br />
-      <table style={{ width: '100%' }}>
-        <tbody>
-          <tr>
-            <td>
-              <input
-                type="button"
-                onClick={clearCR}
-                value="CLEAR CODE RUNNER"
-                style={{ fontSize: 17, backgroundColor: '#f44336', width: '100%', height: 75 }}
-              />
-            </td>
-            <td>
-              <input
-                type="button"
-                onClick={newPage}
-                value="OPEN OUTPUT IN NEW TAB"
-                style={{ fontSize: 17, backgroundColor: '#4caf50', width: '100%', height: 75 }}
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        {/* HOME TAB */}
+        {activeTab === 'home' && (
+          <>
+            <section>
+              <h2>📚 Meu Curso Atual</h2>
+              {enrolledCourses.map((course) => (
+                <div key={course.id} className="course-item">
+                  <h3>{course.title}</h3>
+                  <div className="progress-bar">
+                    <div className="progress" style={{ width: `${course.progress}%` }}></div>
+                  </div>
+                  <p>Progresso: {course.progress}%</p>
+                </div>
+              ))}
+            </section>
+
+            {/* NOVA SECTION: Metodologia do Curso */}
+            <section className="course-methodology">
+              <h2>🌟 Nossa Metodologia</h2>
+              <p>
+                Nosso curso é voltado para quem deseja aprender **HTML, CSS e JavaScript** de forma prática e eficiente.
+                Acreditamos que a melhor forma de aprender é colocando a mão no código.
+              </p>
+
+              <ul>
+                <li>✅ Aulas passo a passo com explicações claras.</li>
+                <li>✅ Simulador de código exclusivo para testar seus aprendizados em tempo real.</li>
+                <li>✅ Projeto final: você criará um site profissional com base no que aprendeu.</li>
+                <li>✅ Suporte e atualizações constantes.</li>
+              </ul>
+
+              <p>
+                Ao final do curso, você terá um **site completo e funcional**, além de dominar as bases para seguir como desenvolvedor web.
+              </p>
+            </section>
+          </>
+        )}
+
+        {/* EDITOR TAB */}
+        {activeTab === 'editor' && (
+          <section>
+            <h2>🧪 Editor de Código</h2>
+            <CodeRunner />
+          </section>
+        )}
+
+        {/* CONTENT TAB */}
+        {activeTab === 'content' && (
+          <section>
+            <h2>📄 Conteúdo do Curso</h2>
+            <ContentCourse />
+          </section>
+        )}
+
+      </main>
     </div>
   );
-};
-
-// Essas funções precisam ser implementadas ou importadas para funcionar
-const changeTab = (index: number) => {
-  console.log('Trocar para tab:', index);
-};
-
-const addCDN = () => {
-  console.log('Adicionar CDN');
-};
-
-const clearCR = () => {
-  console.log('Limpar Code Runner');
-};
-
-const newPage = () => {
-  window.open('/output', '_blank');
 };
 
 export default Course;

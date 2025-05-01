@@ -1,4 +1,3 @@
-import React from 'react';
 import './Footer.css';  // Certifique-se de que o CSS esteja no mesmo diretório ou ajuste o caminho
 
 const Footer = () => {

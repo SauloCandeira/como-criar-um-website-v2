@@ -143,3 +143,18 @@ body {
     margin: 5px 0; /* Espaçamento entre botões */
   }
 }
+
+
+.view-all-button {
+  background-color: #3b7a57;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  font-size: 1rem;
+  border-radius: 30px; /* Bordas mais arredondadas para o botão */
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.3s ease; /* Efeito de hover mais suave */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

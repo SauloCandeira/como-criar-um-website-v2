@@ -13,6 +13,8 @@ import Editor from './pages/Editor/Editor';
 
 export function App() {
   return (
+
+    
     
     <BrowserRouter>
       <Routes>

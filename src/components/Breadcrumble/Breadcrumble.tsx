@@ -21,8 +21,14 @@ const Breadcrumble: React.FC<BreadcrumbleProps> = ({ crumbs, navigateTo }) => {
     <div className="breadcrumble">
       {/* Link para Home com ícone */}
       <span>
-        <Link to="/como-criar-um-website-v2" className="home-link">
-          <i className="fas fa-home"></i> Home
+        <Link to="/como-criar-um-website-v2/dashboard" className="home-link">
+          <i className="fas fa-home"></i> Minha conta
+        </Link>
+        {" > "}
+      </span>
+      <span>
+        <Link to="/como-criar-um-website-v2/course" className="home-link">
+          <i className="fas fa-home"></i> Desenvolvimento Web Basico
         </Link>
         {" > "}
       </span>

@@ -1,5 +1,5 @@
 import './MarketPlaceCard.css';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 interface Product {
   id: number;

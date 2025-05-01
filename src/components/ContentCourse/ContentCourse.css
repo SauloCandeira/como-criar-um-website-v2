@@ -1,0 +1,49 @@
+.course-html-example {
+  padding: 2rem;
+  background-color: #0f172a;
+  color: #f1f5f9;
+  font-family: 'Segoe UI', sans-serif;
+  line-height: 1.6;
+}
+
+.course-html-example h2 {
+  color: #38bdf8;
+  font-size: 1.8rem;
+  margin-bottom: 1rem;
+}
+
+.code-block {
+  background-color: #1e293b;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  color: #e2e8f0;
+  margin-top: 1rem;
+  white-space: pre;
+}
+
+.code-block code {
+  color: #93c5fd;
+}
+
+.html-explanation {
+  margin-top: 2rem;
+  background-color: #1e293b;
+  padding: 1rem;
+  border-radius: 8px;
+  color: #f8fafc;
+}
+
+.html-explanation h3 {
+  color: #7dd3fc;
+}
+
+.html-explanation ul {
+  list-style-type: square;
+  padding-left: 1.5rem;
+}
+
+.html-explanation li {
+  margin-bottom: 0.75rem;
+}

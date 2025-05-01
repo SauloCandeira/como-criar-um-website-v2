@@ -8,12 +8,13 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('users');
-  const [items, setItems] = useState([
+  const [items] = useState([
     { id: 1, name: 'Kit Arduino Uno', price: 'R$ 299,99', description: 'Kit completo para sistemas RFID' },
     { id: 2, name: 'ESP32 Starter Kit', price: 'R$ 349,99', description: 'Kit para robôs móveis e automação' },
   ]);
   const [newItem, setNewItem] = useState({ name: '', price: '', description: '' });
   const [selectedPeriod, setSelectedPeriod] = useState('day'); // day, month, year
+
 
   const users = [
     { id: 1, name: 'João Silva', email: 'joao@email.com' },
@@ -208,7 +209,7 @@ const Admin: React.FC = () => {
                 value={newItem.description}
                 onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
               />
-              <button onClick={handleAddItem}>Adicionar Item</button>
+              <button >Adicionar Item</button>
             </div>
 
             {/* Lista de Itens */}
@@ -230,7 +231,7 @@ const Admin: React.FC = () => {
                     <td>{item.price}</td>
                     <td>{item.description}</td>
                     <td>
-                      <button onClick={() => handleEditItem(item.id)}>Editar</button>
+                      <button>Editar</button>
                     </td>
                   </tr>
                 ))}

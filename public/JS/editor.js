@@ -31,83 +31,77 @@ editorCSS.session.setMode("ace/mode/css");
 editorCSS.session.setNewLineMode("unix");
 editorCSS.setValue(`
 /* CSS Estilizado para o Layout */
+        body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #0f172a;
+        color: #f1f5f9;
+        line-height: 1.6;
+        }
 
-/* Corpo da Página */
-body {
-    background-color: #092554;
-    color: white;
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-}
+        header {
+        background-color: #1e293b;
+        padding: 2rem;
+        text-align: center;
+        }
 
-/* Cabeçalho */
-header {
-    background-color: #0f3c62;
-    padding: 20px;
-    text-align: center;
-}
+        header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        color: #38bdf8;
+        }
 
-header h1 {
-    font-size: 2.5em;
-    margin: 0;
-}
+        header p {
+        margin: 0.5rem 0 0;
+        font-size: 1.2rem;
+        color: #cbd5e1;
+        }
 
-header p {
-    font-size: 1.2em;
-}
+        section {
+        padding: 2rem;
+        max-width: 800px;
+        margin: auto;
+        }
 
-/* Seções */
-section {
-    padding: 20px;
-    margin: 10px;
-}
+        h2 {
+        color: #7dd3fc;
+        border-bottom: 1px solid #334155;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        }
 
-section h2 {
-    color: #1e8bff;
-}
+        ul {
+        list-style-type: square;
+        padding-left: 1.5rem;
+        }
 
-ul {
-    list-style-type: none;
-    padding: 0;
-}
+        footer {
+        background-color: #1e293b;
+        color: #94a3b8;
+        text-align: center;
+        padding: 1.5rem;
+        margin-top: 3rem;
+        }
 
-ul li {
-    background-color: #1e8bff;
-    margin: 10px 0;
-    padding: 10px;
-    border-radius: 5px;
-}
+        .social-links {
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-top: 1rem;
+        }
 
-/* Rodapé */
-footer {
-    background-color: #0f3c62;
-    padding: 10px;
-    text-align: center;
-}
+        .social-links a {
+        color: #38bdf8;
+        text-decoration: none;
+        font-weight: bold;
+        transition: color 0.3s ease;
+        }
 
-footer p {
-    margin: 0;
-}
-
-/* Responsividade */
-@media (max-width: 768px) {
-    header h1 {
-        font-size: 2em;
-    }
-
-    header p {
-        font-size: 1em;
-    }
-
-    section h2 {
-        font-size: 1.5em;
-    }
-
-    ul li {
-        font-size: 0.9em;
-    }
-}
+        .social-links a:hover {
+        color: #facc15;
+        }
+  
 `);
 editorCSS.setOptions({
     enableBasicAutocompletion: true,
@@ -117,36 +111,51 @@ editorCSS.setOptions({
 
 window.onload = function () {
     editorHTML.setValue(`
-        <!DOCTYPE html>
-        <html>
-            <head>
-                <meta charset="UTF-8">
-                <title>Página Institucional</title>
-                <style id="dynamicCSS"></style>
-            </head>
-            <body>
-                <header>
-                    <h1>Bem-vindo à Nossa Empresa</h1>
-                    <p>Somos líderes no mercado de soluções inovadoras.</p>
-                </header>
-                <section>
-                    <h2>Quem Somos</h2>
-                    <p>Somos uma empresa focada em oferecer soluções tecnológicas para o mercado global.</p>
-                </section>
-                <section>
-                    <h2>Nossos Serviços</h2>
-                    <ul>
-                        <li>Consultoria em Tecnologia</li>
-                        <li>Desenvolvimento de Software</li>
-                        <li>Treinamentos e Suporte</li>
-                    </ul>
-                </section>
-                <footer>
-                    <p>&copy; 2025 Nossa Empresa. Todos os direitos reservados.</p>
-                </footer>
-                <script id="dynamicJS"></script>
-            </body>
-        </html>
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dev Portfolio - Saulo Candeira</title>
+    
+    </head>
+
+    <body>
+    <header>
+        <h1>Saulo Candeira</h1>
+        <p>Desenvolvedor Full Stack | JavaScript • React • Node.js</p>
+    </header>
+
+    <section>
+        <h2>👨‍💻 Sobre Mim</h2>
+        <p>Sou um desenvolvedor apaixonado por tecnologia e inovação. Com experiência em aplicações web e mobile, estou sempre em busca de novos desafios.</p>
+    </section>
+
+    <section>
+        <h2>🛠️ Tecnologias</h2>
+        <ul>
+        <li>React, Next.js, Vue.js</li>
+        <li>Node.js, Express, MongoDB</li>
+        <li>Docker, Git, CI/CD</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>📞 Contato</h2>
+        <p>Você pode me encontrar nas redes abaixo:</p>
+        <div class="social-links">
+        <a href="https://www.linkedin.com/in/joaosilva" target="_blank">LinkedIn</a>
+        <a href="https://github.com/joaosilva" target="_blank">GitHub</a>
+        <a href="https://wa.me/5511999999999" target="_blank">WhatsApp</a>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2025 IHK. Todos os direitos reservados.</p>
+    </footer>
+    </body>
+    </html>
+
     `);
 
     updatePageContent();
