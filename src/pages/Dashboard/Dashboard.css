@@ -158,3 +158,40 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+.account-info {
+  background: #f5f5f5;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  border-radius: 8px;
+}
+
+.account-details p {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.status.ativo {
+  color: green;
+  font-weight: bold;
+}
+
+.status.inativo {
+  color: red;
+  font-weight: bold;
+}
+
+.account-details p {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.account-details p strong {
+  display: inline-block;
+  min-width: 100px;
+}
+
+.account-details p:nth-child(6) {
+  font-size: 1.2rem;
+  color: gold;
+}
