@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import './Dashboard.css';
 import { useNavigate } from 'react-router-dom'; // Certifique-se de importar o useNavigate
 import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
-import Header from '../../components/Headers/header-one/Header';
 import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
 
 const Dashboard: React.FC = () => {

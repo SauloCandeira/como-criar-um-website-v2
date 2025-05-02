@@ -18,7 +18,7 @@ const Ticket: React.FC = () => {
     {
       id: 1,
       name: 'Basico',
-      price: 29.90,
+      price: 0.00,
       description: t('ticket.eBookDescription'),
       image: eBookImg,
     },
