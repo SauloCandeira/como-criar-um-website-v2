@@ -2,6 +2,7 @@ import './App.css'
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from './pages/Home/Home';
 import Login from './pages/Login/Login';
+import Signup from './pages/Signup/Signup';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Checkout from './pages/Checkout/Checkout';
 import Product from './pages/Product/Product';
@@ -20,6 +21,7 @@ export function App() {
       <Routes>
         <Route path="/como-criar-um-website-v2/" element={<Home />} />
         <Route path="/como-criar-um-website-v2/login" element={<Login />} />
+        <Route path="/como-criar-um-website-v2/signup" element={<Signup />} />
         <Route path="/como-criar-um-website-v2/dashboard" element={<Dashboard />} />
         <Route path="/como-criar-um-website-v2/product" element={<Product />} />
         <Route path="/como-criar-um-website-v2/checkout" element={<Checkout />} />
