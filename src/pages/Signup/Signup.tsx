@@ -16,54 +16,56 @@ const Signup = () => {
     navigate("/como-criar-um-website-v2/login");
   };
 
-  const handleSignup = async (e) => {
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-
+  
     if (!email || !password || !displayName) {
       setError("Por favor, preencha todos os campos.");
       return;
     }
-
+  
     try {
       // Cria o usuário no Firebase
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
+  
       // Atualiza o displayName no perfil do usuário
       await updateProfile(user, { displayName });
-
+  
       // Salva no localStorage
       localStorage.setItem("name", displayName);
       localStorage.setItem("email", user.email ?? "Email não disponível");
       localStorage.setItem("profilePic", user.photoURL ?? "");
-
+  
       // Limpa os campos (opcional)
       setEmail("");
       setPassword("");
       setDisplayName("");
-
+  
       // Navega para o dashboard
       navigate('/como-criar-um-website-v2/dashboard', { replace: true });
-    } catch (err) {
-      console.error("Erro no cadastro: ", err);
-
-      // Mensagens mais específicas dependendo do código do erro Firebase
-      switch (err.code) {
-        case "auth/email-already-in-use":
-          setError("Este email já está em uso.");
-          break;
-        case "auth/invalid-email":
-          setError("Email inválido.");
-          break;
-        case "auth/weak-password":
-          setError("Senha muito fraca. Use pelo menos 6 caracteres.");
-          break;
-        default:
-          setError("Falha ao criar a conta. Verifique os dados e tente novamente.");
+    } catch (err: unknown) {
+      if (typeof err === "object" && err !== null && "code" in err) {
+        const errorCode = (err as { code?: string }).code;
+  
+        switch (errorCode) {
+          case "auth/email-already-in-use":
+            setError("Este email já está em uso.");
+            break;
+          case "auth/invalid-email":
+            setError("Email inválido.");
+            break;
+          case "auth/weak-password":
+            setError("Senha muito fraca. Use pelo menos 6 caracteres.");
+            break;
+          default:
+            setError("Falha ao criar a conta. Verifique os dados e tente novamente.");
+        }
       }
     }
   };
+  
 
   return (
     <div className="login-container">

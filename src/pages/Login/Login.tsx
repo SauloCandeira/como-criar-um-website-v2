@@ -45,7 +45,8 @@ const Login = () => {
     }
   };
 
-  const handleLoginWithEmail = async (e) => {
+
+  const handleLoginWithEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -109,7 +110,7 @@ const Login = () => {
         </form>
 
         <p className="signup-link">
-          Não tem uma conta? <a href="/signup">Crie uma aqui</a>
+          Não tem uma conta? <a href="/como-criar-um-website-v2/signup">Crie uma aqui</a>
         </p>
       </div>
     </div>
