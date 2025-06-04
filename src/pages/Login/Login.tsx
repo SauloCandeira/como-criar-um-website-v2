@@ -16,15 +16,23 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         navigate('/como-criar-um-website-v2/dashboard', { replace: true });
+      } else {
+        setLoading(false); // não está logado, pode mostrar o login
       }
     });
     return () => unsubscribe();
   }, [navigate]);
-
+  
+  if (loading) {
+    return <div>Carregando...</div>; // Ou um spinner, etc.
+  }
+  
   const handleBack = () => {
     navigate("/como-criar-um-website-v2/");
   };
