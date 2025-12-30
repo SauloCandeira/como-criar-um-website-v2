@@ -20,7 +20,7 @@ const Dashboard: React.FC = () => {
     try {
       await signOut(auth);
       localStorage.clear();
-      navigate('/como-criar-um-website-v2/login'); 
+      navigate('/login'); 
     } catch (error) {
       console.error("Erro ao fazer logout: ", error);
     }

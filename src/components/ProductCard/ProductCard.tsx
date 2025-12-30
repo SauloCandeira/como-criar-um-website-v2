@@ -17,7 +17,7 @@ const ProductCard: React.FC = () => {
 
   const handleViewAllClick = () => {
     // Ao clicar no botão, navegar para a página de marketplace
-    navigate('/como-criar-um-website-v2/marketplace');
+    navigate('/marketplace');
   };
 
   const products: Product[] = [

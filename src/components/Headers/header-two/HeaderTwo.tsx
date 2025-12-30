@@ -44,7 +44,7 @@ const HeaderTwo: React.FC = () => {
   }, []);
 
   const handleLoginClick = () => {
-    navigate('/como-criar-um-website-v2/login');
+    navigate('/login');
   };
 
   const handleLogoutClick = async () => {
@@ -52,7 +52,7 @@ const HeaderTwo: React.FC = () => {
     try {
       await signOut(auth);
       setUser(null);
-      navigate('/como-criar-um-website-v2'); // ou para outra rota desejada
+      navigate('/'); // ou para outra rota desejada
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
     }

@@ -14,7 +14,7 @@ const Transaction: React.FC = () => {
     }, [checkoutData]);
 
   const handleEnroll = () => {
-    navigate('/como-criar-um-website-v2/checkout', {
+    navigate('/checkout', {
       state: {
         checkoutData: {
           courseName: 'Como Criar um Website Profissional',

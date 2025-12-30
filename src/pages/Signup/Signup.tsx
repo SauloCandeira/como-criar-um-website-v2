@@ -13,7 +13,7 @@ const Signup = () => {
   const [error, setError] = useState("");
 
   const handleBack = () => {
-    navigate("/como-criar-um-website-v2/login");
+    navigate("/login");
   };
 
   const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -44,7 +44,7 @@ const Signup = () => {
       setDisplayName("");
   
       // Navega para o dashboard
-      navigate('/como-criar-um-website-v2/dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       if (typeof err === "object" && err !== null && "code" in err) {
         const errorCode = (err as { code?: string }).code;
@@ -110,7 +110,7 @@ const Signup = () => {
 
         <p className="signup-link">
           Já tem uma conta?{" "}
-          <Link to="/como-criar-um-website-v2/login">Faça login aqui</Link>
+          <Link to="/login">Faça login aqui</Link>
         </p>
       </div>
     </div>

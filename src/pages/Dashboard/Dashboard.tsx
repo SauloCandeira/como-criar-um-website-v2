@@ -11,7 +11,7 @@ const Dashboard: React.FC = () => {
 
   const handleViewAllClick = () => {
     // Ao clicar no botão, navegar para a página de marketplace
-    navigate('/como-criar-um-website-v2/course');
+    navigate('/course');
   };
 
   const userInfo = {

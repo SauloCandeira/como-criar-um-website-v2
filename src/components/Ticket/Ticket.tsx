@@ -73,7 +73,7 @@ const Ticket: React.FC = () => {
 
       if (paymentLink) {
         // Redireciona para a página de checkout, passando os dados via state
-        navigate('/como-criar-um-website-v2/product', { state: { checkoutData: paymentLink } });
+        navigate('/product', { state: { checkoutData: paymentLink } });
       } else {
         alert('Erro ao gerar o link de pagamento. Tente novamente.');
       }

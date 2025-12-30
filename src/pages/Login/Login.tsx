@@ -21,7 +21,7 @@ const Login = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        navigate('/como-criar-um-website-v2/dashboard', { replace: true });
+        navigate('/dashboard', { replace: true });
       } else {
         setLoading(false); // não está logado, pode mostrar o login
       }
@@ -34,7 +34,7 @@ const Login = () => {
   }
   
   const handleBack = () => {
-    navigate("/como-criar-um-website-v2/");
+    navigate("/");
   };
 
   const handleLoginWithGoogle = async () => {
@@ -46,7 +46,7 @@ const Login = () => {
       localStorage.setItem("email", user.email ?? "Email não disponível");
       localStorage.setItem("profilePic", user.photoURL ?? "");
 
-      navigate('/como-criar-um-website-v2/dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error("Erro ao fazer login com Google: ", error);
       setError("Falha no login com Google.");
@@ -71,7 +71,7 @@ const Login = () => {
       localStorage.setItem("email", user.email ?? "Email não disponível");
       localStorage.setItem("profilePic", user.photoURL ?? "");
 
-      navigate('/como-criar-um-website-v2/dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error("Erro no login com email e senha: ", error);
       setError("Email ou senha inválidos.");
@@ -118,7 +118,7 @@ const Login = () => {
         </form>
 
         <p className="signup-link">
-          Não tem uma conta? <a href="/como-criar-um-website-v2/signup">Crie uma aqui</a>
+          Não tem uma conta? <a href="/signup">Crie uma aqui</a>
         </p>
       </div>
     </div>
