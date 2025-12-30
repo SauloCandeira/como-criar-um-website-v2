@@ -1,0 +1,71 @@
+/* CSS Estilizado para o Layout */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #0f172a;
+    color: #f1f5f9;
+    line-height: 1.6;
+    }
+
+    header {
+    background-color: #1e293b;
+    padding: 2rem;
+    text-align: center;
+    }
+
+    header h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    color: #38bdf8;
+    }
+
+    header p {
+    margin: 0.5rem 0 0;
+    font-size: 1.2rem;
+    color: #cbd5e1;
+    }
+
+    section {
+    padding: 2rem;
+    max-width: 800px;
+    margin: auto;
+    }
+
+    h2 {
+    color: #7dd3fc;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    }
+
+    ul {
+    list-style-type: square;
+    padding-left: 1.5rem;
+    }
+
+    footer {
+    background-color: #1e293b;
+    color: #94a3b8;
+    text-align: center;
+    padding: 1.5rem;
+    margin-top: 3rem;
+    }
+
+    .social-links {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
+    }
+
+    .social-links a {
+    color: #38bdf8;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s ease;
+    }
+
+    .social-links a:hover {
+    color: #facc15;
+    }

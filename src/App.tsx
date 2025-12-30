@@ -19,16 +19,16 @@ export function App() {
     
     <BrowserRouter>
       <Routes>
-        <Route path="/como-criar-um-website-v2/" element={<Home />} />
-        <Route path="/como-criar-um-website-v2/login" element={<Login />} />
-        <Route path="/como-criar-um-website-v2/signup" element={<Signup />} />
-        <Route path="/como-criar-um-website-v2/dashboard" element={<Dashboard />} />
-        <Route path="/como-criar-um-website-v2/product" element={<Product />} />
-        <Route path="/como-criar-um-website-v2/checkout" element={<Checkout />} />
-        <Route path="/como-criar-um-website-v2/admin" element={<Admin />} />
-        <Route path="/como-criar-um-website-v2/marketplace" element={<MarketPlace />} />
-        <Route path="/como-criar-um-website-v2/course" element={<Course />} />
-        <Route path="/como-criar-um-website-v2/editor" element={<Editor />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/product" element={<Product />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/marketplace" element={<MarketPlace />} />
+        <Route path="/course" element={<Course />} />
+        <Route path="/editor" element={<Editor />} />
         {/* <Route path="/como-criar-um-website-v2/login" element={<Login />} /> */}
         {/* <Route path="/about/" element={<Home />} /> */}
         {/* <Route path="/project/:id" element={<ProjectDetails />} /> */}

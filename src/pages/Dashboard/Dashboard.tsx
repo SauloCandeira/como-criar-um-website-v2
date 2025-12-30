@@ -143,7 +143,7 @@ const Dashboard: React.FC = () => {
                     <span className="course-status">{inscrition.status}</span>
                   </div>
                   <button className="view-all-button" onClick={handleViewAllClick}>
-                    Iniciar
+                    Inscrever
                   </button>
 
                 </li>

@@ -4,5 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: "/como-criar-um-website-v2/"
+  base: "https://www.hktech.com.br/"
 })
+
+// https://www.hktech.com.br/
