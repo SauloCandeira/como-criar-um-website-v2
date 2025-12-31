@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import './Manager.css';
-import CodeRunner from '../../components/CodeRunner/CodeRunner';
 import ContentCourse from '../../components/ContentCourse/ContentCourse';
 import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
 import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
@@ -10,9 +9,6 @@ import TimelineBoard from '../../components/TimelineBoard/TimelineBoard';
 const Manager: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
 
-  const enrolledCourses = [
-    { id: 1, title: 'React Avançado', progress: 70 },
-  ];
 
   const [filter] = useState<string[]>([]);
 
