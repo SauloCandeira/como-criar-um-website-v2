@@ -194,7 +194,7 @@ const Dashboard: React.FC = () => {
                       </a>
                     </td>
                     <td>
-                      <a href={`https://registro.br/2/${project.domain}`} target="_blank" rel="noopener noreferrer">
+                      <a href={`${project.domain}`} target="_blank" rel="noopener noreferrer">
                         {project.domain}
                       </a>
                     </td>
