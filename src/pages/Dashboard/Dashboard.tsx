@@ -39,8 +39,8 @@ const Dashboard: React.FC = () => {
   ];
 
   const projects = [
-    { id: 1, repository: 'meu-projeto', domain: 'meusite.com', hosting: 'GitHub Pages' },
-    { id: 2, repository: 'outro-projeto', domain: 'outrosite.com', hosting: 'AWS' }
+    { id: 1, repository: 'Holding Kapital Technology', domain: 'hktech.com.br', hosting: 'GitHub Pages' },
+    { id: 2, repository: 'Saulo L S Candeira', domain: 'saulocandeira.com.br', hosting: 'GitHub Pages' }
   ];
 
   const [filter] = useState<string[]>([]);
