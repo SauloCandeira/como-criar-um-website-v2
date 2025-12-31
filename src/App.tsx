@@ -11,6 +11,7 @@ import './i18n'; // Importa o arquivo de configuração do i18next
 import MarketPlace from './pages/Marketplace/Marketplace';
 import Course from './pages/Course/Course';
 import Editor from './pages/Editor/Editor';
+import Manager from './pages/Manager/Manager';
 
 export function App() {
   return (
@@ -29,6 +30,7 @@ export function App() {
         <Route path="/marketplace" element={<MarketPlace />} />
         <Route path="/course" element={<Course />} />
         <Route path="/editor" element={<Editor />} />
+        <Route path="/manager" element={<Manager />} />
         {/* <Route path="/como-criar-um-website-v2/login" element={<Login />} /> */}
         {/* <Route path="/about/" element={<Home />} /> */}
         {/* <Route path="/project/:id" element={<ProjectDetails />} /> */}

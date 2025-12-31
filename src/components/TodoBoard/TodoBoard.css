@@ -1,0 +1,72 @@
+/* CONTAINER GERAL */
+.container {
+  padding: 16px;
+  width: 100%;
+}
+
+/* ÁREA DE CRIAÇÃO (EM CIMA) */
+.add-todo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.add-todo input {
+  padding: 8px;
+  font-size: 14px;
+  width: 260px;
+}
+
+.add-todo button {
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* BOARD */
+.todo-container {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr); /* 4 colunas */
+  gap: 12px;
+}
+
+/* COLUNAS */
+.status {
+  background: #1e1e1e;
+  padding: 10px;
+  border-radius: 8px;
+  min-height: 260px;
+}
+
+/* TÍTULO */
+.status h2 {
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+/* CARD */
+.todo {
+  background: #333;
+  color: #fff;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+/* FECHAR */
+.close {
+  cursor: pointer;
+  color: #ff4d4d;
+  margin-left: 6px;
+}
+
+.todo:active {
+  cursor: grabbing;
+}
