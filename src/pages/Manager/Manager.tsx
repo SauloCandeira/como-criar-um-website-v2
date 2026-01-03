@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import './Manager.css';
-import ContentCourse from '../../components/ContentCourse/ContentCourse';
 import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
 import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
 import TodoBoard from '../../components/TodoBoard/TodoBoard';
