@@ -14,6 +14,14 @@ const Dashboard: React.FC = () => {
     navigate('/course');
   };
 
+
+  const managerProject= () => {
+    // Ao clicar no botão, navegar para a página de marketplace
+    navigate('/manager');
+  };
+
+
+
   const userInfo = {
     name: 'Saulo Candeira',
     enrollment: '202501234',
@@ -210,7 +218,7 @@ const Dashboard: React.FC = () => {
                       )}
                     </td>
                     <td>
-                    <button className="action-button" onClick={() => alert('Indo para admin do site')}>Admin</button>
+                    <button className="action-button" onClick={managerProject}>Admin</button>
                   </td>
 
                   </tr>

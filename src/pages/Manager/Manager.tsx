@@ -5,6 +5,8 @@ import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
 import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
 import TodoBoard from '../../components/TodoBoard/TodoBoard';
 import TimelineBoard from '../../components/TimelineBoard/TimelineBoard';
+import RoadMap from '../../components/RoadMap/RoadMap';
+import FichaTecnica from '../../components/FichaTecnica/FichaTecnica';
 
 const Manager: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -21,20 +23,61 @@ const Manager: React.FC = () => {
       <aside className="admin-sidebar">
         <h2>Admin</h2>
         <ul>
+          <li className={activeTab === 'ficha-tecnica' ? 'active' : ''} onClick={() => setActiveTab('ficha-tecnica')}>
+            FICHA TECNICA
+          </li>
           <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
             TASKS
           </li>
           <li className={activeTab === 'content' ? 'active' : ''} onClick={() => setActiveTab('content')}>
-            CONTEÚDO
+            ROADMAP
           </li>
           <li className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
-            EDITOR
+            TIMELINE
+          </li>
+          <li className={activeTab === 'analitycs' ? 'active' : ''} onClick={() => setActiveTab('analitycs')}>
+            ANALITYCS
           </li>
         </ul>
       </aside>
 
       {/* Main Content */}
       <main className="admin-content">
+
+        {/* HOME TAB */}
+        {activeTab === 'ficha-tecnica' && (
+          <>
+            <section>
+            <FichaTecnica
+                data={{
+                  nome: "HKTech Platform",
+                  tipo: "Plataforma Educacional",
+                  status: "Em desenvolvimento",
+                  responsavel: "Saulo Candeira",
+
+                  visao: "Formar criadores de tecnologia no Brasil",
+                  missao: "Ensinar tecnologia de forma prática, acessível e ética",
+                  valores: ["Educação", "Inovação", "Ética", "Autonomia"],
+
+                  publicoAlvo: "Jovens, estudantes e autodidatas",
+                  problema: "Falta de ensino prático em tecnologia",
+                  propostaValor: "Aprendizado real com projetos reais",
+
+                  dataInicio: "01/01/2025",
+                  tecnologias: ["React", "Node.js", "IoT", "Robótica"],
+                  escopo: "Cursos, projetos, kits e comunidade",
+
+                  custoEstimado: "R$ 50.000",
+                  investimento: "Próprio",
+                  retornoEsperado: "R$ 300.000 / ano",
+                  monetizacao: "Cursos, assinaturas e kits"
+                }}
+              />
+
+            </section>
+          </>
+        )}
+
 
         {/* HOME TAB */}
         {activeTab === 'home' && (
@@ -45,6 +88,14 @@ const Manager: React.FC = () => {
           </>
         )}
 
+        {/* CONTENT TAB */}
+        {activeTab === 'content' && (
+          <section>
+            <h2>📄 ROADMAP</h2>
+            <RoadMap />
+          </section>
+        )}
+
         {/* EDITOR TAB */}
         {activeTab === 'editor' && (
           <section>
@@ -52,13 +103,14 @@ const Manager: React.FC = () => {
           </section>
         )}
 
-        {/* CONTENT TAB */}
-        {activeTab === 'content' && (
+        {/* EDITOR TAB */}
+        {activeTab === 'analitycs' && (
           <section>
-            <h2>📄 Conteúdo do Curso</h2>
-            <ContentCourse />
+            < TimelineBoard />
           </section>
         )}
+
+
 
       </main>
     </div>

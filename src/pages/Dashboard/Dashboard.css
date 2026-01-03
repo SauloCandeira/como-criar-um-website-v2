@@ -195,3 +195,8 @@ body {
   font-size: 1.2rem;
   color: gold;
 }
+
+.action-button{
+  background-color: #0f172a;
+   color: #facc15;
+  }
