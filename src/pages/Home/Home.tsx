@@ -11,6 +11,7 @@ import AboutCard from '../../components/AboutCard/AboutCard';
 
 const Home = () => {
 
+  {/*
   const founder = {
     name: "Saulo Candeira",
     position: "Desenvolvedor de Software e Eletrônica",
@@ -20,7 +21,7 @@ const Home = () => {
     github: 'https://github.com/saulocandeira',
     website: 'https://www.saulocandeira.com.br'
   };
-  
+  */}
   return (
     <div  className="section">
       <HeaderTwo/>
