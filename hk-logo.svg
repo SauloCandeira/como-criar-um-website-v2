@@ -1,0 +1,33 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 200 200"
+  width="200"
+  height="200"
+>
+
+  <!-- OUTLINE PRETA (borda uniforme) -->
+  <g fill="#000000">
+
+    <!-- H outline -->
+    <rect x="34" y="24" width="42" height="152" rx="6"/>
+    <rect x="84" y="24" width="42" height="152" rx="6"/>
+    <rect x="34" y="79" width="92" height="42" rx="6"/>
+
+    <!-- K outline -->
+    <polygon points="116,24 170,24 140,100 170,176 116,176 86,100"/>
+  </g>
+
+  <!-- HK AZUL (shape principal, perfeitamente centrado) -->
+  <g fill="#0ea5e9">
+
+    <!-- H -->
+    <rect x="40" y="30" width="30" height="140" rx="4"/>
+    <rect x="80" y="30" width="30" height="140" rx="4"/>
+    <rect x="40" y="85" width="70" height="30" rx="4"/>
+
+    <!-- K -->
+    <polygon points="120,30 160,30 130,100 160,170 120,170 95,100"/>
+
+  </g>
+
+</svg>
