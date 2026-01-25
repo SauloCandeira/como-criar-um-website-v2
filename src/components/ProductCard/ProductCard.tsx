@@ -1,53 +1,49 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom'; // Certifique-se de importar o useNavigate
+import { useNavigate } from 'react-router-dom';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
 import 'slick-carousel/slick/slick-theme.css';
 import './ProductCard.css';
+import arduinoImg from './../../assets/img/kit-arduino-uno.jpg';
+import espImg from './../../assets/img/kit-esp32.jpg';
+import print3dImg from './../../assets/img/print-3d.jpg';
 
-interface Product {
+type ItemType = 'product' | 'service';
+
+interface Item {
   name: string;
   description: string;
-  price: number;
+  price?: number;
   image: string;
+  type: ItemType;
 }
 
 const ProductCard: React.FC = () => {
-  const navigate = useNavigate(); // Inicialize o hook useNavigate
+  const navigate = useNavigate();
 
-  const handleViewAllClick = () => {
-    // Ao clicar no botão, navegar para a página de marketplace
-    navigate('/marketplace');
-  };
-
-  const products: Product[] = [
+  const items: Item[] = [
     {
       name: 'Starter Kit Arduino Uno',
       description:
-        'Kit completo para criação de um sistema de RFID com Arduino, ideal para aprender sobre identificação por rádio frequência e automação.',
+        'Kit completo para aprender eletrônica e automação com Arduino, ideal para iniciantes.',
       price: 299.99,
-      image: 'https://via.placeholder.com/150?text=Arduino+RFID+Kit',
+      image: arduinoImg,
+      type: 'product',
     },
     {
       name: 'Starter Kit ESP32',
       description:
-        'Kit para construção de um robô móvel controlado por Arduino, com sensores e navegação autônoma. Perfeito para projetos de automação residencial e aprendizado de IoT.',
+        'Aprenda IoT e sistemas conectados com ESP32 e projetos práticos.',
       price: 299.99,
-      image: 'https://via.placeholder.com/150?text=Arduino+Autonomous+Robot+Kit',
+      image: espImg,
+      type: 'product',
     },
     {
-      name: 'Kit Arduino Braço Robótico',
+      name: 'Impressão 3D',
       description:
-        'Kit para montagem de uma mão robótica controlada por Arduino, projetada para aprender sobre motores e controle de movimentos. Ideal para iniciantes e entusiastas de robótica que desejam entender como servomotores funcionam na prática.',
-      price: 499.99,
-      image: 'https://via.placeholder.com/150?text=Arduino+Robotic+Hand+Kit',
-    },
-    {
-      name: 'Kit Arduino Carro com Câmera',
-      description:
-        'Kit para construção de um carro de corrida controlado por Arduino, incluindo motores, sensores e controle remoto. Possui câmera para transmissão ao vivo e controle remoto via Wi-Fi ou Bluetooth.',
-      price: 349.99,
-      image: 'https://via.placeholder.com/150?text=Arduino+Race+Car+Kit',
+        'Serviço de impressão 3D sob demanda para protótipos, peças técnicas e projetos personalizados.',
+      image: print3dImg,
+      type: 'service',
     },
   ];
 
@@ -58,55 +54,94 @@ const ProductCard: React.FC = () => {
     slidesToShow: 3,
     slidesToScroll: 1,
     autoplay: true,
-    autoplaySpeed: 3000,
+    autoplaySpeed: 4000,
     responsive: [
       {
         breakpoint: 1024,
-        settings: {
-          slidesToShow: 2,
-          slidesToScroll: 1,
-        },
+        settings: { slidesToShow: 2 },
       },
       {
         breakpoint: 600,
-        settings: {
-          slidesToShow: 1,
-          slidesToScroll: 1,
-        },
+        settings: { slidesToShow: 1 },
       },
     ],
   };
 
   return (
-  <div className="product-section">
-    <div className="product-slider">
-      {/* Título, descrição e botão "Ver Todos os Produtos" */}
-      <div className="product-header">
-        <h1>Produtos</h1>
-        <p className="product-description">
-          Vendemos kits para aprender eletrônica, robótica e programação na prática. Explore nossos kits e inicie seu aprendizado com projetos reais!
-        </p>
-        <button className="view-all-button" onClick={handleViewAllClick}>
-          Ver Todos
-        </button>
-      </div>
-
-      <Slider {...settings}>
-        {products.map((product, index) => (
-          <div key={index} className="product-card-wrapper">
-            <div className="product-card">
-              <img src={product.image} alt={product.name} className="product-image" />
-              <div className="product-info">
-                <h2>{product.name}</h2>
-                <div className="product-description">{product.description}</div>
-                <p className="product-price">${product.price.toFixed(2)}</p>
-              </div>
-            </div>
+    <section className="product-section">
+      <div className="product-wrapper">
+        <div className="product-header">
+          <div className="text-container">
+            <h1>Produtos & Serviços</h1>
+            <p className="product-description">
+              Oferecemos kits educacionais, produtos tecnológicos e serviços
+              especializados como impressão 3D, sempre com foco em aprendizado
+              prático e soluções reais.
+            </p>
           </div>
-        ))}
-      </Slider>
-    </div>
-  </div>
+
+          <button
+            className="view-all-button"
+            onClick={() => navigate('/marketplace')}
+          >
+            Ver todos
+          </button>
+        </div>
+
+        <div className="product-slider">
+          <Slider {...settings}>
+            {items.map((item, index) => (
+              <div key={index} className="product-card-wrapper">
+                <div className="product-card">
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="product-image"
+                  />
+
+                  <div className="product-info">
+                    <span
+                      className={`product-badge ${
+                        item.type === 'product' ? 'product' : 'service'
+                      }`}
+                    >
+                      {item.type === 'product' ? 'Produto' : 'Serviço'}
+                    </span>
+
+                    <h2>{item.name}</h2>
+
+                    <p className="product-text">{item.description}</p>
+
+                    {item.type === 'product' && item.price && (
+                      <p className="product-price">
+                        ${item.price.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    className={`product-action ${
+                      item.type === 'product' ? 'buy' : 'quote'
+                    }`}
+                    onClick={() =>
+                      navigate(
+                        item.type === 'product'
+                          ? '/marketplace'
+                          : '/contact'
+                      )
+                    }
+                  >
+                    {item.type === 'product'
+                      ? 'Acessar'
+                      : 'Solicitar orçamento'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </Slider>
+        </div>
+      </div>
+    </section>
   );
 };
 

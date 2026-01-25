@@ -1,31 +1,201 @@
 {
-    "intro": {
-      "title": "Discover an unexplored universe.",
-      "description": "Venture into the fascinating world of programming and open doors to an innovative and opportunity-filled future."
-    },
-    "timeline": {
-      "title": "Our Timeline",
-      "description": "Explore the key milestones of our journey and see how each stage contributes to our progress.",
-      "html": "Getting Started with HTML",
-      "htmlDesc": "Our journey begins with HTML, the foundation that shapes the structure of the web.",
-      "css": "Evolving with CSS",
-      "cssDesc": "Moving on to CSS, where aesthetics come to life with colors, fonts, and layouts.",
-      "js": "Interactivity with JavaScript",
-      "jsDesc": "With JavaScript, we bring pages to life with interactivity and dynamics.",
-      "github": "Version Control with GitHub",
-      "githubDesc": "Finally, with GitHub, we store, collaborate, and manage our creations."
-    },
+  "intro": {
+    "title": "Connecting Technology, Projects & Capital.",
+    "description": "A private platform for engineering, project structuring and intermediation, connecting companies, startups and strategic opportunities."
+  },
 
-    "ticket": {
-      "title": "Your Ticket",
-      "description": "Choose your package and reserve now!",
-      "reserveNow": "Reserve Now",
-      "eBookDescription": "Learn with our detailed e-book, covering all essential aspects.",
-      "videoDescription": "Watch our video lesson and practice with practical examples.",
-      "completePackageDescription": "Get the e-book and video lessons together at a special price.",
-      "eBookPrice": "9.99",
-      "videoPrice": "15.99",
-      "completePackagePrice": "24.99"
+  "timeline": {
+    "title": "Our Approach",
+    "description": "From engineering foundations to structured opportunities, our process evolves through systems, projects and assets.",
+
+    "html": "Engineering Foundations",
+    "htmlDesc": "Every project starts with solid technical foundations, ensuring reliability, scalability and efficiency.",
+
+    "css": "System Design",
+    "cssDesc": "We design structured systems, aligning technology, usability and operational clarity.",
+
+    "js": "Project Execution",
+    "jsDesc": "Execution transforms ideas into operational systems, integrating logic, automation and performance.",
+
+    "github": "Structuring & Intermediation",
+    "githubDesc": "We structure projects and privately connect opportunities, partners and assets through secure and controlled processes."
+  },
+
+  "platform": {
+    "title": "HK Platform | Technology, Systems & Capital",
+    "description": "A complete ecosystem for technical learning, system development, project management and private investment opportunities.",
+    "request": "Request access",
+    "loading": "Processing...",
+
+"plans": {
+  "basic": {
+    "title": "Explorer",
+    "price": "Free",
+    "features": {
+      "f1": "Access to free technical and hands-on courses",
+      "f2": "Learning platform (LMS) access",
+      "f3": "Technology marketplace access",
+      "f4": "First professional website project (guided)",
+      "f5": "Support to build and host a personal or portfolio website",
+      "f6": "Beta access to management system",
+      "f7": "No access to investments, startups or SPVs"
+    }
+  },
+
+  "intermediate": {
+    "title": "Structured",
+    "price": "USD 29 / month",
+    "features": {
+      "f1": "Everything from the Explorer plan",
+      "f2": "Advanced courses and technical learning tracks",
+      "f3": "Full management system access",
+      "f4": "Structured real-world projects",
+      "f5": "2 hours per month of live online classes with an instructor",
+      "f6": "Instructor time based on senior developer expertise",
+      "f7": "No access to private investment hub"
+    }
+  },
+
+  "advanced": {
+    "title": "Master",
+    "price": "Private / Invitation Only",
+    "features": {
+      "f1": "Everything from the Structured plan",
+      "f2": "Access to private investment hub",
+      "f3": "Participation in the first HK SPV (Special Purpose Entity)",
+      "f4": "Real estate investment SPV focused on auction properties",
+      "f5": "Collective investment model through quota participation",
+      "f6": "Private intermediation and deal structuring",
+      "f7": "AI-driven data analysis for investment decision-making"
     }
   }
-  
+}
+
+  },
+
+  "services": {
+    "title": "Areas of Expertise",
+
+    "tabs": {
+      "software": "Software & Systems",
+      "electronics": "Electronics & Automation",
+      "3dPrototyping": "Prototyping & 3D",
+      "education": "Education & STEM",
+      "business": "Business & Intermediation"
+    },
+
+    "education": {
+      "lectures": "Technology Lectures",
+      "lecturesDesc": "On-site and online lectures on technology, innovation, engineering, artificial intelligence and the market.",
+
+      "privateClasses": "Private Classes",
+      "privateClassesDesc": "On-site and online private classes, free or paid, focused on technology, programming, electronics and applied engineering.",
+
+      "stem": "STEM & Robotics Education",
+      "stemDesc": "Hands-on education in STEM and robotics, integrating science, technology, engineering and mathematics with real-world applications.",
+
+      "kits": "Technology Kits & Materials",
+      "kitsDesc": "Supply of educational kits and materials such as ESP32, sensors, jumpers, electronic modules and components for hands-on learning."
+    },
+
+    "software": {
+      "webDevelopment": "Web Development",
+      "webDevelopmentDesc": "Development of modern, scalable and secure web platforms focused on performance and solid architecture.",
+
+      "mobileDevelopment": "Mobile Applications",
+      "mobileDevelopmentDesc": "Development of mobile applications integrated with systems, APIs and operational workflows.",
+
+      "cloud": "Cloud & Infrastructure",
+      "cloudDesc": "Cloud architecture, integrations, automation and scalable infrastructure.",
+
+      "iot": "IoT & Smart Systems",
+      "iotDesc": "Integration between hardware and software, automation, sensors and connected systems."
+    },
+
+    "electronics": {
+      "vehicleMaintenance": "Automotive & Industrial Electronics",
+      "vehicleMaintenanceDesc": "Diagnostics, maintenance and development of electronic solutions for vehicles and industrial systems.",
+
+      "lithiumBatteryRecovery": "Lithium Batteries & Energy Systems",
+      "lithiumBatteryRecoveryDesc": "Recovery, analysis and development of lithium battery solutions and energy systems."
+    },
+
+    "prototyping": {
+      "drawing3d": "3D Modeling & Design",
+      "drawing3dDesc": "Technical modeling, functional parts and mechanical projects for prototyping.",
+
+      "3dPrinting": "3D Printing & CNC",
+      "3dPrintingDesc": "Rapid prototyping, digital manufacturing, 3D printing and CNC processes."
+    },
+
+    "business": {
+      "businessPlan": "Business Structuring",
+      "businessPlanDesc": "Creation and structuring of business models, projects, startups and SPVs.",
+
+      "agileMethodology": "Agile Project Management",
+      "agileMethodologyDesc": "Planning, organizing and executing projects using agile methodologies.",
+
+      "managementSystem": "Management Systems & Intermediation",
+      "managementSystemDesc": "Platforms, systems and processes for private management and intermediation of projects, assets and opportunities."
+    }
+  },
+
+  "about": {
+    "title": "About HK",
+    "subtitle": "A brief overview of who we are, why we exist and what we are building.",
+
+    "summary": {
+      "title": "Brief Overview",
+      "description": "HK was founded with the purpose of democratizing access to technology, knowledge and project structuring. We are building an initially free platform where individuals and organizations can learn, develop systems, analyze data and structure real-world solutions. Beyond knowledge access, HK also operates in the offering of high-technology products and services, as well as investment structuring such as SPVs and private projects, always with transparency, traceability and intensive use of artificial intelligence for analysis and decision-making."
+    },
+
+    "mission": {
+      "title": "Our Mission",
+      "description": "To build an open and transparent platform that connects technology, data, engineering and capital, using artificial intelligence to support decisions, structure projects and generate real efficiency in both physical and digital worlds."
+    },
+
+    "vision": {
+      "title": "Our Vision",
+      "description": "To become a reference private and technological platform where knowledge, innovation, investments and projects coexist in an accessible, efficient and data-driven way, promoting sustainable economic and social impact."
+    },
+
+    "values": {
+      "title": "Our Values",
+      "items": {
+        "courage": "Courage to challenge traditional models and build new structures",
+        "democracy": "Democracy in access to knowledge, technology and information",
+        "truth": "Truth, transparency and clarity in data, processes and decisions",
+        "efficiency": "Operational, technical and financial efficiency driven by data and artificial intelligence"
+      }
+    }
+  },
+
+  "footer": {
+    "about": "HK is a private platform connecting technology, systems, projects and capital. We structure solutions, systems and opportunities across engineering, business and private intermediation.",
+
+    "platform": {
+      "title": "Platform",
+      "about": "About",
+      "services": "Services",
+      "projects": "Projects",
+      "access": "Platform Access",
+      "contact": "Contact"
+    },
+
+    "legal": {
+      "title": "Legal",
+      "terms": "Terms of Service",
+      "privacy": "Privacy Policy",
+      "disclaimer": "Disclaimer"
+    },
+
+    "newsletter": {
+      "title": "Stay Connected",
+      "description": "Receive updates about projects, systems and private opportunities.",
+      "placeholder": "Your email",
+      "button": "Subscribe"
+    },
+
+    "copyright": "HK | Technology & Capital. All rights reserved."
+  }
+}

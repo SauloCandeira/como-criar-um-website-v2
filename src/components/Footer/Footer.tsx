@@ -1,45 +1,84 @@
-import './Footer.css';  // Certifique-se de que o CSS esteja no mesmo diretório ou ajuste o caminho
+import './Footer.css';
+import { useTranslation } from 'react-i18next';
 
 const Footer = () => {
+  const { t } = useTranslation();
+
   return (
     <footer className="footer">
       <div className="footer-container">
-        {/* Logo and Description Section */}
+
+        {/* Logo & About */}
         <div className="footer-logo">
-          <img src="logo.png" alt="Logo" className="logo" />
-          <p className="description">Sua descrição aqui, conectando o seu público com a missão da empresa.</p>
+          <img
+            src="/hk-logo.svg"
+            alt="HK | Technology & Capital"
+            className="logo"
+          />
+
+          <p className="description">
+            {t('footer.about')}
+          </p>
+
           <div className="social-links">
-            <a href="#facebook" className="social-icon">Facebook</a>
-            <a href="#twitter" className="social-icon">Twitter</a>
-            <a href="#linkedin" className="social-icon">LinkedIn</a>
+            <a
+              href="https://www.linkedin.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="social-icon"
+            >
+              LinkedIn
+            </a>
+
+            <a
+              href="https://github.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="social-icon"
+            >
+              GitHub
+            </a>
+
+            <a
+              href="https://www.instagram.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="social-icon"
+            >
+              Instagram
+            </a>
           </div>
         </div>
 
-        {/* Quick Links Section */}
+        {/* Navigation */}
         <div className="footer-links">
-          <h4 className="footer-heading">Links Úteis</h4>
+          <h4 className="footer-heading">{t('footer.platform.title')}</h4>
           <ul>
-            <li><a href="#">Sobre Nós</a></li>
-            <li><a href="#">Blog</a></li>
-            <li><a href="#">Contato</a></li>
-            <li><a href="#">Termos de Serviço</a></li>
-            <li><a href="#">Privacidade</a></li>
+            <li><a href="#about">{t('footer.platform.about')}</a></li>
+            <li><a href="#services">{t('footer.platform.services')}</a></li>
+            <li><a href="#projects">{t('footer.platform.projects')}</a></li>
+            <li><a href="#platform">{t('footer.platform.access')}</a></li>
+            <li><a href="#contact">{t('footer.platform.contact')}</a></li>
           </ul>
         </div>
 
-        {/* Newsletter Section */}
-        <div className="newsletter">
-          <h4 className="footer-heading">Inscreva-se na nossa Newsletter</h4>
-          <form className="newsletter-form">
-            <input type="email" placeholder="Seu email" className="email-input" required />
-            <button type="submit" className="subscribe-btn">Assinar</button>
-          </form>
+        {/* Legal */}
+        <div className="footer-links">
+          <h4 className="footer-heading">{t('footer.legal.title')}</h4>
+          <ul>
+            <li><a href="#terms">{t('footer.legal.terms')}</a></li>
+            <li><a href="#privacy">{t('footer.legal.privacy')}</a></li>
+            <li><a href="#disclaimer">{t('footer.legal.disclaimer')}</a></li>
+          </ul>
         </div>
+
       </div>
 
-      {/* Footer Bottom Section */}
+      {/* Bottom */}
       <div className="footer-bottom">
-        <p>&copy; 2025 Sua Empresa. Todos os direitos reservados.</p>
+        <p>
+          © {new Date().getFullYear()} {t('footer.copyright')}
+        </p>
       </div>
     </footer>
   );

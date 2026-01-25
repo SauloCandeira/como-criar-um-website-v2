@@ -1,37 +1,200 @@
 {
-    "intro": {
-      "title": "Descubra um universo inexplorado.",
-      "description": "Desbrave o fascinante mundo da programação e abra as portas para um futuro inovador e repleto de possibilidades."
-    },
-    "timeline": {
-      "title": "Nossa Linha do Tempo",
-      "description": "Explore os marcos importantes da nossa jornada e descubra como cada etapa contribui para o nosso progresso.",
-      "html": "Início com HTML",
-      "htmlDesc": "Nossa jornada começa com HTML, o alicerce que molda a estrutura da web.",
-      "css": "Evolução com CSS",
-      "cssDesc": "Avançamos para o CSS, onde a estética ganha vida com cores, fontes e layouts.",
-      "js": "Interatividade com JavaScript",
-      "jsDesc": "Com JavaScript, damos vida às páginas com interatividade e dinamismo.",
-      "github": "Controle de Versão com GitHub",
-      "githubDesc": "Finalmente, com GitHub, armazenamos, colaboramos e gerenciamos nossas criações."
-    },
-    "ticket": {
-      "title": "Embarque",
-      "description": "Embarque nessa aventura com nosso pacote especial!",
-      "reserveNow": "Reserve Agora",
-      "eBookDescription":  "Aprenda com nosso e-book detalhado, cobrindo todos os aspectos essenciais.", 
-      "videoDescription":  "Assista nossa videoaula e pratique com exemplos práticos",
-      "completePackageDescription": "Obtenha o e-book e as videoaulas juntos com um preço especial.",
-      "eBookPrice": "49.99",
-      "videoPrice": "79.99",
-      "completePackagePrice": "119.99"
+  "intro": {
+    "title": "Conectando Tecnologia, Projetos & Capital.",
+    "description": "Uma plataforma privada para engenharia, estruturação de projetos e intermediação, conectando empresas, startups e oportunidades estratégicas."
+  },
+
+  "timeline": {
+    "title": "Nossa Abordagem",
+    "description": "Da base em engenharia até oportunidades estruturadas, nosso processo evolui por sistemas, projetos e ativos.",
+
+    "html": "Fundamentos de Engenharia",
+    "htmlDesc": "Todo projeto começa com bases técnicas sólidas, garantindo confiabilidade, escalabilidade e eficiência.",
+
+    "css": "Design de Sistemas",
+    "cssDesc": "Projetamos sistemas estruturados, alinhando tecnologia, usabilidade e clareza operacional.",
+
+    "js": "Execução de Projetos",
+    "jsDesc": "A execução transforma ideias em sistemas operacionais, integrando lógica, automação e performance.",
+
+    "github": "Estruturação & Intermediação",
+    "githubDesc": "Estruturamos projetos e conectamos de forma privada oportunidades, parceiros e ativos por meio de processos seguros e controlados."
+  },
+
+  "platform": {
+    "title": "Plataforma HK | Tecnologia, Sistemas & Capital",
+    "description": "Um ecossistema completo para aprendizado técnico, desenvolvimento de sistemas, gestão de projetos e oportunidades privadas de investimento.",
+    "request": "Solicitar acesso",
+    "loading": "Processando...",
+
+    "plans": {
+      "basic": {
+        "title": "Explorador",
+        "price": "Gratuito",
+        "features": {
+          "f1": "Acesso a cursos técnicos e práticos gratuitos",
+          "f2": "Acesso à plataforma de cursos (LMS)",
+          "f3": "Acesso ao marketplace de tecnologia",
+          "f4": "Primeiro projeto profissional de website (guiado)",
+          "f5": "Suporte para criar e hospedar um site pessoal ou portfólio",
+          "f6": "Acesso beta ao sistema de gestão",
+          "f7": "Sem acesso a investimentos, startups ou SPEs"
+        }
+      },
+
+      "intermediate": {
+        "title": "Estruturado",
+        "price": "USD 29 / mês",
+        "features": {
+          "f1": "Tudo do plano Explorador",
+          "f2": "Cursos avançados e trilhas técnicas",
+          "f3": "Acesso completo ao sistema de gestão",
+          "f4": "Projetos reais estruturados",
+          "f5": "2 horas mensais de aulas online ao vivo com instrutor",
+          "f6": "Tempo de instrutor baseado em desenvolvedor sênior",
+          "f7": "Sem acesso ao hub privado de investimentos"
+        }
+      },
+
+      "advanced": {
+        "title": "Master",
+        "price": "Privado / Apenas convite",
+        "features": {
+          "f1": "Tudo do plano Estruturado",
+          "f2": "Acesso ao hub privado de investimentos",
+          "f3": "Participação na primeira SPE (Sociedade de Propósito Específico) da HK",
+          "f4": "SPE focada em investimentos imobiliários via imóveis de leilão",
+          "f5": "Modelo de investimento coletivo por cotas",
+          "f6": "Intermediação privada e estruturação de negócios",
+          "f7": "Análises orientadas por inteligência artificial para decisões de investimento"
+        }
+      }
     }
+  },
 
+  "services": {
+    "title": "Áreas de Atuação",
 
+    "tabs": {
+      "software": "Software & Sistemas",
+      "electronics": "Eletrônica & Automação",
+      "3dPrototyping": "Prototipagem & 3D",
+      "education": "Educação & STEM",
+      "business": "Negócios & Intermediação"
+    },
 
+    "education": {
+      "lectures": "Palestras Tecnológicas",
+      "lecturesDesc": "Palestras presenciais e online sobre tecnologia, inovação, engenharia, inteligência artificial e mercado.",
 
+      "privateClasses": "Aulas Particulares",
+      "privateClassesDesc": "Aulas particulares presenciais e online, gratuitas ou pagas, focadas em tecnologia, programação, eletrônica e engenharia aplicada.",
 
+      "stem": "Educação STEM & Robótica",
+      "stemDesc": "Educação prática em STEM e robótica, integrando ciência, tecnologia, engenharia e matemática com aplicações reais.",
 
+      "kits": "Kits e Materiais Tecnológicos",
+      "kitsDesc": "Fornecimento de kits e materiais educacionais como ESP32, sensores, jumpers, módulos eletrônicos e componentes para aprendizado prático."
+    },
 
+    "software": {
+      "webDevelopment": "Desenvolvimento Web",
+      "webDevelopmentDesc": "Desenvolvimento de plataformas web modernas, escaláveis e seguras, com foco em performance e arquitetura sólida.",
+
+      "mobileDevelopment": "Aplicações Mobile",
+      "mobileDevelopmentDesc": "Desenvolvimento de aplicativos mobile integrados a sistemas, APIs e fluxos operacionais.",
+
+      "cloud": "Cloud & Infraestrutura",
+      "cloudDesc": "Arquitetura em nuvem, integrações, automações e infraestrutura escalável.",
+
+      "iot": "IoT & Sistemas Inteligentes",
+      "iotDesc": "Integração entre hardware e software, automação, sensores e sistemas conectados."
+    },
+
+    "electronics": {
+      "vehicleMaintenance": "Eletrônica Automotiva & Industrial",
+      "vehicleMaintenanceDesc": "Diagnóstico, manutenção e desenvolvimento de soluções eletrônicas para veículos e sistemas industriais.",
+
+      "lithiumBatteryRecovery": "Baterias de Lítio & Sistemas de Energia",
+      "lithiumBatteryRecoveryDesc": "Recuperação, análise e desenvolvimento de soluções com baterias de lítio e sistemas energéticos."
+    },
+
+    "prototyping": {
+      "drawing3d": "Modelagem & Design 3D",
+      "drawing3dDesc": "Modelagem técnica, peças funcionais e projetos mecânicos para prototipagem.",
+
+      "3dPrinting": "Impressão 3D & CNC",
+      "3dPrintingDesc": "Prototipagem rápida, manufatura digital, impressão 3D e processos CNC."
+    },
+
+    "business": {
+      "businessPlan": "Estruturação de Negócios",
+      "businessPlanDesc": "Criação e estruturação de modelos de negócio, projetos, startups e SPEs.",
+
+      "agileMethodology": "Gestão Ágil de Projetos",
+      "agileMethodologyDesc": "Planejamento, organização e execução de projetos utilizando metodologias ágeis.",
+
+      "managementSystem": "Sistemas de Gestão & Intermediação",
+      "managementSystemDesc": "Plataformas, sistemas e processos para gestão e intermediação privada de projetos, ativos e oportunidades."
+    }
+  },
+
+  "about": {
+    "title": "Sobre a HK",
+    "subtitle": "Um breve panorama de quem somos, por que existimos e o que estamos construindo.",
+
+    "summary": {
+      "title": "Visão Geral",
+      "description": "A HK nasce com o propósito de democratizar o acesso à tecnologia, ao conhecimento e à estruturação de projetos. Construímos uma plataforma inicialmente gratuita onde pessoas e organizações podem aprender, desenvolver sistemas, analisar dados e estruturar soluções reais. Além do acesso ao conhecimento, a HK atua na oferta de produtos e serviços de alta tecnologia e na estruturação de investimentos, como SPEs e projetos privados, sempre com transparência, rastreabilidade e uso intensivo de inteligência artificial para análise e tomada de decisão."
+    },
+
+    "mission": {
+      "title": "Nossa Missão",
+      "description": "Construir uma plataforma aberta e transparente que conecte tecnologia, dados, engenharia e capital, utilizando inteligência artificial para apoiar decisões, estruturar projetos e gerar eficiência real nos mundos físico e digital."
+    },
+
+    "vision": {
+      "title": "Nossa Visão",
+      "description": "Ser uma referência como plataforma privada e tecnológica onde conhecimento, inovação, investimentos e projetos coexistem de forma acessível, eficiente e orientada por dados, promovendo impacto econômico e social sustentável."
+    },
+
+    "values": {
+      "title": "Nossos Valores",
+      "items": {
+        "courage": "Coragem para questionar modelos tradicionais e construir novas estruturas",
+        "democracy": "Democracia no acesso ao conhecimento, à tecnologia e à informação",
+        "truth": "Verdade, transparência e clareza em dados, processos e decisões",
+        "efficiency": "Eficiência operacional, técnica e financeira orientada por dados e inteligência artificial"
+      }
+    }
+  },
+
+  "footer": {
+    "about": "A HK é uma plataforma privada que conecta tecnologia, sistemas, projetos e capital. Estruturamos soluções, sistemas e oportunidades nas áreas de engenharia, negócios e intermediação privada.",
+
+    "platform": {
+      "title": "Plataforma",
+      "about": "Sobre",
+      "services": "Serviços",
+      "projects": "Projetos",
+      "access": "Acesso à Plataforma",
+      "contact": "Contato"
+    },
+
+    "legal": {
+      "title": "Legal",
+      "terms": "Termos de Uso",
+      "privacy": "Política de Privacidade",
+      "disclaimer": "Aviso Legal"
+    },
+
+    "newsletter": {
+      "title": "Fique Conectado",
+      "description": "Receba atualizações sobre projetos, sistemas e oportunidades privadas.",
+      "placeholder": "Seu email",
+      "button": "Inscrever-se"
+    },
+
+    "copyright": "HK | Technology & Capital. Todos os direitos reservados."
   }
-  
+}

@@ -1,0 +1,127 @@
+/* ===============================
+   BASE
+=============================== */
+
+.ticket-section {
+  background-color: #092554;
+  background-image: url('../../assets/img/stars.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  color: #ffffff;
+  min-height: 100vh;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bottom-section-text {
+  text-align: center;
+  max-width: 800px;
+  margin-bottom: 2rem;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+}
+
+/* ===============================
+   CARDS
+=============================== */
+
+.card-content {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 2rem;
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.package {
+  background-color: #1f2933;
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 320px;
+  width: 100%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  text-align: center;
+}
+
+.package img {
+  width: 70px;
+  margin-bottom: 1rem;
+}
+
+.package h2 {
+  font-size: 1.6rem;
+  margin-bottom: 0.5rem;
+    color: #e5e7eb;
+}
+
+.price {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #38bdf8;
+  margin-bottom: 1rem;
+}
+
+/* ===============================
+   CHECKLIST
+=============================== */
+
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.feature-list li {
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  color: #e5e7eb;
+}
+
+/* ===============================
+   BUTTON
+=============================== */
+
+.reserve-button {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.reserve-button:hover {
+  background-color: #1d4ed8;
+}
+
+/* ===============================
+   MOBILE (iPhone 11)
+=============================== */
+
+@media (max-width: 900px) {
+  .card-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .card-content {
+    flex-direction: column;
+  }
+
+  .package {
+    max-width: 100%;
+  }
+}

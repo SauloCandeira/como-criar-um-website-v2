@@ -1,0 +1,165 @@
+/* =========================
+   SECTION
+========================= */
+
+.about-section {
+  background-color: #092554;
+  background-image: url('../../assets/img/stars.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  padding: 80px 16px;
+  color: #ffffff;
+  overflow-x: hidden;
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.about-header {
+  text-align: center;
+  max-width: 900px;
+  margin: 0 auto 48px;
+}
+
+.about-header h1 {
+  font-size: 2.4rem;
+  margin-bottom: 10px;
+}
+
+.about-header p {
+  font-size: 1.1rem;
+  color: #cbd5f5;
+  line-height: 1.6;
+}
+
+/* =========================
+   SUMMARY (FULL WIDTH)
+========================= */
+
+.about-summary {
+  max-width: 960px;
+  margin: 0 auto 48px;
+  padding: 32px;
+
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+}
+
+.about-summary h2 {
+  font-size: 1.6rem;
+  margin-bottom: 14px;
+  color: #38bdf8;
+  text-align: center;
+}
+
+.about-summary p {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #e5e7eb;
+  text-align: center;
+}
+
+/* =========================
+   GRID
+========================= */
+
+.about-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+/* =========================
+   BOX
+========================= */
+
+.about-box {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+
+  padding: 28px;
+  border-radius: 16px;
+
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.3);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.about-box:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(56, 189, 248, 0.35);
+}
+
+.about-box h2 {
+  font-size: 1.35rem;
+  margin-bottom: 14px;
+  color: #38bdf8;
+  text-align: center;
+}
+
+.about-box p,
+.about-box li {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e5e7eb;
+}
+
+.about-box ul {
+  padding-left: 18px;
+  margin-top: 10px;
+}
+
+.about-box li {
+  margin-bottom: 8px;
+}
+
+/* =========================
+   RESPONSIVE — IPHONE 11
+========================= */
+
+@media (max-width: 768px) {
+  .about-section {
+    padding: 64px 14px;
+  }
+
+  .about-header h1 {
+    font-size: 2rem;
+  }
+
+  .about-header p {
+    font-size: 1rem;
+  }
+
+  .about-summary {
+    padding: 24px;
+  }
+
+  .about-summary h2 {
+    font-size: 1.4rem;
+  }
+
+  .about-summary p {
+    font-size: 1rem;
+  }
+
+  .about-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .about-box {
+    padding: 24px;
+  }
+
+  .about-box h2 {
+    font-size: 1.25rem;
+  }
+}

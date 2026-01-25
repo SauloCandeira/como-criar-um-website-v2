@@ -1,165 +1,181 @@
-/* Estilo para o título, descrição e botão */
-/* Certifique-se de que este arquivo esteja no caminho correto */
+/* =========================
+   SECTION
+========================= */
 .product-section {
-  background-color: #092554; /* Cor de fundo igual ao SCSS */
-  background-image: url('../../assets/img/stars.png'); /* Imagem de fundo igual ao SCSS */
-  background-size: cover; /* Ajusta a imagem de fundo para cobrir todo o fundo */
-  background-repeat: no-repeat; /* Evita repetição da imagem de fundo */
-  background-position: center; /* Ajusta a posição da imagem de fundo */
+  background-color: #092554;
+  background-image: url('../../assets/img/stars.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
   color: #ffffff;
+
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh; /* Garante que ocupe pelo menos 100% da altura da viewport */
-  position: relative; /* Necessário para posicionar a linha de conexão */
-  padding: 2rem; /* Adiciona um padding para a seção */
-  overflow: hidden; /* Garante que nenhum conteúdo ultrapasse os limites da seção */
+
+  /* ↓↓↓ AJUSTE PRINCIPAL (ANTES ESTAVA MUITO GRANDE) */
+  min-height: auto;
+  padding: 3rem 1.5rem 2rem;
+  overflow: hidden;
 }
 
-
+/* =========================
+   HEADER
+========================= */
 .product-header {
+  width: 100%;
+  max-width: 1200px;
+
   display: flex;
-  justify-content: space-between; /* Alinha título e descrição à esquerda e botão à direita */
+  justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  background-color: rgba(9, 37, 84, 0.9); /* Fundo com opacidade para o header */
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* Sombra suave para um visual mais moderno */
+
+  margin-bottom: 2rem;
+  background-color: rgba(9, 37, 84, 0.9);
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .product-header .text-container {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  max-width: 75%; /* Limita a largura do título e descrição */
+  max-width: 75%;
 }
 
 .product-header h1 {
   font-size: 2.2rem;
   font-weight: 700;
-  color: #fff;
-  margin-bottom: 10px;
-  letter-spacing: 0.5px; /* Aumenta o espaçamento entre letras */
+  margin-bottom: 0.5rem;
 }
 
 .product-header .product-description {
   font-size: 1rem;
-  color: #ccc;
+  color: #d1d5db;
+  line-height: 1.6;
   text-align: justify;
-  margin-bottom: 10px;
-  line-height: 1.5;
 }
 
+/* Botão */
 .product-header .view-all-button {
   background-color: #3b7a57;
   color: white;
   border: none;
-  padding: 12px 25px;
+  padding: 0.7rem 1.8rem;
   font-size: 1rem;
-  border-radius: 30px; /* Bordas mais arredondadas para o botão */
+  border-radius: 30px;
   cursor: pointer;
-  transition: background-color 0.3s, transform 0.3s ease; /* Efeito de hover mais suave */
-  display: flex;
-  align-items: center;
-  justify-content: center;
+
+  transition: background-color 0.3s ease, transform 0.3s ease;
 }
 
 .product-header .view-all-button:hover {
   background-color: #2e5d45;
-  transform: scale(1.05); /* Pequeno efeito de ampliação no hover */
+  transform: scale(1.05);
 }
 
-.product-header .view-all-button:active {
-  transform: scale(1); /* Anula o efeito de ampliação ao clicar */
-}
-
-/* Slider */
+/* =========================
+   SLIDER
+========================= */
 .product-slider {
-  width: 90%;
-  margin: 0 auto;
-  padding: 20px 0;
-  background-color: #092554;
-  background-image: url('../../assets/img/stars.png');
-  background-size: cover;
-  background-position: center;
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 1200px;
+  padding: 1.5rem 0;
 }
 
-/* Wrapper dos cards */
+/* =========================
+   CARD WRAPPER
+========================= */
 .product-card-wrapper {
   padding: 0 10px;
 }
 
-/* Configuração fixa dos cards */
+/* =========================
+   CARD
+========================= */
 .product-card {
-  background: rgba(45, 45, 45, 0.9);
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  padding: 20px;
-  text-align: center;
-  transition: transform 0.3s ease;
-  width: 100%;
-  height: 400px;
+  background: rgba(45, 45, 45, 0.92);
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+
+  padding: 1.2rem;
+  height: 420px;
+
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  position: relative;
+
+  transition: transform 0.3s ease;
 }
 
-/* Hover */
 .product-card:hover {
-  transform: translateY(-10px);
+  transform: translateY(-8px);
 }
 
-/* Imagem */
+/* =========================
+   IMAGE
+========================= */
 .product-image {
   width: 100%;
   max-width: 180px;
   height: 120px;
-  margin: 0 auto 10px;
-  border-radius: 6px;
+  margin: 0 auto 0.75rem;
+  border-radius: 8px;
   object-fit: cover;
 }
 
-/* Informações */
+/* =========================
+   INFO
+========================= */
 .product-info {
-  flex-grow: 1;
   display: flex;
   flex-direction: column;
+  flex-grow: 1;
+}
+
+/* Badge */
+.product-badge {
+  align-self: center;
+  margin-bottom: 0.4rem;
+
+  padding: 0.2rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.product-badge.product {
+  background-color: #2563eb;
+}
+
+.product-badge.service {
+  background-color: #059669;
+}
+
+/* Title */
+.product-info h2 {
+  font-size: 1.15rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
   text-align: center;
 }
 
-/* Nome do Produto */
-.product-info h2 {
-  font-size: 1.2rem;
-  font-weight: bold;
-  margin-bottom: 10px;
-  color: #ffffff;
-}
-
-/* Descrição */
+/* Description */
 .product-description {
-  font-size: 1rem;
-  color: #ccc;
-  margin-bottom: 10px;
+  font-size: 0.95rem;
+  color: #d1d5db;
+  line-height: 1.5;
+
+  margin-bottom: 0.75rem;
   height: 80px;
   overflow-y: auto;
-  padding: 5px;
   text-align: justify;
 }
 
-/* Preço */
-.product-price {
-  font-size: 1.125rem;
-  font-weight: bold;
-  color: #3b7a57;
-  margin-top: auto;
-}
-
-/* Barra de rolagem mais discreta */
+/* Scrollbar */
 .product-description::-webkit-scrollbar {
   width: 5px;
 }
@@ -169,21 +185,43 @@
   border-radius: 3px;
 }
 
-.product-description::-webkit-scrollbar-track {
-  background: transparent;
+/* Price */
+.product-price {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #3b7a57;
+  margin-bottom: 0.75rem;
+  text-align: center;
 }
 
-/* Ajustes de responsividade */
+/* =========================
+   BUTTONS
+========================= */
+.product-action {
+  width: 100%;
+  border: none;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.product-action.buy {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.product-action.quote {
+  background-color: #059669;
+  color: #ffffff;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
 @media (max-width: 1024px) {
-  .product-slider {
-    width: 100%;
-  }
   .product-header h1 {
-    font-size: 1.8rem;
-  }
-  .view-all-button {
-    font-size: 0.9rem;
-    padding: 8px 16px;
+    font-size: 1.9rem;
   }
 }
 
@@ -191,14 +229,18 @@
   .product-header {
     flex-direction: column;
     align-items: flex-start;
-    padding: 15px;
+    gap: 1rem;
   }
+
+  .product-header .text-container {
+    max-width: 100%;
+  }
+
   .product-header h1 {
     font-size: 1.6rem;
   }
-  .product-header .view-all-button {
-    font-size: 0.8rem;
-    padding: 6px 14px;
-    margin-top: 10px;
+
+  .product-card {
+    height: auto;
   }
 }

@@ -1,0 +1,162 @@
+/* =========================
+   FUNDO ESTRELADO (FULL WIDTH)
+========================= */
+
+.services-background {
+  width: 100vw;
+  min-height: 100vh;
+
+  background-color: #092554;
+  background-image: url('../../assets/img/stars.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  overflow-x: hidden;
+}
+
+/* =========================
+   CONTAINER CENTRAL
+========================= */
+
+.services-container {
+  width: 100%;
+  max-width: 900px;
+
+  padding: 80px 20px;
+  box-sizing: border-box;
+
+  text-align: center;
+  color: #ffffff;
+}
+
+/* =========================
+   TÍTULO
+========================= */
+
+.services-title {
+  font-size: 2.6rem;
+  font-weight: bold;
+  margin-bottom: 50px;
+  color: #ffffff;
+}
+
+/* =========================
+   TABS
+========================= */
+
+.react-tabs {
+  width: 100%;
+}
+
+.react-tabs__tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+/* =========================
+   BOTÕES (NEON)
+========================= */
+
+.react-tabs__tab {
+  padding: 16px 22px;
+  background-color: #1f1f1f;
+  color: #ffffff;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.react-tabs__tab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(45deg, #00ffcc, #ff00ff, #00ffff);
+  border-radius: 8px;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.react-tabs__tab:hover::before {
+  opacity: 1;
+}
+
+.react-tabs__tab:hover {
+  transform: scale(1.05);
+}
+
+.react-tabs__tab--selected {
+  background: linear-gradient(90deg, #1d4ed8, #2563eb);
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.8);
+}
+
+.react-tabs__tab--selected::before {
+  opacity: 1;
+}
+
+/* =========================
+   GRID DE SERVIÇOS
+========================= */
+
+.service-category {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 40px;
+}
+
+/* =========================
+   CARDS
+========================= */
+
+.service-item {
+  background: linear-gradient(180deg, #ffffff, #f1f5f9);
+  padding: 24px;
+  border-radius: 12px;
+
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  text-align: left;
+  transition: all 0.3s ease;
+}
+
+.service-item:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 16px 32px rgba(0, 123, 255, 0.45);
+}
+
+.service-item h2 {
+  color: #1d4ed8;
+  margin-bottom: 12px;
+}
+
+.service-item p {
+  color: #334155;
+  line-height: 1.6;
+}
+
+/* =========================
+   RESPONSIVO
+========================= */
+
+@media (max-width: 768px) {
+  .services-container {
+    padding: 50px 16px;
+  }
+
+  .service-category {
+    grid-template-columns: 1fr;
+  }
+}
