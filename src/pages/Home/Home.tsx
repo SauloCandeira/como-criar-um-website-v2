@@ -1,11 +1,11 @@
 import './Home.css'; // Certifique-se de que seus estilos CSS estejam no arquivo Home.css
-import Timeline from '../../components/Timeline/Timeline'; // Ajuste o caminho conforme necessário
+ {/*import Timeline from '../../components/Timeline/Timeline';*/} // Ajuste o caminho conforme necessário
 import Ticket from '../../components/PlatformAccess/PlatformAccess'; // Ajuste o caminho conforme necessário
 import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
 import Intro from '../../components/Intro/Intro';
 import ProductCard from '../../components/ProductCard/ProductCard';
 import Footer from '../../components/Footer/Footer';
-import FounderCard from '../../components/FounderCard/FounderCard';
+  {/*import FounderCard from '../../components/FounderCard/FounderCard';  */}
 import Services from '../../components/Services/Services';
 import AboutCard from '../../components/AboutCard/AboutCard';
 
