@@ -3,7 +3,7 @@
   top: 60px; /* Ajuste a posição para 60px para ficar logo abaixo do Header (altura do header) */
   left: 0;
   width: 100%;
-  background: #f8f9fa;
+  background: transparent;
   padding: 10px 20px;
   font-family: Arial, sans-serif;
   font-size: 14px;
@@ -41,9 +41,4 @@
 
 .navigate-button:hover {
   background-color: #005f87;
-}
-
-/* Adiciona um espaçamento para garantir que o conteúdo não sobreponha o breadcrumb */
-body {
-  padding-top: 100px; /* Ajuste esse valor conforme necessário */
 }

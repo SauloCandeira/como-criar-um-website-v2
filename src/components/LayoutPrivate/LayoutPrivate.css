@@ -1,14 +1,18 @@
 /* Layout para Páginas Privadas */
 .private-layout {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #092554 0%, #1e3a8a 100%);
-  color: #ffffff;
+  background-color: #f4f7fa;
+  color: #333;
 }
 
 .private-main {
-  padding: 2rem 0;
-  max-width: 1200px;
-  margin: 0 auto;
+  flex: 1;
+  padding: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow-y: auto;
 }
 
 /* Responsividade */

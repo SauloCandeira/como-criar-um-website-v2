@@ -1,13 +1,9 @@
-body {
-  margin: 0;
-  font-family: 'Arial', sans-serif;
-  background-color: #f4f7fa; /* Cor de fundo mais clara */
-}
-
 .admin-container {
   display: flex;
-  min-height: calc(100vh - 200px); /* Ajustar para header e footer */
+  min-height: calc(100vh - 180px); /* Altura ajustada para header e footer */
   background-color: #f4f7fa;
+  margin-top: 0;
+  padding: 0;
 }
 
 .admin-sidebar {

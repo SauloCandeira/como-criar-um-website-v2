@@ -1,13 +1,13 @@
 /* Layout da Página Home */
 .home-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #092554 0%, #1e3a8a 100%);
+  height: calc(100vh - 100px);
+  overflow: auto;
   color: #ffffff;
 }
 
 /* Seções Individuais */
 .home-section {
-  margin-bottom: 4rem; /* Espaçamento entre seções */
 }
 
 .home-section:last-child {

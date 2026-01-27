@@ -7,6 +7,10 @@
 
 html {
     scroll-behavior: smooth;
+    background-color: #092554;
+    background-image: url(../img/stars.png);
+    background-size: cover;
+    background-position: center;
 }
 
 body {
@@ -23,6 +27,7 @@ body {
     background-position: center center; /* Centraliza a imagem */
     background-size: cover; /* Garante que a imagem cubra toda a área sem se repetir */
     background-repeat: no-repeat; /* Garante que a imagem não se repita */
+    background-attachment: fixed; /* Para efeito parallax */
     animation: backgroundSize 1s ease-in-out forwards 1s;
 
     .mountain {
