@@ -1,40 +1,28 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import './HeaderTwo.css';
 import LanguageSwitcher from '../../LanguageSwitcher/LanguageSwitcher';
-
-// Firebase Auth
 import { getAuth, onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 const HeaderTwo: React.FC = () => {
   const { t } = useTranslation();
   const goTopBtnRef = useRef<HTMLButtonElement | null>(null);
   const navigate = useNavigate();
-
   const [user, setUser] = useState<User | null>(null);
 
-  // Detecta scroll para mostrar botão "voltar ao topo" (se houver)
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY >= 800) {
-        if (goTopBtnRef.current) {
-          goTopBtnRef.current.classList.add('active');
-        }
+        goTopBtnRef.current?.classList.remove('hidden');
       } else {
-        if (goTopBtnRef.current) {
-          goTopBtnRef.current.classList.remove('active');
-        }
+        goTopBtnRef.current?.classList.add('hidden');
       }
     };
 
     window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Detecta se usuário está logado
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -43,57 +31,65 @@ const HeaderTwo: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleLoginClick = () => {
-    navigate('/login');
-  };
-
+  const handleLoginClick = () => navigate('/login');
   const handleLogoutClick = async () => {
-    const auth = getAuth();
     try {
-      await signOut(auth);
+      await signOut(getAuth());
       setUser(null);
-      navigate('/'); // ou para outra rota desejada
+      navigate('/');
     } catch (error) {
-      console.error('Erro ao fazer logout:', error);
+      console.error('Logout error:', error);
     }
   };
 
-  const handleMyAccountClick = () => {
-    navigate('/dashboard'); // ou a rota da conta do usuário
-  };
-
-  const handleHomeClick = () => {
-    navigate('/');
-  };
-
   return (
-    <header>
-      <div className="container">
-        <div className="header-left">
+    <header className="fixed top-0 left-0 w-full h-[60px] flex items-center bg-[#092554]/90 shadow-sm z-[1000] transition-none">
+      <div className="mx-auto flex h-full w-full max-w-[1280px] items-center justify-between border-2 border-red-600 bg-red-500/5 px-4">
+        <div className="flex items-center gap-5">
           <img
             src="/hk-logo.svg"
             alt="HK Logo"
-            className="header-logo"
-            onClick={handleHomeClick}
+            className="h-10 w-10 cursor-pointer transition-transform duration-300 hover:scale-110"
+            onClick={() => navigate('/')}
           />
           <LanguageSwitcher />
         </div>
 
-        {user ? (
-          <div className="auth-buttons">
-            <button className="btn-account" onClick={handleMyAccountClick}>
-              <i className="fas fa-user"></i> {t('myAccount')}
+        <div className="flex items-center gap-2.5">
+          {user ? (
+            <>
+              <button
+                className="flex items-center gap-1.5 whitespace-nowrap rounded bg-[#28a745] px-4 py-2.5 text-white transition-colors hover:bg-[#218838]"
+                onClick={() => navigate('/dashboard')}
+              >
+                <i className="fas fa-user"></i> {t('myAccount')}
+              </button>
+              <button
+                className="flex items-center gap-1.5 whitespace-nowrap rounded bg-[#007bff] px-4 py-2.5 text-white transition-colors hover:bg-[#0056b3]"
+                onClick={handleLogoutClick}
+              >
+                <i className="fas fa-sign-out-alt"></i> {t('logout')}
+              </button>
+            </>
+          ) : (
+            <button
+              className="flex items-center gap-1.5 whitespace-nowrap rounded bg-[#007bff] px-4 py-2.5 text-white transition-colors hover:bg-[#0056b3]"
+              onClick={handleLoginClick}
+            >
+              <i className="fas fa-user"></i> {t('login')}
             </button>
-            <button className="btn-login" onClick={handleLogoutClick}>
-              <i className="fas fa-sign-out-alt"></i> {t('logout')}
-            </button>
-          </div>
-        ) : (
-          <button className="btn-login" onClick={handleLoginClick}>
-            <i className="fas fa-user"></i> {t('login')}
-          </button>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Scroll to Top Button */}
+      <button
+        ref={goTopBtnRef}
+        className="fixed bottom-5 right-5 hidden cursor-pointer rounded-full bg-black/50 p-2.5 text-white transition-transform hover:scale-110"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      >
+        <i className="fas fa-arrow-up text-2xl"></i>
+      </button>
     </header>
   );
 };
