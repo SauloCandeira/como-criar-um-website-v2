@@ -58,15 +58,36 @@ const HeaderTwo: React.FC = () => {
     }
   };
 
+  const handleMyAccountClick = () => {
+    navigate('/dashboard'); // ou a rota da conta do usuário
+  };
+
+  const handleHomeClick = () => {
+    navigate('/');
+  };
+
   return (
     <header>
       <div className="container">
-        <LanguageSwitcher />
+        <div className="header-left">
+          <img
+            src="/hk-logo.svg"
+            alt="HK Logo"
+            className="header-logo"
+            onClick={handleHomeClick}
+          />
+          <LanguageSwitcher />
+        </div>
 
         {user ? (
-          <button className="btn-login" onClick={handleLogoutClick}>
-            <i className="fas fa-sign-out-alt"></i> {t('logout')}
-          </button>
+          <div className="auth-buttons">
+            <button className="btn-account" onClick={handleMyAccountClick}>
+              <i className="fas fa-user"></i> {t('myAccount')}
+            </button>
+            <button className="btn-login" onClick={handleLogoutClick}>
+              <i className="fas fa-sign-out-alt"></i> {t('logout')}
+            </button>
+          </div>
         ) : (
           <button className="btn-login" onClick={handleLoginClick}>
             <i className="fas fa-user"></i> {t('login')}

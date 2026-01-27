@@ -6,6 +6,13 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
+interface Sale {
+  id: number;
+  user: string;
+  value: string;
+  date: string;
+}
+
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('users');
   const [items] = useState([
@@ -36,18 +43,17 @@ const Admin: React.FC = () => {
     return new Date(+year, +month - 1, +day);
   };
 
-  // Função para agrupar vendas
-  const groupSalesByPeriod = (sales: any[], period: string) => {
-    return sales.reduce((acc, sale) => {
+  const groupSalesByPeriod = (sales: Sale[], period: string) => {
+    return sales.reduce((acc: Record<string, number>, sale) => {
       const date = formatDate(sale.date);
-      let key;
+      let key: string;
 
       if (period === 'day') {
         key = date.toLocaleDateString();
       } else if (period === 'month') {
         key = `${date.getMonth() + 1}/${date.getFullYear()}`;
       } else {
-        key = date.getFullYear();
+        key = date.getFullYear().toString();
       }
 
       if (!acc[key]) acc[key] = 0;

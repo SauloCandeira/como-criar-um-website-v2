@@ -23,17 +23,25 @@ const Home = () => {
   };
   */}
   return (
-    <div  className="section">
-      <HeaderTwo/>
-      <Intro />
-      <AboutCard  />
-      <Services  />
-
-      {/* NEGÓCIOS      <Timeline />   <FounderCard {...founder} />*/}
-  
-      <Ticket  />
-      <ProductCard  />
-     
+    <div className="home-container">
+      <HeaderTwo />
+      <main>
+        <section className="home-section">
+          <Intro />
+        </section>
+        <section className="home-section">
+          <AboutCard />
+        </section>
+        <section className="home-section">
+          <Services />
+        </section>
+        <section className="home-section">
+          <Ticket />
+        </section>
+        <section className="home-section">
+          <ProductCard />
+        </section>
+      </main>
       <Footer />
     </div>
   );

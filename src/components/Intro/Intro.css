@@ -69,3 +69,23 @@ button span {
 .pb-8 {
   padding-bottom: 2rem; /* Ajuste o padding inferior conforme necessário */
 }
+
+/* Media Queries para Responsividade */
+@media (max-width: 768px) {
+  .intro-section {
+    padding: 3rem 1rem; /* Reduz padding em mobile */
+    min-height: 100vh;
+  }
+
+  .mountain {
+    max-width: 400px; /* Reduz tamanho da imagem em mobile */
+  }
+
+  button img {
+    width: 30px; /* Reduz tamanho do ícone */
+  }
+
+  button span {
+    font-size: 0.875rem; /* Reduz fonte */
+  }
+}

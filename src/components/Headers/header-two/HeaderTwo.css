@@ -31,8 +31,49 @@ header {
   padding: 0 20px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-logo {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.header-logo:hover {
+  transform: scale(1.1);
+}
+
 .language-switcher {
   /* Adiciona estilo opcional para LanguageSwitcher se necessário */
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-account {
+  background-color: #28a745; /* Verde para Minha Conta */
+  color: #fff;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: background-color 0.3s;
+}
+
+.btn-account:hover {
+  background-color: #218838;
 }
 
 .btn-login {
@@ -47,7 +88,6 @@ header {
   gap: 5px;
   white-space: nowrap; /* Impede quebra de linha dentro do botão */
   transition: background-color 0.3s; /* Suaviza a transição de cor */
-  margin-left: auto; /* Faz com que o botão de login fique alinhado ao final */
 }
 
 .btn-login:hover {
@@ -79,13 +119,27 @@ header {
     justify-content: space-between; /* Garante que os itens fiquem em extremos opostos */
   }
 
+  .header-left {
+    gap: 10px;
+  }
+
+  .header-logo {
+    width: 30px;
+    height: 30px;
+  }
+
   .language-switcher {
     margin-right: 0; /* Remove a margem à direita em dispositivos móveis */
   }
 
+  .auth-buttons {
+    gap: 5px; /* Reduz gap em mobile */
+  }
+
+  .btn-account,
   .btn-login {
-    background-color: #0056b3; /* Ajusta a cor de fundo do botão para contraste em dispositivos móveis */
-    margin-left: 0; /* Remove a margem à esquerda no mobile */
+    padding: 8px 12px; /* Reduz padding */
+    font-size: 14px; /* Reduz fonte */
   }
 
   .go-top {

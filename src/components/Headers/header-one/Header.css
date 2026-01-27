@@ -15,21 +15,10 @@
   justify-content: center; /* Centraliza itens horizontalmente */
 }
 
-/* Container do Header */
-.container {
-  max-width: 1200px; /* Define um máximo para a largura do contêiner */
-  width: 100%; /* Garante que o contêiner ocupe toda a largura disponível */
+/* Container da Navegação */
+.nav-container {
   display: flex;
-  justify-content: space-between; /* Espaça o logotipo e a navegação */
-  align-items: center; /* Alinha os itens verticalmente */
-}
-
-/* Logo */
-.logo {
-  font-size: 1.875rem; /* Tamanho da fonte para o logotipo */
-  font-weight: bold; /* Aplica negrito ao texto */
-  text-decoration: none; /* Remove o sublinhado do link */
-  color: #ffffff; /* Cor do logotipo */
+  align-items: center;
 }
 
 /* Navegação */
@@ -40,6 +29,24 @@
   padding: 0;
   margin: 0;
   align-items: center; /* Alinha itens verticalmente */
+}
+
+/* Hamburger Menu */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0.5rem;
+}
+
+.bar {
+  width: 25px;
+  height: 3px;
+  background-color: #ffffff;
+  margin: 3px 0;
+  transition: 0.3s;
 }
 
 /* Itens da Navegação */
@@ -76,6 +83,44 @@
 .login-button:hover {
   background-color: #ffffff; /* Cor de fundo ao passar o mouse */
   color: #092554; /* Cor do texto ao passar o mouse */
+}
+
+/* Media Queries para Responsividade */
+@media (max-width: 768px) {
+  .nav {
+    position: fixed;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 100%);
+    background-color: rgba(9, 37, 84, 0.95);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 999;
+  }
+
+  .nav-open {
+    transform: translateX(0);
+  }
+
+  .hamburger {
+    display: flex;
+  }
+
+  .nav li {
+    margin: 1rem 0;
+  }
+
+  .nav a {
+    font-size: 1.2rem;
+  }
+
+  .login-button {
+    margin-top: 1rem;
+  }
 }
 
 /* Adiciona um espaçamento no topo do conteúdo para não ficar escondido pelo header fixo */

@@ -155,3 +155,32 @@ body {
 #preview-section h2 {
   margin-bottom: 10px;
 }
+
+/* Media Queries para Responsividade */
+@media (max-width: 768px) {
+  #topBar {
+    padding: 0 20px;
+    gap: 20px;
+    height: 60px;
+  }
+
+  #logo {
+    font-size: 18px;
+  }
+
+  .toggleB {
+    height: 40px;
+    width: 80px;
+    font-size: 14px;
+  }
+
+  #set {
+    gap: 5px;
+  }
+
+  #editors-section,
+  #preview-section {
+    flex: none;
+    width: 100%;
+  }
+}

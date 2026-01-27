@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Configurações da API SumUp
 const CLIENT_ID = 'cc_classic_4v9jN2dj5Xh2WhECrQydPM9tpnW1C'; // Novo CLIENT_ID
@@ -17,7 +17,7 @@ interface Mandate {
   type: string;
 }
 
-interface Transaction {
+export interface Transaction {
   amount: number;
   auth_code: string;
   currency: string;
@@ -34,7 +34,7 @@ interface Transaction {
   vat_amount: number;
 }
 
-interface CheckoutResponse {
+export interface CheckoutResponse {
   amount: number;
   checkout_reference: string;
   currency: string;
@@ -72,8 +72,9 @@ export const getAccessToken = async (): Promise<string | null> => {
     
     console.log('Token de acesso obtido com sucesso:', response.data.access_token);
     return response.data.access_token;
-  } catch (error) {
-    console.error('Erro ao obter token de acesso:', (error as any).response?.data || error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    console.error('Erro ao obter token de acesso:', axiosError.response?.data || error);
     return null;
   }
 };
@@ -123,8 +124,9 @@ export const createCheckout = async (amount: number, currency: string, productNa
 
     // Retornar dados do checkout
     return response.data;
-  } catch (error) {
-    console.error('Erro ao criar checkout:', (error as any).response?.data || error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    console.error('Erro ao criar checkout:', axiosError.response?.data || error);
     return null;
   }
 };
@@ -152,8 +154,9 @@ export const listCheckouts = async (): Promise<{ checkouts: CheckoutResponse[] }
 
     console.log('Lista de checkouts recebida com sucesso:', response.data);
     return response.data;
-  } catch (error) {
-    console.error('Erro ao listar checkouts:', (error as any).response?.data || error);
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    console.error('Erro ao listar checkouts:', axiosError.response?.data || error);
     return null;
   }
 };

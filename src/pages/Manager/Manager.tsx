@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import './Manager.css';
-import Breadcrumble from '../../components/Breadcrumble/Breadcrumble';
-import HeaderTwo from '../../components/Headers/header-two/HeaderTwo';
+import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
 import TodoBoard from '../../components/TodoBoard/TodoBoard';
 import TimelineBoard from '../../components/TimelineBoard/TimelineBoard';
 import RoadMap from '../../components/RoadMap/RoadMap';
@@ -14,40 +13,38 @@ const Manager: React.FC = () => {
   const [filter] = useState<string[]>([]);
 
   return (
-    <div className="admin-container">
-      <HeaderTwo/>
-      <Breadcrumble crumbs={filter} />
+    <LayoutPrivate crumbs={filter}>
+      <div className="admin-container">
+        {/* Sidebar */}
+        <aside className="admin-sidebar">
+          <h2>Admin</h2>
+          <ul>
+            <li className={activeTab === 'ficha-tecnica' ? 'active' : ''} onClick={() => setActiveTab('ficha-tecnica')}>
+              FICHA TECNICA
+            </li>
+            <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
+              TASKS
+            </li>
+            <li className={activeTab === 'content' ? 'active' : ''} onClick={() => setActiveTab('content')}>
+              ROADMAP
+            </li>
+            <li className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
+              TIMELINE
+            </li>
+            <li className={activeTab === 'analitycs' ? 'active' : ''} onClick={() => setActiveTab('analitycs')}>
+              ANALITYCS
+            </li>
+          </ul>
+        </aside>
 
-      {/* Sidebar */}
-      <aside className="admin-sidebar">
-        <h2>Admin</h2>
-        <ul>
-          <li className={activeTab === 'ficha-tecnica' ? 'active' : ''} onClick={() => setActiveTab('ficha-tecnica')}>
-            FICHA TECNICA
-          </li>
-          <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
-            TASKS
-          </li>
-          <li className={activeTab === 'content' ? 'active' : ''} onClick={() => setActiveTab('content')}>
-            ROADMAP
-          </li>
-          <li className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
-            TIMELINE
-          </li>
-          <li className={activeTab === 'analitycs' ? 'active' : ''} onClick={() => setActiveTab('analitycs')}>
-            ANALITYCS
-          </li>
-        </ul>
-      </aside>
+        {/* Main Content */}
+        <main className="admin-content">
 
-      {/* Main Content */}
-      <main className="admin-content">
-
-        {/* HOME TAB */}
-        {activeTab === 'ficha-tecnica' && (
-          <>
-            <section>
-            <FichaTecnica
+          {/* HOME TAB */}
+          {activeTab === 'ficha-tecnica' && (
+            <>
+              <section>
+              <FichaTecnica
                 data={{
                   nome: "HKTech Platform",
                   tipo: "Plataforma Educacional",
@@ -73,46 +70,47 @@ const Manager: React.FC = () => {
                 }}
               />
 
-            </section>
-          </>
-        )}
+              </section>
+            </>
+          )}
 
 
-        {/* HOME TAB */}
-        {activeTab === 'home' && (
-          <>
+          {/* HOME TAB */}
+          {activeTab === 'home' && (
+            <>
+              <section>
+                <TodoBoard/>
+              </section>
+            </>
+          )}
+
+          {/* CONTENT TAB */}
+          {activeTab === 'content' && (
             <section>
-              <TodoBoard/>
+              <h2>📄 ROADMAP</h2>
+              <RoadMap />
             </section>
-          </>
-        )}
+          )}
 
-        {/* CONTENT TAB */}
-        {activeTab === 'content' && (
-          <section>
-            <h2>📄 ROADMAP</h2>
-            <RoadMap />
-          </section>
-        )}
+          {/* EDITOR TAB */}
+          {activeTab === 'editor' && (
+            <section>
+               < TimelineBoard />
+            </section>
+          )}
 
-        {/* EDITOR TAB */}
-        {activeTab === 'editor' && (
-          <section>
-            < TimelineBoard />
-          </section>
-        )}
-
-        {/* EDITOR TAB */}
-        {activeTab === 'analitycs' && (
-          <section>
-            < TimelineBoard />
-          </section>
-        )}
+          {/* EDITOR TAB */}
+          {activeTab === 'analitycs' && (
+            <section>
+               < TimelineBoard />
+            </section>
+          )}
 
 
 
-      </main>
-    </div>
+        </main>
+      </div>
+    </LayoutPrivate>
   );
 };
 

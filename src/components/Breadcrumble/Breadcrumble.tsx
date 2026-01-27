@@ -10,6 +10,11 @@ interface BreadcrumbleProps {
 const Breadcrumble: React.FC<BreadcrumbleProps> = ({ crumbs, navigateTo }) => {
   const navigate = useNavigate();  // Usando o hook useNavigate para navegação programática
 
+  // Se não há crumbs, não renderizar nada
+  if (!crumbs || crumbs.length === 0) {
+    return null;
+  }
+
   // Função de navegação para a rota especificada
   const handleNavigate = () => {
     if (navigateTo) {
@@ -19,19 +24,6 @@ const Breadcrumble: React.FC<BreadcrumbleProps> = ({ crumbs, navigateTo }) => {
 
   return (
     <div className="breadcrumble">
-      {/* Link para Home com ícone */}
-      <span>
-        <Link to="/dashboard" className="home-link">
-          <i className="fas fa-home"></i> Minha conta
-        </Link>
-        {" > "}
-      </span>
-      <span>
-        <Link to="/course" className="home-link">
-          <i className="fas fa-home"></i> Desenvolvimento Web Basico
-        </Link>
-        {" > "}
-      </span>
       {/* Exibindo os crumbs com links */}
       {crumbs.map((crumb, index) => (
         <span key={index}>

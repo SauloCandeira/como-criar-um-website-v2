@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';  // Importando useNavigate
 import { useTranslation } from 'react-i18next';
-import { createCheckout, listCheckouts } from '../../services/sumupService';
+import { createCheckout, listCheckouts, CheckoutResponse } from '../../services/sumupService';
+import { Product } from '../../Interfaces/InterfaceProduct';
 import eBookImg from './../../assets/img/e-book.png';
 import videoImg from './../../assets/img/video.png';
 import packageImg from './../../assets/img/package.png';
@@ -10,17 +11,17 @@ import './Ticket.css';
 const Ticket: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [loadingProductId, setLoadingProductId] = useState<number | null>(null);
-  const [checkouts, setCheckouts] = useState<any[]>([]);
-  const [pendingCheckouts, setPendingCheckouts] = useState<any[]>([]);
+  const [pendingCheckouts, setPendingCheckouts] = useState<CheckoutResponse[]>([]);
   const navigate = useNavigate();  // Inicializando o hook useNavigate
 
-  const products = [
+  const products: Product[] = [
     {
       id: 1,
       name: 'Basico',
       price: 0.00,
       description: t('ticket.eBookDescription'),
       image: eBookImg,
+      link: '#',
     },
     {
       id: 2,
@@ -28,6 +29,7 @@ const Ticket: React.FC = () => {
       price: 49.90,
       description: t('ticket.videoDescription'),
       image: videoImg,
+      link: '#',
     },
     {
       id: 3,
@@ -35,6 +37,7 @@ const Ticket: React.FC = () => {
       price: 79.90,
       description: t('ticket.completePackageDescription'),
       image: packageImg,
+      link: '#',
     },
   ];
 
@@ -44,8 +47,7 @@ const Ticket: React.FC = () => {
       const response = await listCheckouts();
       console.log('Resposta da API de checkouts:', response);
       if (response && response.checkouts) {
-        setCheckouts(response.checkouts);
-        const pending = response.checkouts.filter((checkout: any) => checkout.status === 'PENDING');
+        const pending = response.checkouts.filter((checkout: CheckoutResponse) => checkout.status === 'PENDING');
         console.log('Checkouts pendentes:', pending);
         setPendingCheckouts(pending);
       }
@@ -55,13 +57,12 @@ const Ticket: React.FC = () => {
   };
 
   useEffect(() => {
-    console.log(checkouts)
     loadCheckouts();
   }, []);
 
   const getCurrencySymbol = () => (i18n.language === 'pt' ? 'R$' : '$');
 
-  const handleReserve = async (product: any) => {
+  const handleReserve = async (product: Product) => {
     console.log(`Iniciando reserva para o produto: ${product.name}`);
     setLoadingProductId(product.id);
 
@@ -94,7 +95,7 @@ const Ticket: React.FC = () => {
         <h2 className="text-3xl font-bold mb-4">{t('ticket.pendingCheckoutsTitle')}</h2>
         {pendingCheckouts.length > 0 ? (
           <div className="checkouts-list">
-            {pendingCheckouts.map((checkout: any) => (
+            {pendingCheckouts.map((checkout: CheckoutResponse) => (
               <div key={checkout.checkout_reference} className="checkout-item">
                 <p>{t('ticket.checkoutReference')}: {checkout.checkout_reference}</p>
                 <p>{t('ticket.checkoutAmount')}: {checkout.currency} {checkout.amount}</p>

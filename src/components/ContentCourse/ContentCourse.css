@@ -47,3 +47,23 @@
 .html-explanation li {
   margin-bottom: 0.75rem;
 }
+
+/* Media Queries para Responsividade */
+@media (max-width: 768px) {
+  .course-html-example {
+    padding: 1rem;
+  }
+
+  .course-html-example h2 {
+    font-size: 1.5rem;
+  }
+
+  .code-block {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .html-explanation {
+    padding: 0.5rem;
+  }
+}

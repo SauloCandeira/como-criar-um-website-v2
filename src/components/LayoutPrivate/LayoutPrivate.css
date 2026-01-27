@@ -1,0 +1,19 @@
+/* Layout para Páginas Privadas */
+.private-layout {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #092554 0%, #1e3a8a 100%);
+  color: #ffffff;
+}
+
+.private-main {
+  padding: 2rem 0;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .private-main {
+    padding: 1rem;
+  }
+}

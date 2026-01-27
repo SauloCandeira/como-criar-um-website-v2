@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Product.css';
 
 const Product: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const checkoutData = location.state?.checkoutData || {};
+  const checkoutData = useMemo(() => location.state?.checkoutData || {}, [location.state]);
 
   useEffect(() => {
     console.log('Dados recebidos no Checkout:', checkoutData);

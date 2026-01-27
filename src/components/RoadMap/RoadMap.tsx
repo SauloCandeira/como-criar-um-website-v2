@@ -32,7 +32,7 @@ export default function RoadMap() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [targetDate]);
 
   return (
     <section className="StyleContador">

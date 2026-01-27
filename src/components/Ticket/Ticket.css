@@ -1,31 +1,31 @@
 /* Ajustes gerais para responsividade */
 .ticket-section {
-  background-color: #092554;
+  background-color: var(--primary-bg);
   background-image: url('../../assets/img/stars.png');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
-  color: #ffffff;
+  color: var(--primary-text);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 2rem;
-  box-sizing: border-box; /* Garante que o padding seja incluído nas dimensões totais */
+  padding: var(--padding-section);
+  box-sizing: border-box;
 }
 
 .bottom-section-text {
   text-align: center;
-  color: #ffffff;
-  margin-bottom: 2rem;
+  color: var(--primary-text);
+  margin-bottom: var(--margin-bottom);
 }
 
 .container {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: var(--padding-card);
   box-sizing: border-box;
 }
 
@@ -35,19 +35,19 @@
   gap: 2rem;
   justify-content: center;
   align-items: center;
-  width: 100%; /* Garante que o conteúdo ocupe toda a largura */
+  width: 100%;
   box-sizing: border-box;
 }
 
 /* Estilos para os cards */
 .package {
-  background-color: #2d2d2d;
-  border-radius: 8px;
-  padding: 1rem;
-  color: #fff;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  background-color: var(--secondary-bg);
+  border-radius: var(--border-radius);
+  padding: var(--padding-card);
+  color: var(--primary-text);
+  box-shadow: var(--shadow);
   text-align: center;
-  flex: 1 1 calc(33.333% - 2rem); /* Ajusta a largura dos pacotes para 3 colunas */
+  flex: 1 1 calc(33.333% - 2rem);
   max-width: 300px;
   margin: 1rem;
   box-sizing: border-box;
@@ -72,16 +72,17 @@
 .package a {
   display: inline-block;
   text-decoration: none;
-  background-color: #1d4ed8;
-  color: #ffffff;
+  background-color: var(--accent-blue);
+  color: var(--primary-text);
   padding: 0.5rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--border-radius);
   font-weight: bold;
-  transition: background-color 0.3s ease;
+  transition: var(--transition);
 }
 
 .package a:hover {
-  background-color: #2563eb;
+  background-color: var(--accent-blue);
+  opacity: 0.8;
 }
 
 /* Media query para dispositivos móveis */

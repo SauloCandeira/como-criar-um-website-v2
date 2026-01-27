@@ -196,5 +196,9 @@
     },
 
     "copyright": "HK | Technology & Capital. Todos os direitos reservados."
-  }
+  },
+
+  "login": "Entrar",
+  "logout": "Sair",
+  "myAccount": "Minha Conta"
 }
