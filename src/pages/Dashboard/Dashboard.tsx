@@ -1,16 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './Dashboard.css';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
+import { fetchProjects, ProjectDTO, updateProject } from '../../services/projectsApi';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [projects, setProjects] = useState<ProjectDTO[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
+  const [editProjectData, setEditProjectData] = useState({
+    id: '',
+    name: '',
+    description: '',
+    repository: '',
+    domain: '',
+    hosting: 'Vercel',
+    status: 'Ativo',
+    paid: false,
+    isPublic: true,
+  });
 
   const navigate = useNavigate();
-
-  const handleViewAllClick = () => {
-    navigate('/course');
-  };
+  const location = useLocation();
 
   const managerProject = () => {
     navigate('/manager');
@@ -25,42 +39,114 @@ const Dashboard: React.FC = () => {
     stars: 4
   };
 
-  const courses = [
-    { id: 1, title: 'Desenvolvimento web basico', status: 'Disponível' }
+  const cartItems = [
+    { id: 1, title: 'Landingpage Institucional', price: 'R$ 499,99' }
   ];
 
-  const inscritions = [
-    { id: 2, title: 'Desenvolvimento web intermediario', status: 'Indisponível' },
+  const purchases = [
+    { id: 1, title: 'Landingpage Institucional', date: '27/01/2026', status: 'Entregue' }
   ];
 
-  const enrolledCourses = [
-    { id: 1, title: 'React Avançado', progress: 70 },
+  const loadProjects = async () => {
+    setProjectsLoading(true);
+    setProjectsError(null);
+    try {
+      const data = await fetchProjects();
+      setProjects(data);
+    } catch (error) {
+      console.error('Erro ao buscar projetos:', error);
+      setProjectsError('Não foi possível carregar os projetos.');
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  const handleEditProject = (project: ProjectDTO) => {
+    setProjectsError(null);
+    setEditProjectData({
+      id: project.id,
+      name: project.name,
+      description: project.description || '',
+      repository: project.repository || '',
+      domain: project.domain || '',
+      hosting: project.hosting || 'Vercel',
+      status: project.status || 'Ativo',
+      paid: project.paid,
+      isPublic: project.isPublic ?? true,
+    });
+    setIsProjectEditModalOpen(true);
+  };
+
+  const handleSaveProjectEdit = async () => {
+    if (!editProjectData.name.trim()) {
+      setProjectsError('Preencha o nome do projeto.');
+      return;
+    }
+    try {
+      await updateProject(editProjectData.id, {
+        name: editProjectData.name.trim(),
+        description: editProjectData.description.trim(),
+        repository: editProjectData.repository.trim(),
+        domain: editProjectData.domain.trim(),
+        hosting: editProjectData.hosting.trim(),
+        status: editProjectData.status.trim(),
+        paid: editProjectData.paid,
+        isPublic: editProjectData.isPublic,
+      });
+      setIsProjectEditModalOpen(false);
+      loadProjects();
+    } catch (error) {
+      console.error('Erro ao editar projeto:', error);
+      setProjectsError('Não foi possível editar o projeto.');
+    }
+  };
+
+  const visibleProjects = projects.filter((project) => project.isPublic ?? true);
+
+  const tabLabels: Record<string, string> = {
+    'home': 'Home',
+    'projects': 'Projetos',
+    'cart': 'Carrinho',
+    'purchases': 'Compras'
+  };
+
+  const crumbs = [
+    { label: 'Dashboard' },
+    { label: tabLabels[activeTab] || 'Home' }
   ];
 
-  const projects = [
-    { id: 1, repository: 'Holding Kapital Technology', domain: 'hktech.com.br', hosting: 'GitHub Pages' },
-    { id: 2, repository: 'Saulo L S Candeira', domain: 'saulocandeira.com.br', hosting: 'GitHub Pages' }
-  ];
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    if (tab && ['home', 'projects', 'cart', 'purchases'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
 
-  const [filter] = useState<string[]>([]);
+  useEffect(() => {
+    loadProjects();
+  }, []);
 
   return (
-    <LayoutPrivate crumbs={filter}>
-      <div className="admin-container">
+    <LayoutPrivate
+      crumbs={crumbs}
+      sidebarCollapsed={sidebarCollapsed}
+      onToggleSidebar={() => setSidebarCollapsed((s) => !s)}
+    >
+      <div className={`admin-container has-breadcrumb ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <aside className="admin-sidebar">
           <h2>Admin</h2>
           <ul>
             <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
               HOME
             </li>
-            <li className={activeTab === 'courses' ? 'active' : ''} onClick={() => setActiveTab('courses')}>
-              CURSOS
-            </li>
-            <li className={activeTab === 'myCourses' ? 'active' : ''} onClick={() => setActiveTab('myCourses')}>
-              MEUS CURSOS
-            </li>
             <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
-              PROJETO
+              PROJETOS
+            </li>
+            <li className={activeTab === 'cart' ? 'active' : ''} onClick={() => setActiveTab('cart')}>
+              CARRINHO
+            </li>
+            <li className={activeTab === 'purchases' ? 'active' : ''} onClick={() => setActiveTab('purchases')}>
+              COMPRAS
             </li>
           </ul>
         </aside>
@@ -81,125 +167,220 @@ const Dashboard: React.FC = () => {
               </section>
 
               <section className="course-methodology">
-                <h2>🚀 Nossa Metodologia Prática e Inovadora</h2>
+                <h2>🚀 Metodologia baseada em projetos</h2>
                 <p>
-                  Bem-vindo à nova geração de ensino digital! Nossa plataforma de cursos foi desenvolvida com foco total no <strong>desenvolvimento prático de projetos reais</strong>.
-                  Aqui, cada aula é uma oportunidade de colocar a mão na massa e criar algo do zero.
+                  Bem-vindo à nossa plataforma de projetos práticos. Aqui o foco é <strong>criar e entregar projetos reais</strong>
+                  com documentação, tarefas, cronogramas e entregas organizadas.
                 </p>
 
                 <ul>
-                  <li>🔧 Aprenda na prática a construir <strong>websites completos</strong>, sistemas interativos e até projetos de <strong>robótica</strong>.</li>
-                  <li>💡 Em vez de teoria isolada, cada módulo leva você a resolver problemas reais, como um verdadeiro desenvolvedor.</li>
-                  <li>🌐 Desenvolva diretamente na nossa plataforma com a <strong>IDE online exclusiva: Code Runner</strong>, sem precisar instalar nada.</li>
-                  <li>🎯 Acompanhamento contínuo com atualizações, novos desafios e suporte personalizado.</li>
+                  <li>🔧 Crie websites, sistemas e soluções sob demanda em um fluxo profissional.</li>
+                  <li>💡 Estruture tarefas, roadmap e timeline para garantir previsibilidade.</li>
+                  <li>🌐 Use a IDE integrada para validar códigos e protótipos rapidamente.</li>
+                  <li>🎯 Acompanhe métricas e qualidade com checkpoints de entrega.</li>
                 </ul>
 
                 <p>
-                  Ao final de cada curso, você terá construído projetos reais que vão direto para seu portfólio, enquanto domina tecnologias como <strong>HTML, CSS, JavaScript</strong> e muito mais.
-                  Tudo isso em um ambiente feito para acelerar sua jornada como criador digital.
+                  Ao final de cada ciclo, você terá projetos prontos para publicação e portfólio, com documentação técnica
+                  e histórico de execução para clientes e times.
                 </p>
               </section>
             </>
-          )}
-
-          {activeTab === 'courses' && (
-            <>
-              <section>
-                <h2>Cursos Disponíveis</h2>
-                <ul className="courses-list">
-                  {courses.map((course) => (
-                    <li key={course.id} className="course-item">
-                      <div className="course-info">
-                        <h3>{course.title}</h3>
-                        <span className="course-status">{course.status}</span>
-                      </div>
-                      <button className="view-all-button" onClick={handleViewAllClick}>
-                        Iniciar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section>
-                <h2>Inscricoes abertas</h2>
-                <ul className="courses-list">
-                  {inscritions.map((inscrition) => (
-                    <li key={inscrition.id} className="course-item">
-                      <div className="course-info">
-                        <h3>{inscrition.title}</h3>
-                        <span className="course-status">{inscrition.status}</span>
-                      </div>
-                      <button className="view-all-button" onClick={handleViewAllClick}>
-                        Inscrever
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </>
-          )}
-
-          {activeTab === 'myCourses' && (
-            <section>
-              <h2>Meus Cursos</h2>
-              <ul className="courses-list">
-                {enrolledCourses.map((course) => (
-                  <li key={course.id} className="course-item">
-                    <h3>{course.title}</h3>
-                    <p>Progresso: {course.progress}%</p>
-                    <div className="progress-bar">
-                      <div className="progress" style={{ width: `${course.progress}%` }}></div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
           )}
 
           {activeTab === 'projects' && (
             <section>
               <h2>Plataforma de Projetos</h2>
               <p>Gerencie seus repositórios e hospede seus projetos de forma simples.</p>
+              {projectsLoading && <p>Carregando projetos...</p>}
+              {projectsError && <p>{projectsError}</p>}
               <table className="projects-table">
                 <thead>
                   <tr>
                     <th>Repositório</th>
                     <th>Domínio</th>
                     <th>Hospedagem</th>
+                    <th>Status</th>
+                    <th>Pagamento</th>
+                    <th>Público</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.map((project) => (
+                  {!projectsLoading && visibleProjects.length === 0 && (
+                    <tr>
+                      <td colSpan={7}>Nenhum projeto encontrado.</td>
+                    </tr>
+                  )}
+                  {visibleProjects.map((project) => (
                     <tr key={project.id}>
                       <td>
-                        <a href={`https://github.com/${project.repository}`} target="_blank" rel="noopener noreferrer">
-                          {project.repository}
-                        </a>
+                        {project.repository ? (
+                          <a href={`https://github.com/${project.repository}`} target="_blank" rel="noopener noreferrer">
+                            {project.repository}
+                          </a>
+                        ) : (
+                          project.name
+                        )}
                       </td>
                       <td>
-                        <a href={`${project.domain}`} target="_blank" rel="noopener noreferrer">
-                          {project.domain}
-                        </a>
+                        {project.domain ? (
+                          <a href={`${project.domain}`} target="_blank" rel="noopener noreferrer">
+                            {project.domain}
+                          </a>
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td>
-                        {project.hosting === 'GitHub Pages' ? (
+                        {project.hosting === 'GitHub Pages' && project.repository ? (
                           <a href={`https://${project.repository}.github.io`} target="_blank" rel="noopener noreferrer">
                             {project.hosting}
                           </a>
                         ) : (
-                          <a href="https://aws.amazon.com/" target="_blank" rel="noopener noreferrer">
-                            AWS
-                          </a>
+                          project.hosting || '-'
                         )}
                       </td>
                       <td>
-                        <button className="action-button" onClick={managerProject}>Admin</button>
+                        <span className={`pill ${project.status === 'Ativo' ? 'pill--ok' : 'pill--warn'}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`pill ${project.paid ? 'pill--ok' : 'pill--danger'}`}>
+                          {project.paid ? 'Pago' : 'Não pago'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`pill ${project.isPublic ? 'pill--ok' : 'pill--danger'}`}>
+                          {project.isPublic ? 'Sim' : 'Não'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="project-actions">
+                          <button className="action-button" onClick={() => handleEditProject(project)}>Editar</button>
+                          <button className="action-button action-button--ghost" onClick={managerProject}>Admin</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {isProjectEditModalOpen && (
+                <div className="dashboard-modal-backdrop" onClick={() => setIsProjectEditModalOpen(false)}>
+                  <div className="dashboard-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="dashboard-modal__header">
+                      <h3>Editar projeto</h3>
+                      <button className="action-button action-button--ghost" onClick={() => setIsProjectEditModalOpen(false)}>Fechar</button>
+                    </div>
+                    {projectsError && <p className="dashboard-modal__error">{projectsError}</p>}
+                    <div className="dashboard-modal__form">
+                      <label>
+                        <span>Nome</span>
+                        <input
+                          type="text"
+                          value={editProjectData.name}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, name: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Descrição</span>
+                        <textarea
+                          value={editProjectData.description}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, description: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Repositório</span>
+                        <input
+                          type="text"
+                          value={editProjectData.repository}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, repository: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Domínio</span>
+                        <input
+                          type="text"
+                          value={editProjectData.domain}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, domain: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Hospedagem</span>
+                        <select
+                          value={editProjectData.hosting}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, hosting: e.target.value })}
+                        >
+                          <option value="Vercel">Vercel</option>
+                          <option value="Netlify">Netlify</option>
+                          <option value="GitHub Pages">GitHub Pages</option>
+                          <option value="Outro">Outro</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Status</span>
+                        <select
+                          value={editProjectData.status}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, status: e.target.value })}
+                        >
+                          <option value="Ativo">Ativo</option>
+                          <option value="Pausado">Pausado</option>
+                          <option value="Finalizado">Finalizado</option>
+                          <option value="Em produção">Em produção</option>
+                        </select>
+                      </label>
+                      <label className="dashboard-modal__checkbox">
+                        <input
+                          type="checkbox"
+                          checked={editProjectData.paid}
+                          onChange={(e) => setEditProjectData({ ...editProjectData, paid: e.target.checked })}
+                        />
+                        <span>Pago</span>
+                      </label>
+                    </div>
+                    <div className="dashboard-modal__footer">
+                      <button className="action-button action-button--ghost" onClick={() => setIsProjectEditModalOpen(false)}>Cancelar</button>
+                      <button className="action-button" onClick={handleSaveProjectEdit}>Salvar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'cart' && (
+            <section>
+              <h2>🛒 Carrinho</h2>
+              <ul className="courses-list">
+                {cartItems.map((item) => (
+                  <li key={item.id} className="course-item">
+                    <div className="course-info">
+                      <h3>{item.title}</h3>
+                      <span className="course-status">{item.price}</span>
+                    </div>
+                    <button className="view-all-button">Finalizar</button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {activeTab === 'purchases' && (
+            <section>
+              <h2>🧾 Compras</h2>
+              <ul className="courses-list">
+                {purchases.map((item) => (
+                  <li key={item.id} className="course-item">
+                    <div className="course-info">
+                      <h3>{item.title}</h3>
+                      <span className="course-status">{item.status}</span>
+                    </div>
+                    <p>Data: {item.date}</p>
+                    <button className="view-all-button" onClick={managerProject}>Acessar Projeto</button>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
         </main>

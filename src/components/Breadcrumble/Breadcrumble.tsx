@@ -1,10 +1,15 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';  // Usando o React Router para navegação
+import { Link, useNavigate } from 'react-router-dom';
 import './Breadcrumble.css';  // Certifique-se de que o CSS esteja no mesmo diretório ou ajuste o caminho
 
+export interface BreadcrumbleItem {
+  label: string;
+  to?: string;
+}
+
 interface BreadcrumbleProps {
-  crumbs: string[];  // Caminhos das páginas para o breadcrumb
-  navigateTo?: string;  // Rota para redirecionamento
+  crumbs: BreadcrumbleItem[];
+  navigateTo?: string;
 }
 
 const Breadcrumble: React.FC<BreadcrumbleProps> = ({ crumbs, navigateTo }) => {
@@ -24,17 +29,17 @@ const Breadcrumble: React.FC<BreadcrumbleProps> = ({ crumbs, navigateTo }) => {
 
   return (
     <div className="breadcrumble">
-      {/* Exibindo os crumbs com links */}
       {crumbs.map((crumb, index) => (
-        <span key={index}>
-          <Link to={`/${crumb.toLowerCase().replace(/ /g, '-')}`}>
-            {crumb}
-          </Link>
-          {index < crumbs.length - 1 && " > "}
+        <span key={`${crumb.label}-${index}`}>
+          {crumb.to ? (
+            <Link to={crumb.to}>{crumb.label}</Link>
+          ) : (
+            <span>{crumb.label}</span>
+          )}
+          {index < crumbs.length - 1 && ' > '}
         </span>
       ))}
 
-      {/* Condicionalmente renderizando o botão de navegação */}
       {navigateTo && (
         <button onClick={handleNavigate} className="navigate-button">
           Navegar para {navigateTo}

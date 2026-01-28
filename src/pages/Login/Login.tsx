@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   onAuthStateChanged 
 } from "firebase/auth"; 
-import { auth, provider } from '../../lib/init-firebase'; 
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db, provider } from '../../lib/init-firebase'; 
 import "./Login.css";
 
 const Login = () => {
@@ -42,6 +43,19 @@ const Login = () => {
       const result = await signInWithPopup(auth, provider);
       const user = result.user; 
 
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          uid: user.uid,
+          name: user.displayName ?? "Usuário Anônimo",
+          email: user.email ?? "",
+          photoURL: user.photoURL ?? "",
+          authProvider: "Google",
+          lastLoginAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+
       localStorage.setItem("name", user.displayName ?? "Usuário Anônimo");
       localStorage.setItem("email", user.email ?? "Email não disponível");
       localStorage.setItem("profilePic", user.photoURL ?? "");
@@ -66,6 +80,19 @@ const Login = () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          uid: user.uid,
+          name: user.displayName ?? "Usuário Anônimo",
+          email: user.email ?? "",
+          photoURL: user.photoURL ?? "",
+          authProvider: "Email",
+          lastLoginAt: serverTimestamp()
+        },
+        { merge: true }
+      );
 
       localStorage.setItem("name", user.displayName ?? "Usuário Anônimo");
       localStorage.setItem("email", user.email ?? "Email não disponível");

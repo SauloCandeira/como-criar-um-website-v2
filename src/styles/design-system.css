@@ -1,18 +1,38 @@
 /* Design System - Variáveis CSS */
 
+/* Tema escuro (padrão) */
 :root {
   /* Cores Primárias */
-  --primary-bg: #092554;
-  --primary-text: #ffffff;
-  --secondary-bg: rgba(45, 45, 45, 0.92);
-  --accent-green: #3b7a57;
-  --accent-blue: #2563eb;
-  --accent-teal: #059669;
+  --primary-bg: #0b1220;
+  --primary-text: #e2e8f0;
+  --secondary-bg: #0f172a;
+  --accent-green: #22c55e;
+  --accent-blue: #38bdf8;
+  --accent-teal: #2dd4bf;
 
-  /* Cores Secundárias */
-  --text-muted: #d1d5db;
+  /* Sistema de superfícies */
+  --app-bg: #0b1220;
+  --surface: #0f172a;
+  --surface-2: #111827;
+  --surface-3: #0b1f3a;
+  --border: rgba(148, 163, 184, 0.18);
+  --shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+
+  /* Texto */
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-inverse: #0b1220;
+
+  /* Componentes */
+  --link: #7dd3fc;
+  --link-hover: #38bdf8;
+  --table-header: #0f2a4f;
+  --table-row: #0b1f3a;
+  --pill-ok: #22c55e;
+  --pill-warn: #facc15;
+  --pill-danger: #f87171;
+
   --border-radius: 12px;
-  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   --transition: 0.3s ease;
 
   /* Fontes */
@@ -31,4 +51,33 @@
   --mobile: 600px;
   --tablet: 768px;
   --desktop: 1024px;
+}
+
+/* Tema claro */
+[data-theme="light"] {
+  --primary-bg: #f8fafc;
+  --primary-text: #0f172a;
+  --secondary-bg: #ffffff;
+  --accent-green: #16a34a;
+  --accent-blue: #2563eb;
+  --accent-teal: #0d9488;
+
+  --app-bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: rgba(15, 23, 42, 0.12);
+  --shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-inverse: #ffffff;
+
+  --link: #1d4ed8;
+  --link-hover: #1e40af;
+  --table-header: #e2e8f0;
+  --table-row: #f8fafc;
+  --pill-ok: #16a34a;
+  --pill-warn: #d97706;
+  --pill-danger: #dc2626;
 }

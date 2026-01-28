@@ -5,16 +5,39 @@ import TodoBoard from '../../components/TodoBoard/TodoBoard';
 import TimelineBoard from '../../components/TimelineBoard/TimelineBoard';
 import RoadMap from '../../components/RoadMap/RoadMap';
 import FichaTecnica from '../../components/FichaTecnica/FichaTecnica';
+import ContentCourse from '../../components/ContentCourse/ContentCourse';
+import CodeRunner from '../../components/CodeRunner/CodeRunner';
 
 const Manager: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
 
-  const [filter] = useState<string[]>([]);
+  const tabLabels: Record<string, string> = {
+    'home': 'Home',
+    'ficha-tecnica': 'Ficha Técnica',
+    'roadmap': 'Roadmap',
+    'timeline': 'Timeline',
+    'analitycs': 'Analytics',
+    'course-content': 'Conteúdo',
+    'course-editor': 'Editor'
+  };
+
+  const projectName = 'Landingpage Institucional';
+
+  const crumbs = [
+    { label: 'Projetos', to: '/dashboard?tab=projects' },
+    { label: projectName },
+    { label: tabLabels[activeTab] || 'Home' }
+  ];
 
   return (
-    <LayoutPrivate crumbs={filter}>
-      <div className="admin-container">
+    <LayoutPrivate
+      crumbs={crumbs}
+      sidebarCollapsed={sidebarCollapsed}
+      onToggleSidebar={() => setSidebarCollapsed((s) => !s)}
+    >
+      <div className={`admin-container has-breadcrumb ${sidebarCollapsed ? 'collapsed' : ''}`}>
         {/* Sidebar */}
         <aside className="admin-sidebar">
           <h2>Admin</h2>
@@ -25,14 +48,20 @@ const Manager: React.FC = () => {
             <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
               TASKS
             </li>
-            <li className={activeTab === 'content' ? 'active' : ''} onClick={() => setActiveTab('content')}>
+            <li className={activeTab === 'roadmap' ? 'active' : ''} onClick={() => setActiveTab('roadmap')}>
               ROADMAP
             </li>
-            <li className={activeTab === 'editor' ? 'active' : ''} onClick={() => setActiveTab('editor')}>
+            <li className={activeTab === 'timeline' ? 'active' : ''} onClick={() => setActiveTab('timeline')}>
               TIMELINE
             </li>
             <li className={activeTab === 'analitycs' ? 'active' : ''} onClick={() => setActiveTab('analitycs')}>
               ANALITYCS
+            </li>
+            <li className={activeTab === 'course-content' ? 'active' : ''} onClick={() => setActiveTab('course-content')}>
+              CONTEÚDO
+            </li>
+            <li className={activeTab === 'course-editor' ? 'active' : ''} onClick={() => setActiveTab('course-editor')}>
+              EDITOR
             </li>
           </ul>
         </aside>
@@ -85,7 +114,7 @@ const Manager: React.FC = () => {
           )}
 
           {/* CONTENT TAB */}
-          {activeTab === 'content' && (
+          {activeTab === 'roadmap' && (
             <section>
               <h2>📄 ROADMAP</h2>
               <RoadMap />
@@ -93,7 +122,7 @@ const Manager: React.FC = () => {
           )}
 
           {/* EDITOR TAB */}
-          {activeTab === 'editor' && (
+          {activeTab === 'timeline' && (
             <section>
                < TimelineBoard />
             </section>
@@ -103,6 +132,22 @@ const Manager: React.FC = () => {
           {activeTab === 'analitycs' && (
             <section>
                < TimelineBoard />
+            </section>
+          )}
+
+          {/* COURSE CONTENT (migrated from Course page) */}
+          {activeTab === 'course-content' && (
+            <section>
+              <h2>📄 Conteúdo do Projeto</h2>
+              <ContentCourse />
+            </section>
+          )}
+
+          {/* COURSE EDITOR (migrated from Course page) */}
+          {activeTab === 'course-editor' && (
+            <section>
+              <h2>🧪 Editor de Código</h2>
+              <CodeRunner />
             </section>
           )}
 

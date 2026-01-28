@@ -5,10 +5,17 @@
   }
   
   .admin-sidebar {
-    width: 250px;
+    width: 260px;
+    max-width: 28%;
     background: #092554;
     color: white;
-    padding: 20px;
+    padding: 16px;
+    overflow: hidden;
+    position: fixed;
+    top: 72px;
+    left: 0;
+    bottom: 72px;
+    z-index: 900;
   }
   
   .admin-sidebar h2 {
@@ -21,15 +28,20 @@
   }
   
   .admin-sidebar ul li {
-    padding: 12px;
+    padding: 10px 12px;
     cursor: pointer;
     border-radius: 5px;
     margin-bottom: 8px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     background: #1e3a8a;
     transition: 0.3s;
   }
-  
+
   .admin-sidebar ul li:hover,
   .admin-sidebar ul li.active {
     background: #1e90ff;
@@ -39,6 +51,15 @@
     flex: 1;
     padding: 30px;
     background: #f5f5f5;
+    margin-left: 300px;
+  }
+
+  .admin-container.collapsed .admin-sidebar {
+    width: 64px;
+  }
+
+  .admin-container.collapsed .admin-content {
+    margin-left: 92px;
   }
   
   h2 {

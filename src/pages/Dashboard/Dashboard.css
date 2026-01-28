@@ -1,17 +1,34 @@
 .admin-container {
   display: flex;
-  min-height: calc(100vh - 180px); /* Altura ajustada para header e footer */
-  background-color: #f4f7fa;
+  height: calc(100vh - 132px); /* header + footer */
+  background-color: var(--app-bg);
   margin-top: 0;
   padding: 0;
 }
 
+.admin-container.has-breadcrumb {
+  height: calc(100vh - 168px); /* header + breadcrumb + footer */
+}
+
 .admin-sidebar {
-  width: 250px;
-  background-color: #2c3e50;
-  color: white;
-  padding: 20px;
+  width: 260px;
+  max-width: 28%;
+  background-color: var(--surface);
+  color: var(--text);
+  padding: 16px;
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  bottom: 72px;
+  z-index: 900;
+  transition: width 0.3s ease;
+}
+
+.admin-container.has-breadcrumb .admin-sidebar {
+  top: 96px; /* header + breadcrumb */
 }
 
 .admin-sidebar h2 {
@@ -21,30 +38,85 @@
 .admin-sidebar ul {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 .admin-sidebar li {
-  padding: 10px 0;
+  padding: 10px 12px;
   cursor: pointer;
-  border-bottom: 1px solid #34495e;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-sidebar li.active {
-  background-color: #34495e;
-  padding-left: 10px;
+  background-color: var(--surface-2);
+  padding-left: 12px;
 }
 
 .admin-content {
   flex: 1;
   padding: 20px;
-  background-color: #ffffff;
-  margin-left: 20px;
+  background-color: var(--surface);
+  margin-left: 300px;
   border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
+  transition: margin-left 0.3s ease;
+  height: calc(100vh - 132px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 42, 0.45) transparent;
+}
+
+.admin-container.has-breadcrumb .admin-content {
+  height: calc(100vh - 168px);
+}
+
+.admin-container.collapsed .admin-sidebar {
+  width: 64px;
+}
+
+.admin-container.collapsed .admin-sidebar h2 {
+  display: none;
+}
+
+.admin-container.collapsed .admin-sidebar li {
+  padding: 10px 8px;
+  justify-content: center;
+  font-size: 0;
+}
+
+.admin-container.collapsed .admin-content {
+  margin-left: 100px;
 }
 
 .admin-content section {
-  margin-bottom: 40px;
+  margin-bottom: 0;
+}
+
+.admin-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.admin-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-content::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.admin-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.55);
+  background-clip: content-box;
 }
 
 .courses-list {
@@ -53,11 +125,11 @@
 }
 
 .course-item {
-  background-color: #ffffff; /* Fundo branco para cada curso */
+  background-color: var(--surface-2);
   border-radius: 8px; /* Bordas arredondadas */
   padding: 15px;
   margin-bottom: 20px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Sombra leve para cursos */
+  box-shadow: var(--shadow);
   transition: transform 0.3s; /* Transição suave ao passar o mouse */
 }
 
@@ -72,25 +144,25 @@
 }
 
 .course-status {
-  color: #888; /* Cor do status do curso */
+  color: var(--text-muted);
 }
 
 .progress-bar {
-  background-color: #e0e0e0;
+  background-color: var(--surface-3);
   border-radius: 5px;
   overflow: hidden;
   height: 10px;
 }
 
 .progress {
-  background-color: #00aaff;
+  background-color: var(--accent-blue);
   height: 100%;
   transition: width 0.4s ease;
 }
 
 .view-all-button {
-  background-color: #3b7a57;
-  color: white;
+  background-color: var(--accent-green);
+  color: var(--text-inverse);
   border: none;
   padding: 12px 25px;
   font-size: 1rem;
@@ -103,7 +175,7 @@
 }
 
 .account-info {
-  background: #f5f5f5;
+  background: var(--surface-2);
   padding: 1.5rem;
   margin-top: 2rem;
   border-radius: 8px;
@@ -115,12 +187,12 @@
 }
 
 .status.ativo {
-  color: green;
+  color: var(--pill-ok);
   font-weight: bold;
 }
 
 .status.inativo {
-  color: red;
+  color: var(--pill-danger);
   font-weight: bold;
 }
 
@@ -131,35 +203,189 @@
 
 .account-details p:nth-child(6) {
   font-size: 1.2rem;
-  color: gold;
+  color: var(--pill-warn);
 }
 
 .action-button{
-  background-color: #0f172a;
-   color: #facc15;
-  }
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.action-button--ghost {
+  background-color: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.action-button:hover {
+  background-color: var(--link-hover);
+}
+
+.action-button--ghost:hover {
+  background-color: var(--surface-2);
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dashboard-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.dashboard-modal {
+  width: min(720px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.dashboard-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.dashboard-modal__form {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-modal__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dashboard-modal__form input,
+.dashboard-modal__form textarea,
+.dashboard-modal__form select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.dashboard-modal__form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.dashboard-modal__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.dashboard-modal__checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.dashboard-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.dashboard-modal__error {
+  color: #f87171;
+  margin: 0 0 12px;
+}
 
 .projects-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
+  background: var(--table-row);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .projects-table th, .projects-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px;
   text-align: left;
 }
 
 .projects-table th {
-  background-color: #f2f2f2;
+  background-color: var(--table-header);
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.projects-table td {
+  color: var(--text);
+}
+
+.projects-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.projects-table a {
+  color: var(--link);
+}
+
+.projects-table a:hover {
+  color: var(--link-hover);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.pill--ok {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--pill-ok);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.pill--warn {
+  background: rgba(234, 179, 8, 0.18);
+  color: var(--pill-warn);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.pill--danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--pill-danger);
+  border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
 .course-methodology {
-  background-color: #f0f8ff;
+  background-color: var(--surface-2);
   padding: 20px;
   border-radius: 8px;
-  border-left: 5px solid #00aaff;
+  border-left: 5px solid var(--accent-blue);
 }
 
 /* Responsividade */
@@ -169,8 +395,11 @@
   }
 
   .admin-sidebar {
+    position: relative;
     width: 100%;
     order: 2;
+    top: 0;
+    bottom: auto;
   }
 
   .admin-content {

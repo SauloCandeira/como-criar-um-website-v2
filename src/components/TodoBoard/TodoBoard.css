@@ -1,24 +1,24 @@
 /* CONTAINER GERAL */
-.container {
+.todo-board {
   padding: 16px;
   width: 100%;
 }
 
 /* ÁREA DE CRIAÇÃO (EM CIMA) */
-.add-todo {
+.todo-header {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 20px;
 }
 
-.add-todo input {
+.todo-header input {
   padding: 8px;
   font-size: 14px;
   width: 260px;
 }
 
-.add-todo button {
+.todo-header button {
   padding: 8px 14px;
   font-size: 14px;
   cursor: pointer;

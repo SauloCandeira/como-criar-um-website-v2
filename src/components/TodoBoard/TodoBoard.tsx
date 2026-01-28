@@ -73,7 +73,7 @@ export default function TodoBoard() {
   }
 
   return (
-    <div className="container">
+    <div className="todo-board">
       {/* HEADER */}
       <div className="todo-header">
         <input

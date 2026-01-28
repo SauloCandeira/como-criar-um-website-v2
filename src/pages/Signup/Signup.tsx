@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from '../../lib/init-firebase';
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db } from '../../lib/init-firebase';
 import "./Signup.css"; // Reaproveitando o mesmo estilo do login
 
 const Signup = () => {
@@ -32,6 +33,20 @@ const Signup = () => {
   
       // Atualiza o displayName no perfil do usuário
       await updateProfile(user, { displayName });
+      // Salva/atualiza o usuário no Firestore
+      await setDoc(
+        doc(db, "users", user.uid),
+        {
+          uid: user.uid,
+          name: displayName,
+          email: user.email ?? "",
+          photoURL: user.photoURL ?? "",
+          authProvider: "Email",
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp()
+        },
+        { merge: true }
+      );
   
       // Salva no localStorage
       localStorage.setItem("name", displayName);

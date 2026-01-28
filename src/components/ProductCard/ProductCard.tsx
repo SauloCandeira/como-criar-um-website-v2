@@ -45,6 +45,14 @@ const ProductCard: React.FC = () => {
       image: print3dImg,
       type: 'service',
     },
+    {
+      name: 'Landingpage Institucional',
+      description:
+        'Landingpage profissional e responsiva para sua empresa com design moderno, otimizada para SEO e conversão de leads.',
+      price: 499.99,
+      image: arduinoImg,
+      type: 'product',
+    },
   ];
 
   const settings = {

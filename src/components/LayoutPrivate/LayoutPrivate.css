@@ -3,8 +3,8 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #f4f7fa;
-  color: #333;
+  background-color: var(--app-bg);
+  color: var(--text);
 }
 
 .private-main {
@@ -12,7 +12,31 @@
   padding: 0;
   max-width: 100%;
   margin: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  padding-top: 60px; /* espaço para header fixo */
+  padding-bottom: 72px; /* espaço para footer fixo */
+}
+
+.private-main.has-breadcrumb {
+  padding-top: 100px; /* header + breadcrumb */
+}
+
+.private-layout .footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 72px;
+  padding: 12px 0;
+  z-index: 950;
+}
+
+.private-layout .footer .footer-container {
+  display: none;
+}
+
+.private-layout .footer-bottom {
+  margin-top: 0;
 }
 
 /* Responsividade */

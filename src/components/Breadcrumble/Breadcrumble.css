@@ -1,15 +1,16 @@
 .breadcrumble {
   position: fixed;
-  top: 60px; /* Ajuste a posição para 60px para ficar logo abaixo do Header (altura do header) */
+  top: 60px; /* logo abaixo do header */
   left: 0;
   width: 100%;
-  background: transparent;
-  padding: 10px 20px;
+  height: 36px;
+  background: var(--surface-3);
+  padding: 0 20px;
   font-family: Arial, sans-serif;
   font-size: 14px;
-  color: #0077b6;
-  border-bottom: 2px solid #0077b6;
-  z-index: 999; /* Ajuste o z-index para garantir que o breadcrumb esteja abaixo do header */
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  z-index: 980; /* abaixo do header */
   display: flex;
   align-items: center;
   gap: 5px;
@@ -17,11 +18,12 @@
 
 .breadcrumble a {
   text-decoration: none;
-  color: #0077b6;
+  color: var(--link);
 }
 
 .breadcrumble a:hover {
   text-decoration: underline;
+  color: var(--link-hover);
 }
 
 .breadcrumble span {
@@ -32,13 +34,13 @@
   margin-left: auto;
   padding: 5px 10px;
   border: none;
-  background-color: #0077b6;
-  color: white;
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
   cursor: pointer;
   border-radius: 5px;
   font-size: 12px;
 }
 
 .navigate-button:hover {
-  background-color: #005f87;
+  background-color: var(--link-hover);
 }

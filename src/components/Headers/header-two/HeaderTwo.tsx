@@ -7,12 +7,18 @@ import LanguageSwitcher from '../../LanguageSwitcher/LanguageSwitcher';
 // Firebase Auth
 import { getAuth, onAuthStateChanged, signOut, User } from 'firebase/auth';
 
-const HeaderTwo: React.FC = () => {
+interface HeaderTwoProps {
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
+}
+
+const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed }) => {
   const { t } = useTranslation();
   const goTopBtnRef = useRef<HTMLButtonElement | null>(null);
   const navigate = useNavigate();
 
   const [user, setUser] = useState<User | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   // Detecta scroll para mostrar botão "voltar ao topo" (se houver)
   useEffect(() => {
@@ -43,6 +49,20 @@ const HeaderTwo: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('theme');
+    const initial = saved === 'light' ? 'light' : 'dark';
+    setTheme(initial);
+    document.documentElement.setAttribute('data-theme', initial);
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  };
+
   const handleLoginClick = () => {
     navigate('/login');
   };
@@ -67,9 +87,21 @@ const HeaderTwo: React.FC = () => {
   };
 
   return (
-    <header>
-      <div className="container">
-        <div className="header-left">
+    <header className="header-two">
+      <div className="header-two__container">
+        <div className="header-two__left">
+          {onToggleSidebar && (
+            <button
+              type="button"
+              className={`header-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
+              aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              onClick={onToggleSidebar}
+            >
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+          )}
           <img
             src="/hk-logo.svg"
             alt="HK Logo"
@@ -80,18 +112,36 @@ const HeaderTwo: React.FC = () => {
         </div>
 
         {user ? (
-          <div className="auth-buttons">
+          <div className="header-two__auth">
+            <button
+              type="button"
+              className="header-theme-toggle"
+              aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button className="btn-account" onClick={handleMyAccountClick}>
-              <i className="fas fa-user"></i> {t('myAccount')}
+              <i className="fas fa-user"></i>
             </button>
             <button className="btn-login" onClick={handleLogoutClick}>
-              <i className="fas fa-sign-out-alt"></i> {t('logout')}
+              <i className="fas fa-sign-out-alt"></i>
             </button>
           </div>
         ) : (
-          <button className="btn-login" onClick={handleLoginClick}>
-            <i className="fas fa-user"></i> {t('login')}
-          </button>
+          <div className="header-two__auth">
+            <button
+              type="button"
+              className="header-theme-toggle"
+              aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button className="btn-login" onClick={handleLoginClick}>
+              <i className="fas fa-user"></i> {t('login')}
+            </button>
+          </div>
         )}
       </div>
     </header>

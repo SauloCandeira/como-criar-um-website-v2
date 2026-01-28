@@ -11,11 +11,20 @@ body {
 }
 
 .admin-sidebar {
-  width: 250px;
+  width: 260px;
+  max-width: 28%;
   background-color: #2c3e50;
   color: white;
-  padding: 20px;
+  padding: 16px;
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: fixed;
+  top: 72px;
+  left: 0;
+  bottom: 72px;
+  z-index: 900;
+  transition: width 0.3s ease;
 }
 
 .admin-sidebar h2 {
@@ -25,26 +34,52 @@ body {
 .admin-sidebar ul {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 .admin-sidebar li {
-  padding: 10px 0;
+  padding: 10px 12px;
   cursor: pointer;
   border-bottom: 1px solid #34495e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-sidebar li.active {
   background-color: #34495e;
-  padding-left: 10px;
+  padding-left: 12px;
 }
 
 .admin-content {
   flex: 1;
   padding: 20px;
   background-color: #ffffff;
-  margin-left: 20px;
+  margin-left: 300px;
   border-radius: 8px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  transition: margin-left 0.3s ease;
+}
+
+.admin-container.collapsed .admin-sidebar {
+  width: 64px;
+}
+
+.admin-container.collapsed .admin-sidebar h2 {
+  display: none;
+}
+
+.admin-container.collapsed .admin-sidebar li {
+  padding: 10px 8px;
+  justify-content: center;
+  font-size: 0;
+}
+
+.admin-container.collapsed .admin-content {
+  margin-left: 100px;
 }
 
 .admin-content section {
@@ -87,8 +122,11 @@ body {
   }
 
   .admin-sidebar {
+    position: relative;
     width: 100%;
     order: 2;
+    top: 0;
+    bottom: auto;
   }
 
   .admin-content {

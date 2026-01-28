@@ -1,15 +1,14 @@
 /* HeaderTwo.css */
-header {
+.header-two {
   transition: none !important;
   animation: none !important;
   opacity: 1 !important;
   transform: none !important;
 }
 
-
-header {
-  background-color: #092554 !important;
-  padding: 20px 20px; /* Ajuste o padding para o cabeçalho */
+.header-two {
+  background-color: var(--primary-bg) !important;
+  padding: 0 20px; /* usa altura fixa */
   position: fixed;
   width: 100%;
   top: 0;
@@ -21,21 +20,83 @@ header {
   height: 60px; /* Defina a altura do cabeçalho */
 }
 
-.container {
+.header-two__container {
   display: flex;
   align-items: center;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   justify-content: space-between;
-  padding: 0 20px;
+  height: 100%;
 }
 
-.header-left {
+.header-two__left {
   display: flex;
   align-items: center;
   gap: 20px;
 }
+
+.header-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+}
+
+.header-toggle span {
+  width: 18px;
+  height: 2px;
+  background: var(--primary-text);
+  border-radius: 2px;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.header-toggle.collapsed span:first-child {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.header-toggle.collapsed span:nth-child(2) {
+  opacity: 0;
+}
+
+.header-toggle.collapsed span:last-child {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.header-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.05);
+}
+.header-theme-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--primary-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+}
+
+.header-theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.05);
+}
+
 
 .header-logo {
   width: 40px;
@@ -52,15 +113,15 @@ header {
   /* Adiciona estilo opcional para LanguageSwitcher se necessário */
 }
 
-.auth-buttons {
+.header-two__auth {
   display: flex;
   gap: 10px;
   align-items: center;
 }
 
 .btn-account {
-  background-color: #28a745; /* Verde para Minha Conta */
-  color: #fff;
+  background-color: var(--accent-green);
+  color: var(--text-inverse);
   border: none;
   padding: 10px 15px;
   border-radius: 4px;
@@ -73,12 +134,12 @@ header {
 }
 
 .btn-account:hover {
-  background-color: #218838;
+  background-color: color-mix(in srgb, var(--accent-green) 85%, #000 15%);
 }
 
 .btn-login {
-  background-color: #007bff; /* Cor de fundo do botão */
-  color: #fff; /* Cor do texto do botão */
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
   border: none;
   padding: 10px 15px;
   border-radius: 4px;
@@ -91,7 +152,7 @@ header {
 }
 
 .btn-login:hover {
-  background-color: #0056b3; /* Cor de fundo ao passar o mouse */
+  background-color: var(--link-hover);
 }
 
 .go-top {
@@ -108,18 +169,18 @@ header {
 
 /* Estilos para dispositivos móveis */
 @media (max-width: 768px) {
-  header {
-    padding: 10px; /* Ajusta o padding para dispositivos móveis */
+  .header-two {
+    padding: 0 12px; /* Ajusta o padding para dispositivos móveis */
   }
 
-  .container {
+  .header-two__container {
     flex-direction: row; /* Mantém a direção dos itens em linha */
     align-items: center; /* Alinha os itens verticalmente */
-    padding: 10px 20px; /* Ajusta o padding para dispositivos móveis */
+    height: 100%;
     justify-content: space-between; /* Garante que os itens fiquem em extremos opostos */
   }
 
-  .header-left {
+  .header-two__left {
     gap: 10px;
   }
 
@@ -132,7 +193,7 @@ header {
     margin-right: 0; /* Remove a margem à direita em dispositivos móveis */
   }
 
-  .auth-buttons {
+  .header-two__auth {
     gap: 5px; /* Reduz gap em mobile */
   }
 

@@ -1,71 +1,305 @@
 .admin-container {
-    display: flex;
-    height: 100vh;
-    font-family: Arial, sans-serif;
-  }
-  
-  .admin-sidebar {
-    width: 250px;
-    background: #092554;
-    color: white;
-    padding: 20px;
-  }
-  
-  .admin-sidebar h2 {
-    text-align: center;
-  }
-  
-  .admin-sidebar ul {
-    list-style: none;
-    padding: 0;
-  }
-  
-  .admin-sidebar ul li {
-    padding: 12px;
-    cursor: pointer;
-    border-radius: 5px;
-    margin-bottom: 8px;
-    text-align: center;
-    background: #1e3a8a;
-    transition: 0.3s;
-  }
-  
-  .admin-sidebar ul li:hover,
-  .admin-sidebar ul li.active {
-    background: #1e90ff;
-  }
-  
-  .admin-content {
-    flex: 1;
-    padding: 30px;
-    background: #f5f5f5;
-  }
-  
-  h2 {
-    color: #092554;
-  }
-  
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  }
-  
-  th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-  }
-  
-  th {
-    background: #1e90ff;
-    color: white;
-  }
-  
-  tr:hover {
-    background: #f1f1f1;
-  }
+  display: flex;
+  height: calc(100vh - 132px); /* header + footer */
+  font-family: var(--font-family);
+  background: var(--app-bg);
+}
+
+.admin-sidebar {
+  width: 260px;
+  max-width: 28%;
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  bottom: 72px;
+  z-index: 900;
+  transition: width 0.3s ease;
+}
+
+.admin-sidebar h2 {
+  text-align: center;
+  margin: 0 0 16px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+}
+
+.admin-sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-sidebar ul li {
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: 0.3s;
+}
+
+.admin-sidebar ul li:hover,
+.admin-sidebar ul li.active {
+  background: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+.admin-content {
+  flex: 1;
+  padding: 30px;
+  background: var(--surface);
+  margin-left: 300px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  height: calc(100vh - 132px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 23, 42, 0.45) transparent;
+}
+
+.admin-user-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0 20px;
+}
+
+.admin-user-actions input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 220px;
+}
+
+.admin-user-actions select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-btn {
+  background: var(--accent-blue);
+  color: var(--text-inverse);
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.admin-btn:hover {
+  background: var(--link-hover);
+}
+
+.admin-btn--danger {
+  background: #ef4444;
+}
+
+.admin-btn--danger:hover {
+  background: #f87171;
+}
+
+.admin-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.admin-btn--ghost:hover {
+  background: var(--surface-2);
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.admin-modal {
+  width: min(720px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.admin-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.admin-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.admin-modal__grid span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-modal__form {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-modal__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-modal__form input,
+.admin-modal__form textarea,
+.admin-modal__form select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.admin-modal__form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.admin-modal__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.admin-modal__checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-modal__error {
+  color: #f87171;
+  margin: 0 0 12px;
+}
+
+.admin-modal__grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+}
+
+.admin-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.admin-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-content::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.admin-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.55);
+  background-clip: content-box;
+}
+
+.admin-container.collapsed .admin-sidebar {
+  width: 64px;
+}
+
+.admin-container.collapsed .admin-sidebar h2 {
+  font-size: 0;
+  margin-bottom: 8px;
+}
+
+.admin-container.collapsed .admin-sidebar ul li {
+  font-size: 0;
+  padding: 12px 8px;
+}
+
+.admin-container.collapsed .admin-content {
+  margin-left: 100px;
+}
+
+h2 {
+  color: var(--text);
+}
+
+.admin-content table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.admin-content th,
+.admin-content td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.admin-content th {
+  background: var(--table-header);
+  color: var(--text);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.admin-content tr:nth-child(even) {
+  background: var(--surface-2);
+}
+
+.admin-content tr:hover {
+  background: var(--surface-3);
+}
   
