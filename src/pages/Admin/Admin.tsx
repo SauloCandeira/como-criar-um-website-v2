@@ -719,6 +719,7 @@ const Admin: React.FC = () => {
                     hosting: 'Vercel',
                     status: 'Ativo',
                     paid: false,
+                    isPublic: true,
                   });
                   setIsProjectModalOpen(true);
                 }}
