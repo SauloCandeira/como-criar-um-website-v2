@@ -11,7 +11,7 @@ const Course: React.FC = () => {
     { id: 1, title: 'React Avançado', progress: 70 },
   ];
 
-  const [filter] = useState<string[]>([]);
+  const [filter] = useState([{ label: 'Curso' }]);
 
   return (
     <LayoutPrivate crumbs={filter}>

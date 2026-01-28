@@ -5,7 +5,7 @@ import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
 
 
 const MarketPlace = () => {
-  const [filter] = useState<string[]>([]);
+  const [filter] = useState([{ label: 'Marketplace' }]);
 
   return (
     <LayoutPrivate crumbs={filter}>
