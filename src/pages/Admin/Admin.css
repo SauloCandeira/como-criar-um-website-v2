@@ -147,6 +147,10 @@
   border-radius: 14px;
   box-shadow: var(--shadow);
   padding: 20px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .admin-modal__header {
@@ -154,6 +158,11 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  padding-bottom: 10px;
+  z-index: 2;
 }
 
 .admin-modal__grid {
@@ -171,6 +180,10 @@
 .admin-modal__form {
   display: grid;
   gap: 14px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
 .admin-modal__form label {
@@ -215,6 +228,11 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 16px;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  padding-top: 10px;
+  z-index: 2;
 }
 
 .admin-modal__error {
@@ -301,5 +319,67 @@ h2 {
 
 .admin-content tr:hover {
   background: var(--surface-3);
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.report-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  box-shadow: var(--shadow);
+}
+
+.report-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.report-card strong {
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.report-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.report-filter select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.report-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.report-chart {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 220px;
+  box-shadow: var(--shadow);
+}
+
+.report-chart h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
 }
   

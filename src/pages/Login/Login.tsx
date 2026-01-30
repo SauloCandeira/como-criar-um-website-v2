@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { 
   signInWithPopup, 
   signInWithEmailAndPassword, 
-  onAuthStateChanged 
+  onAuthStateChanged,
 } from "firebase/auth"; 
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db, provider } from '../../lib/init-firebase'; 
+import { auth, provider } from '../../lib/init-firebase'; 
+import { upsertUser, PermissionLevel } from '../../services/usersApi';
 import "./Login.css";
 
+type UserRole = 'user' | 'admin' | 'investor';
 const Login = () => {
   const navigate = useNavigate();
 
@@ -16,18 +17,52 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
   const [loading, setLoading] = useState(true);
 
+  const permissionToRole: Record<PermissionLevel, UserRole> = {
+    A: 'user',
+    B: 'admin',
+    C: 'investor'
+  };
+
+  const finalizeLogin = async (user: any) => {
+    const profile = await upsertUser({
+      authUid: user.uid,
+      name: user.displayName ?? "Usuário Anônimo",
+      email: user.email ?? "",
+      photoUrl: user.photoURL ?? "",
+      authProvider: user.providerData?.[0]?.providerId ?? "",
+    });
+    const permissionLevel = (profile.permissionLevel ?? 'A') as PermissionLevel;
+    const resolvedRole = permissionToRole[permissionLevel] ?? 'user';
+
+    localStorage.setItem("name", user.displayName ?? "Usuário Anônimo");
+    localStorage.setItem("email", user.email ?? "Email não disponível");
+    localStorage.setItem("profilePic", user.photoURL ?? "");
+    localStorage.setItem("permissionLevel", permissionLevel);
+    localStorage.setItem("role", resolvedRole);
+
+    navigate('/account', { replace: true });
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    let isMounted = true;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
       if (user) {
-        navigate('/dashboard', { replace: true });
+        try {
+          await finalizeLogin(user);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
       } else {
         setLoading(false); // não está logado, pode mostrar o login
       }
     });
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [navigate]);
   
   if (loading) {
@@ -42,25 +77,7 @@ const Login = () => {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user; 
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          uid: user.uid,
-          name: user.displayName ?? "Usuário Anônimo",
-          email: user.email ?? "",
-          photoURL: user.photoURL ?? "",
-          authProvider: "Google",
-          lastLoginAt: serverTimestamp()
-        },
-        { merge: true }
-      );
-
-      localStorage.setItem("name", user.displayName ?? "Usuário Anônimo");
-      localStorage.setItem("email", user.email ?? "Email não disponível");
-      localStorage.setItem("profilePic", user.photoURL ?? "");
-
-      navigate('/dashboard', { replace: true });
+      await finalizeLogin(user);
     } catch (error) {
       console.error("Erro ao fazer login com Google: ", error);
       setError("Falha no login com Google.");
@@ -81,24 +98,7 @@ const Login = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          uid: user.uid,
-          name: user.displayName ?? "Usuário Anônimo",
-          email: user.email ?? "",
-          photoURL: user.photoURL ?? "",
-          authProvider: "Email",
-          lastLoginAt: serverTimestamp()
-        },
-        { merge: true }
-      );
-
-      localStorage.setItem("name", user.displayName ?? "Usuário Anônimo");
-      localStorage.setItem("email", user.email ?? "Email não disponível");
-      localStorage.setItem("profilePic", user.photoURL ?? "");
-
-      navigate('/dashboard', { replace: true });
+      await finalizeLogin(user);
     } catch (error) {
       console.error("Erro no login com email e senha: ", error);
       setError("Email ou senha inválidos.");
@@ -111,12 +111,13 @@ const Login = () => {
       <div className="login-form">
         <h2>Login</h2>
 
+
         <button 
           className="login-with-google-btn" 
           onClick={handleLoginWithGoogle}
           type="button"
         >
-          Sign in with Google
+          Entrar com Google
         </button>
 
         <hr style={{ margin: "20px 0", borderColor: "rgba(255,255,255,0.3)" }} />

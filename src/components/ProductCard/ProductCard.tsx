@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Slider from 'react-slick';
 import 'slick-carousel/slick/slick.css';
@@ -7,53 +7,59 @@ import './ProductCard.css';
 import arduinoImg from './../../assets/img/kit-arduino-uno.jpg';
 import espImg from './../../assets/img/kit-esp32.jpg';
 import print3dImg from './../../assets/img/print-3d.jpg';
-
-type ItemType = 'product' | 'service';
+import { fetchProducts, ProductDTO } from '../../services/productsApi';
 
 interface Item {
   name: string;
   description: string;
   price?: number;
   image: string;
-  type: ItemType;
 }
 
 const ProductCard: React.FC = () => {
   const navigate = useNavigate();
+  const [products, setProducts] = useState<ProductDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const items: Item[] = [
-    {
-      name: 'Starter Kit Arduino Uno',
-      description:
-        'Kit completo para aprender eletrônica e automação com Arduino, ideal para iniciantes.',
-      price: 299.99,
-      image: arduinoImg,
-      type: 'product',
-    },
-    {
-      name: 'Starter Kit ESP32',
-      description:
-        'Aprenda IoT e sistemas conectados com ESP32 e projetos práticos.',
-      price: 299.99,
-      image: espImg,
-      type: 'product',
-    },
-    {
-      name: 'Impressão 3D',
-      description:
-        'Serviço de impressão 3D sob demanda para protótipos, peças técnicas e projetos personalizados.',
-      image: print3dImg,
-      type: 'service',
-    },
-    {
-      name: 'Landingpage Institucional',
-      description:
-        'Landingpage profissional e responsiva para sua empresa com design moderno, otimizada para SEO e conversão de leads.',
-      price: 499.99,
-      image: arduinoImg,
-      type: 'product',
-    },
-  ];
+  const imagePool = [arduinoImg, espImg, print3dImg];
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchProducts();
+        setProducts(data);
+      } catch (err) {
+        console.error('Erro ao carregar produtos da home:', err);
+        setError('Não foi possível carregar os produtos.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const items: Item[] = useMemo(() => {
+    return products
+      .filter((product) => product.showOnHome)
+      .map((product, index) => {
+        const numericPrice = Number(
+          String(product.salePrice ?? product.price)
+            .replace('R$', '')
+            .replace('.', '')
+            .replace(',', '.')
+            .trim()
+        );
+        return {
+          name: product.name,
+          description: product.description,
+          price: Number.isNaN(numericPrice) ? undefined : numericPrice,
+          image: imagePool[index % imagePool.length],
+        };
+      });
+  }, [products]);
 
   const settings = {
     dots: true,
@@ -97,56 +103,44 @@ const ProductCard: React.FC = () => {
         </div>
 
         <div className="product-slider">
-          <Slider {...settings}>
-            {items.map((item, index) => (
-              <div key={index} className="product-card-wrapper">
-                <div className="product-card">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="product-image"
-                  />
+          {loading && <p>Carregando produtos...</p>}
+          {!loading && error && <p>{error}</p>}
+          {!loading && !error && items.length === 0 && (
+            <p>Nenhum produto disponível para a Home.</p>
+          )}
+          {!loading && !error && items.length > 0 && (
+            <Slider {...settings}>
+              {items.map((item, index) => (
+                <div key={index} className="product-card-wrapper">
+                  <div className="product-card">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="product-image"
+                    />
 
-                  <div className="product-info">
-                    <span
-                      className={`product-badge ${
-                        item.type === 'product' ? 'product' : 'service'
-                      }`}
+                    <div className="product-info">
+                      <span className="product-badge product">Produto</span>
+                      <h2>{item.name}</h2>
+                      <p className="product-text">{item.description}</p>
+                      {item.price !== undefined && !Number.isNaN(item.price) && (
+                        <p className="product-price">
+                          R$ {item.price.toFixed(2).replace('.', ',')}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      className="product-action buy"
+                      onClick={() => navigate('/marketplace')}
                     >
-                      {item.type === 'product' ? 'Produto' : 'Serviço'}
-                    </span>
-
-                    <h2>{item.name}</h2>
-
-                    <p className="product-text">{item.description}</p>
-
-                    {item.type === 'product' && item.price && (
-                      <p className="product-price">
-                        ${item.price.toFixed(2)}
-                      </p>
-                    )}
+                      Acessar
+                    </button>
                   </div>
-
-                  <button
-                    className={`product-action ${
-                      item.type === 'product' ? 'buy' : 'quote'
-                    }`}
-                    onClick={() =>
-                      navigate(
-                        item.type === 'product'
-                          ? '/marketplace'
-                          : '/contact'
-                      )
-                    }
-                  >
-                    {item.type === 'product'
-                      ? 'Acessar'
-                      : 'Solicitar orçamento'}
-                  </button>
                 </div>
-              </div>
-            ))}
-          </Slider>
+              ))}
+            </Slider>
+          )}
         </div>
       </div>
     </section>

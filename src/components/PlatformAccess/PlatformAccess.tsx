@@ -15,16 +15,16 @@ const PlatformAccess: React.FC = () => {
   const [loadingId, setLoadingId] = useState<number | null>(null);
 
   const accessPlans = [
-    { id: 1, key: 'basic', image: eBookImg },
-    { id: 2, key: 'intermediate', image: videoImg },
-    { id: 3, key: 'advanced', image: packageImg }
+    { id: 1, key: 'basic', image: eBookImg, route: '/signup' },
+    { id: 2, key: 'intermediate', image: videoImg, route: '/access-request' },
+    { id: 3, key: 'advanced', image: packageImg, route: '/access-request' }
   ];
 
-  const handleAccess = (planId: number) => {
+  const handleAccess = (planId: number, route: string) => {
     setLoadingId(planId);
     setTimeout(() => {
       setLoadingId(null);
-      navigate('/access-request');
+      navigate(route);
     }, 800);
   };
 
@@ -63,11 +63,11 @@ const PlatformAccess: React.FC = () => {
               <button
                 className="reserve-button"
                 disabled={loadingId === plan.id}
-                onClick={() => handleAccess(plan.id)}
+                onClick={() => handleAccess(plan.id, plan.route)}
               >
                 {loadingId === plan.id
                   ? t('platform.loading')
-                  : t('platform.request')}
+                  : (t(`platform.plans.${plan.key}.cta`, { defaultValue: t('platform.request') }) as string)}
               </button>
             </div>
           ))}

@@ -24,7 +24,7 @@
   "platform": {
     "title": "Plataforma HK | Tecnologia, Sistemas & Capital",
     "description": "Um ecossistema completo para aprendizado técnico, desenvolvimento de sistemas, gestão de projetos e oportunidades privadas de investimento.",
-    "request": "Solicitar acesso",
+    "request": "Registrar agora",
     "loading": "Processando...",
 
     "plans": {
@@ -32,7 +32,7 @@
         "title": "Explorador",
         "price": "Gratuito",
         "features": {
-          "f1": "Acesso a cursos técnicos e práticos gratuitos",
+          "f1": "Cadastro gratuito com permissão de usuário",
           "f2": "Acesso à plataforma de cursos (LMS)",
           "f3": "Acesso ao marketplace de tecnologia",
           "f4": "Primeiro projeto profissional de website (guiado)",
@@ -45,20 +45,22 @@
       "intermediate": {
         "title": "Estruturado",
         "price": "USD 29 / mês",
+        "cta": "Assinar",
         "features": {
           "f1": "Tudo do plano Explorador",
-          "f2": "Cursos avançados e trilhas técnicas",
+          "f2": "Consultoria, assessoria ou uso do nosso SaaS de gestão",
           "f3": "Acesso completo ao sistema de gestão",
-          "f4": "Projetos reais estruturados",
-          "f5": "2 horas mensais de aulas online ao vivo com instrutor",
-          "f6": "Tempo de instrutor baseado em desenvolvedor sênior",
+          "f4": "Acesso a 5 projetos diferenciados",
+          "f5": "Acompanhamento com especialistas",
+          "f6": "Trilhas técnicas avançadas",
           "f7": "Sem acesso ao hub privado de investimentos"
         }
       },
 
       "advanced": {
-        "title": "Master",
+        "title": "Investidor",
         "price": "Privado / Apenas convite",
+        "cta": "Solicitar acesso",
         "features": {
           "f1": "Tudo do plano Estruturado",
           "f2": "Acesso ao hub privado de investimentos",

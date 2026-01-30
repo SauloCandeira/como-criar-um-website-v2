@@ -1,0 +1,272 @@
+.investor-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.broker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(15, 23, 42, 0.92));
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+}
+
+.broker-header h2 {
+  margin: 0 0 6px;
+}
+
+.broker-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.broker-badge {
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--text);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.investor-hero {
+  background: linear-gradient(135deg, rgba(0, 170, 255, 0.2), rgba(9, 37, 84, 0.85));
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  color: var(--text);
+}
+
+.investor-hero h2 {
+  margin: 0 0 12px 0;
+}
+
+.investor-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.investor-kpi-card {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow);
+}
+
+.investor-kpi-card strong {
+  font-size: 1.3rem;
+}
+
+.investor-kpi-card em {
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.investor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.broker-quick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.broker-card {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 6px;
+}
+
+.broker-card span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.broker-card strong {
+  font-size: 1.25rem;
+}
+
+.broker-card em,
+.broker-card small {
+  color: var(--text-muted);
+  font-style: normal;
+  font-size: 0.9rem;
+}
+
+.investor-panel {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.broker-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.broker-asset-grid span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.broker-asset-grid strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+}
+
+.investor-milestones {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.investor-milestones li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.investor-milestones li span {
+  display: block;
+  color: var(--text-muted);
+}
+
+.investor-risk-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.investor-risk-list li {
+  display: grid;
+  gap: 6px;
+}
+
+.investor-metric-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.investor-order-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.broker-order-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.broker-deposit-card {
+  margin-top: 12px;
+}
+
+.broker-order-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.broker-order-row span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.broker-orderbook-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.broker-orderbook-header span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.investor-order-form span {
+  color: var(--text-muted);
+  display: block;
+  font-size: 0.85rem;
+}
+
+.investor-order-form input,
+.investor-order-form select {
+  width: 100%;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.investor-metric-list span {
+  color: var(--text-muted);
+  display: block;
+}
+
+.investor-costs-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.investor-costs-summary div {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 6px;
+}
+
+.investor-costs-summary span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .investor-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

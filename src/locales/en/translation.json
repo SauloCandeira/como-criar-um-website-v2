@@ -24,7 +24,7 @@
   "platform": {
     "title": "HK Platform | Technology, Systems & Capital",
     "description": "A complete ecosystem for technical learning, system development, project management and private investment opportunities.",
-    "request": "Request access",
+    "request": "Register now",
     "loading": "Processing...",
 
 "plans": {
@@ -32,9 +32,9 @@
     "title": "Explorer",
     "price": "Free",
     "features": {
-      "f1": "Access to free technical and hands-on courses",
-      "f2": "Learning platform (LMS) access",
-      "f3": "Technology marketplace access",
+          "f1": "Free registration with user permission",
+          "f2": "Access to the course platform (LMS)",
+          "f3": "Access to the technology marketplace",
       "f4": "First professional website project (guided)",
       "f5": "Support to build and host a personal or portfolio website",
       "f6": "Beta access to management system",
@@ -45,20 +45,22 @@
   "intermediate": {
     "title": "Structured",
     "price": "USD 29 / month",
+    "cta": "Subscribe",
     "features": {
-      "f1": "Everything from the Explorer plan",
-      "f2": "Advanced courses and technical learning tracks",
-      "f3": "Full management system access",
-      "f4": "Structured real-world projects",
-      "f5": "2 hours per month of live online classes with an instructor",
-      "f6": "Instructor time based on senior developer expertise",
+          "f1": "Everything in Explorer plan",
+          "f2": "Consulting, advisory, or our management SaaS",
+          "f3": "Full access to the management system",
+          "f4": "Access to 5 differentiated projects",
+          "f5": "Guidance with specialists",
+          "f6": "Advanced technical tracks",
       "f7": "No access to private investment hub"
     }
   },
 
   "advanced": {
-    "title": "Master",
+    "title": "Investor",
     "price": "Private / Invitation Only",
+    "cta": "Request access",
     "features": {
       "f1": "Everything from the Structured plan",
       "f2": "Access to private investment hub",
@@ -160,7 +162,7 @@
     },
 
     "values": {
-      "title": "Our Values",
+        "title": "Investor",
       "items": {
         "courage": "Courage to challenge traditional models and build new structures",
         "democracy": "Democracy in access to knowledge, technology and information",

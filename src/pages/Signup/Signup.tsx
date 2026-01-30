@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from '../../lib/init-firebase';
+import { auth } from '../../lib/init-firebase';
+import { upsertUser } from '../../services/usersApi';
 import "./Signup.css"; // Reaproveitando o mesmo estilo do login
 
 const Signup = () => {
@@ -33,25 +33,22 @@ const Signup = () => {
   
       // Atualiza o displayName no perfil do usuário
       await updateProfile(user, { displayName });
-      // Salva/atualiza o usuário no Firestore
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          uid: user.uid,
-          name: displayName,
-          email: user.email ?? "",
-          photoURL: user.photoURL ?? "",
-          authProvider: "Email",
-          createdAt: serverTimestamp(),
-          lastLoginAt: serverTimestamp()
-        },
-        { merge: true }
-      );
+      await upsertUser({
+        authUid: user.uid,
+        name: displayName,
+        email: user.email ?? "",
+        photoUrl: user.photoURL ?? "",
+        authProvider: "Email",
+        permissionLevel: 'A',
+        status: 'Ativo'
+      });
   
       // Salva no localStorage
       localStorage.setItem("name", displayName);
       localStorage.setItem("email", user.email ?? "Email não disponível");
       localStorage.setItem("profilePic", user.photoURL ?? "");
+      localStorage.setItem("permissionLevel", "A");
+      localStorage.setItem("role", "user");
   
       // Limpa os campos (opcional)
       setEmail("");
