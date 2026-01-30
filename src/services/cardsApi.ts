@@ -137,6 +137,17 @@ export async function createUserCard(userId: string, cpf: string): Promise<CardD
   return normalizeCard(await res.json());
 }
 
+export async function refreshAlienCard(userId: string): Promise<CardDTO> {
+  const res = await fetch(`${API_BASE}/cards/${encodeURIComponent(userId)}/refresh`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || "Falha ao atualizar visual");
+  }
+  return normalizeCard(await res.json());
+}
+
 export async function addCardXp(userId: string, amount: number): Promise<CardDTO> {
   const res = await fetch(`${API_BASE}/cards/${encodeURIComponent(userId)}/xp`, {
     method: "POST",

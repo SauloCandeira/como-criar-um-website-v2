@@ -14,6 +14,7 @@ import {
   buyCardListing,
   fetchInternalAccount,
   createUserCard,
+  refreshAlienCard,
   CardDTO,
   CardListingDTO,
   InternalAccountDTO,
@@ -111,7 +112,12 @@ const Dashboard: React.FC = () => {
     setAlienError(null);
     try {
       const card = await fetchUserCard(userId);
-      setAlienCard(card);
+      if (!card.imageUrl) {
+        const refreshed = await refreshAlienCard(userId);
+        setAlienCard(refreshed);
+      } else {
+        setAlienCard(card);
+      }
     } catch (error) {
       console.error('Erro ao carregar carta:', error);
       setAlienError(error instanceof Error ? error.message : 'Não foi possível carregar sua carta alienígena.');
@@ -681,6 +687,9 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="alien-actions">
                     <button className="action-button" onClick={loadAlienCard}>Atualizar perfil</button>
+                    <button className="action-button action-button--ghost" onClick={() => refreshAlienCard(userId).then(setAlienCard).catch((err) => setAlienError(err.message))}>
+                      Atualizar visual
+                    </button>
                     <button className="action-button action-button--ghost" onClick={handleAddXp}>Ganhar XP</button>
                   </div>
                 </div>

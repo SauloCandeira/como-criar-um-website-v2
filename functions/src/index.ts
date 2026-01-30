@@ -923,6 +923,43 @@ app.post("/cards/:userId", async (req, res) => {
   }
 });
 
+app.post("/cards/:userId/refresh", async (req, res) => {
+  const { userId } = req.params;
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      const existing = await client.query(
+        "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (!existing.rows[0]) {
+        return res.status(404).json({ message: "Carta não encontrada." });
+      }
+      const hashSeedValue = String(existing.rows[0].hash_seed || "");
+      if (!hashSeedValue) {
+        return res.status(400).json({ message: "Informe o CPF para gerar o hash da carta." });
+      }
+      const visualMeta = generateVisualMetaFromHash(hashSeedValue);
+      const imageUrl = await ensureAlienImage(userId, existing.rows[0].name, existing.rows[0].rarity, visualMeta, hashSeedValue);
+      const updated = await client.query(
+        "UPDATE user_cards SET visual_meta = $2, image_url = $3, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
+        [userId, visualMeta, imageUrl]
+      );
+      res.json(updated.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao atualizar visual do alien." });
+  }
+});
+
 app.post("/cards/:userId/xp", async (req, res) => {
   const { userId } = req.params;
   const { amount } = req.body ?? {};
