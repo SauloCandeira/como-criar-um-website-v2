@@ -1,5 +1,6 @@
 import './App.css'
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { useEffect, useState } from 'react';
 import Home from './pages/Home/Home';
 import Login from './pages/Login/Login';
 import Signup from './pages/Signup/Signup';
@@ -14,6 +15,26 @@ import Editor from './pages/Editor/Editor';
 import Manager from './pages/Manager/Manager';
 import Investor from './pages/Investor/Investor';
 import Account from './pages/Account/Account';
+import LoadingOverlay from './components/LoadingOverlay/LoadingOverlay';
+
+const RouteLoader = () => {
+  const location = useLocation();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const delay = location.pathname === '/' ? 1200 : 700;
+    const timer = window.setTimeout(() => setLoading(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname]);
+
+  return (
+    <LoadingOverlay
+      visible={loading}
+      variant={location.pathname === '/' ? 'rocket' : 'default'}
+    />
+  );
+};
 
 export function App() {
   return (
@@ -21,6 +42,7 @@ export function App() {
     
     
     <BrowserRouter>
+      <RouteLoader />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
