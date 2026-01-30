@@ -23,7 +23,7 @@ const RouteLoader = () => {
 
   useEffect(() => {
     setLoading(true);
-    const delay = location.pathname === '/' ? 1200 : 700;
+    const delay = location.pathname === '/' ? 900 : 600;
     const timer = window.setTimeout(() => setLoading(false), delay);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
