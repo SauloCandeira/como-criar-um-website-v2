@@ -71,6 +71,12 @@ svg {
   height: auto;
 }
 
+table {
+  max-width: 100%;
+  width: 100%;
+  border-collapse: collapse;
+}
+
 input,
 select,
 textarea,
@@ -79,6 +85,21 @@ button {
 }
 
 @media (max-width: 768px) {
+  table {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  table th,
+  table td {
+    white-space: nowrap;
+  }
+
   .admin-container {
     position: relative;
     flex-direction: column;
@@ -135,5 +156,7 @@ button {
     margin-left: 0 !important;
     width: 100% !important;
     height: auto !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
 }
