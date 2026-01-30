@@ -212,15 +212,52 @@ function calculateRarity(score: number, rng: () => number) {
   return "comum";
 }
 
-function generateVisualMeta(seed: number) {
-  const rng = mulberry32(seed);
-  const palette = VISUAL_PALETTES[Math.floor(rng() * VISUAL_PALETTES.length)];
+function hslToHex(h: number, s: number, l: number) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (h < 60) {
+    r = c;
+    g = x;
+  } else if (h < 120) {
+    r = x;
+    g = c;
+  } else if (h < 180) {
+    g = c;
+    b = x;
+  } else if (h < 240) {
+    g = x;
+    b = c;
+  } else if (h < 300) {
+    r = x;
+    b = c;
+  } else {
+    r = c;
+    b = x;
+  }
+  const toHex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function generateVisualMetaFromHash(hash: string) {
+  const bytes = hash.match(/.{1,2}/g)?.map((h) => parseInt(h, 16)) ?? [];
+  const hue = (bytes[0] ?? 120) % 360;
+  const accentHue = (hue + (bytes[1] ?? 90)) % 360;
+  const palette = {
+    primary: hslToHex(hue, 0.75, 0.6),
+    secondary: hslToHex((hue + 200) % 360, 0.45, 0.18),
+    accent: hslToHex(accentHue, 0.8, 0.55),
+  };
   return {
     palette,
-    pattern: Math.floor(rng() * 6),
-    eyes: Math.floor(rng() * 5),
-    horns: Math.floor(rng() * 4),
-    glow: rng() > 0.65,
+    pattern: (bytes[2] ?? 0) % 6,
+    eyes: (bytes[3] ?? 0) % 4 + 1,
+    horns: (bytes[4] ?? 0) % 5,
+    glow: (bytes[5] ?? 0) % 2 === 1,
+    aura: (bytes[6] ?? 0) % 3,
   };
 }
 
@@ -236,6 +273,9 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
   const palette = visualMeta?.palette ?? VISUAL_PALETTES[0];
   const glow = visualMeta?.glow ? `filter="url(#glow)"` : "";
   const patternId = `pattern-${visualMeta?.pattern ?? 0}`;
+  const eyes = Math.max(1, Number(visualMeta?.eyes ?? 2));
+  const horns = Math.max(0, Number(visualMeta?.horns ?? 0));
+  const aura = Number(visualMeta?.aura ?? 0);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
   <defs>
@@ -279,12 +319,21 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
   </defs>
   <rect width="480" height="640" rx="32" fill="url(#bg)" />
   <rect x="32" y="48" width="416" height="480" rx="28" fill="url(#${patternId})" opacity="0.5" />
+  ${aura === 1 ? `<circle cx="240" cy="260" r="175" fill="${palette.accent}" opacity="0.08" />` : ""}
+  ${aura === 2 ? `<circle cx="240" cy="260" r="185" fill="${palette.primary}" opacity="0.08" />` : ""}
   <g ${glow}>
     <ellipse cx="240" cy="260" rx="120" ry="150" fill="url(#core)" />
-    <ellipse cx="200" cy="240" rx="22" ry="30" fill="${palette.accent}" />
-    <ellipse cx="280" cy="240" rx="22" ry="30" fill="${palette.accent}" />
-    <circle cx="200" cy="245" r="8" fill="#0f172a" />
-    <circle cx="280" cy="245" r="8" fill="#0f172a" />
+    ${Array.from({ length: eyes }).map((_, idx) => {
+      const offset = eyes === 1 ? 0 : (idx - (eyes - 1) / 2) * 50;
+      return `
+    <ellipse cx="${240 + offset}" cy="240" rx="18" ry="26" fill="${palette.accent}" />
+    <circle cx="${240 + offset}" cy="245" r="7" fill="#0f172a" />`;
+    }).join("")}
+    ${Array.from({ length: horns }).map((_, idx) => {
+      const offset = horns === 1 ? 0 : (idx - (horns - 1) / 2) * 40;
+      return `
+    <path d="M${240 + offset - 10} 140 Q${240 + offset} 90 ${240 + offset + 10} 140" stroke="${palette.accent}" stroke-width="6" fill="none" />`;
+    }).join("")}
     <path d="M210 300 Q240 320 270 300" stroke="${palette.accent}" stroke-width="8" fill="none" stroke-linecap="round" />
   </g>
   <text x="50%" y="560" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${name}</text>
@@ -292,7 +341,7 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
 </svg>`;
 }
 
-async function ensureAlienImage(userId: string, name: string, rarity: string, visualMeta: any) {
+async function ensureAlienImage(userId: string, name: string, rarity: string, visualMeta: any, hashSeed: string) {
   const projectId = admin.app().options.projectId as string | undefined;
   const bucketName =
     process.env.FIREBASE_STORAGE_BUCKET ||
@@ -302,7 +351,7 @@ async function ensureAlienImage(userId: string, name: string, rarity: string, vi
     throw new Error("Bucket de storage não configurado.");
   }
   const bucket = admin.storage().bucket(bucketName);
-  const file = bucket.file(`aliens/${userId}.svg`);
+  const file = bucket.file(`aliens/${userId}-${hashSeed.slice(0, 12)}.svg`);
   const svg = generateAlienSvg(name, rarity, visualMeta);
   await file.save(svg, { contentType: "image/svg+xml", resumable: false, public: true });
   try {
@@ -817,9 +866,9 @@ app.post("/cards/:userId", async (req, res) => {
         plan: gamification.plan || "free",
         level,
       });
-      const visualMeta = generateVisualMeta(seed);
+      const visualMeta = generateVisualMetaFromHash(hashSeed);
       const marketValue = computeMarketValue(profile.attributes, profile.rarity);
-      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta);
+      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta, hashSeed);
       if (existing.rows[0]) {
         const updated = await client.query(
           "UPDATE user_cards SET seed = $2, hash_seed = $3, name = $4, species = $5, class = $6, rarity = $7, attributes = $8, visual_meta = $9, market_value = $10, image_url = $11, level = $12, xp = $13, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
@@ -909,9 +958,10 @@ app.post("/cards/:userId/xp", async (req, res) => {
         plan: gamification.plan || "free",
         level,
       });
-      const visualMeta = generateVisualMeta(seed);
+      const hashSeedValue = String(existingCard.rows[0].hash_seed || "");
+      const visualMeta = generateVisualMetaFromHash(hashSeedValue);
       const marketValue = computeMarketValue(profile.attributes, profile.rarity);
-      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta);
+      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta, hashSeedValue);
       const updated = await client.query(
         "UPDATE user_cards SET name = $3, species = $4, class = $5, rarity = $6, attributes = $7, visual_meta = $8, market_value = $9, image_url = $10, level = $11, xp = $12, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
         [userId, seed, profile.name, profile.species, profile.className, profile.rarity, profile.attributes, visualMeta, marketValue, imageUrl, level, newXp]
