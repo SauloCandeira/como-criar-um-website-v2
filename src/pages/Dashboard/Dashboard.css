@@ -185,6 +185,8 @@
   margin: 0.5rem 0;
   font-size: 1rem;
 }
+
+.account-switcher {
   margin-top: 16px;
   display: grid;
   gap: 8px;
