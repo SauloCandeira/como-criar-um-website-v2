@@ -44,3 +44,12 @@
 .navigate-button:hover {
   background-color: var(--link-hover);
 }
+
+@media (max-width: 768px) {
+  .breadcrumble {
+    height: auto;
+    min-height: 36px;
+    padding: 6px 12px;
+    flex-wrap: wrap;
+  }
+}

@@ -112,13 +112,15 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
           {onToggleSidebar && (
             <button
               type="button"
-              className={`header-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
-              aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              className={`header-toggle ${sidebarCollapsed ? '' : 'open'}`}
+              aria-label={sidebarCollapsed ? 'Abrir menu lateral' : 'Fechar menu lateral'}
               onClick={onToggleSidebar}
+              title={roleLabel || undefined}
             >
               <span></span>
               <span></span>
               <span></span>
+              {roleLabel && <span className="header-toggle__role">{roleLabel}</span>}
             </button>
           )}
           <img
@@ -140,7 +142,6 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
             >
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
-            {roleLabel && <span className="role-badge">{roleLabel}</span>}
             {roleLabel !== 'Investidor' && (
               <button className="btn-account" onClick={handleMyAccountClick}>
                 <i className="fas fa-user"></i>
