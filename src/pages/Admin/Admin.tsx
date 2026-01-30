@@ -67,9 +67,6 @@ interface UserItem {
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
-  const [permissionLevel, setPermissionLevel] = useState<'A' | 'B' | 'C'>(
-    (localStorage.getItem('permissionLevel') || 'A') as 'A' | 'B' | 'C'
-  );
   const currentEmail = (localStorage.getItem('email') || '').toLowerCase();
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -80,7 +77,6 @@ const Admin: React.FC = () => {
       try {
         const profile = await fetchUserByEmail(currentEmail || user.email || '');
         const dbLevel = (profile?.permissionLevel || 'A') as 'A' | 'B' | 'C';
-        setPermissionLevel(dbLevel);
         localStorage.setItem('permissionLevel', dbLevel);
         if (dbLevel !== 'B') {
           navigate('/account', { replace: true });
