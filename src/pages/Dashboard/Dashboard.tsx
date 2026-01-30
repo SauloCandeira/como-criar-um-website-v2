@@ -105,12 +105,12 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const loadAlienCard = async (refresh?: boolean) => {
+  const loadAlienCard = async () => {
     if (!userId) return;
     setAlienLoading(true);
     setAlienError(null);
     try {
-      const card = await fetchUserCard(userId, refresh);
+      const card = await fetchUserCard(userId);
       setAlienCard(card);
     } catch (error) {
       console.error('Erro ao carregar carta:', error);
@@ -680,7 +680,7 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <div className="alien-actions">
-                    <button className="action-button" onClick={() => loadAlienCard(true)}>Atualizar perfil</button>
+                    <button className="action-button" onClick={loadAlienCard}>Atualizar perfil</button>
                     <button className="action-button action-button--ghost" onClick={handleAddXp}>Ganhar XP</button>
                   </div>
                 </div>

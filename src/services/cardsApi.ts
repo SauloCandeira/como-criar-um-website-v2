@@ -115,7 +115,7 @@ const normalizeListing = (row: any): CardListingDTO => ({
   xp: row.xp ? Number(row.xp) : undefined,
 });
 
-export async function fetchUserCard(userId: string, refresh?: boolean): Promise<CardDTO> {
+export async function fetchUserCard(userId: string): Promise<CardDTO> {
   const res = await fetch(`${API_BASE}/cards/${encodeURIComponent(userId)}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
