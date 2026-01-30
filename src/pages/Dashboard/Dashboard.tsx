@@ -193,7 +193,7 @@ const Dashboard: React.FC = () => {
     setAlienListingsError(null);
     try {
       await buyCardListing(listingId, userId);
-      await loadAlienCard(true);
+      await loadAlienCard();
       await loadInternalAccount();
       await loadAlienListings();
     } catch (error) {
