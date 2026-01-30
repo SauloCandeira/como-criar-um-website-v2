@@ -293,7 +293,15 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
 }
 
 async function ensureAlienImage(userId: string, name: string, rarity: string, visualMeta: any) {
-  const bucket = admin.storage().bucket();
+  const projectId = admin.app().options.projectId as string | undefined;
+  const bucketName =
+    process.env.FIREBASE_STORAGE_BUCKET ||
+    (admin.app().options.storageBucket as string | undefined) ||
+    (projectId ? `${projectId}.appspot.com` : undefined);
+  if (!bucketName) {
+    throw new Error("Bucket de storage não configurado.");
+  }
+  const bucket = admin.storage().bucket(bucketName);
   const file = bucket.file(`aliens/${userId}.svg`);
   const svg = generateAlienSvg(name, rarity, visualMeta);
   await file.save(svg, { contentType: "image/svg+xml", resumable: false, public: true });
