@@ -53,6 +53,30 @@
   --desktop: 1024px;
 }
 
+@media (max-width: 768px) {
+  :root {
+    --font-size-h1: 1.9rem;
+    --font-size-h2: 1.05rem;
+    --font-size-body: 0.95rem;
+    --font-size-small: 0.85rem;
+    --padding-section: 2.4rem 1.2rem 1.6rem;
+    --padding-card: 1rem;
+    --margin-bottom: 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --font-size-h1: 1.6rem;
+    --font-size-h2: 1rem;
+    --font-size-body: 0.93rem;
+    --font-size-small: 0.82rem;
+    --padding-section: 2rem 1rem 1.4rem;
+    --padding-card: 0.9rem;
+    --margin-bottom: 1.2rem;
+  }
+}
+
 /* Tema claro */
 [data-theme="light"] {
   --primary-bg: #f8fafc;

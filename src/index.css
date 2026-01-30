@@ -1,14 +1,25 @@
 @import './styles/design-system.css';
 @import './styles/utils.css';
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 html, body {
   height: 100%;
   margin: 0;
   font-family: var(--font-family);
+  -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--app-bg);
   color: var(--text);
+  overflow-x: hidden;
+  touch-action: manipulation;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
 }
 
 [data-theme="dark"] body {
@@ -50,4 +61,79 @@ html, body {
 
 #root {
   height: 100%;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+@media (max-width: 768px) {
+  .admin-container {
+    position: relative;
+    flex-direction: column;
+    height: auto !important;
+    min-height: calc(100vh - 132px);
+  }
+
+  .admin-container.has-breadcrumb {
+    min-height: calc(100vh - 168px);
+    height: auto !important;
+  }
+
+  .admin-container::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 990;
+  }
+
+  .admin-container:not(.collapsed)::before {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .admin-sidebar {
+    position: fixed !important;
+    top: 60px !important;
+    left: 0;
+    bottom: 72px !important;
+    width: min(82vw, 320px) !important;
+    max-width: 85vw !important;
+    transform: translateX(-105%);
+    transition: transform 0.3s ease;
+    z-index: 1001;
+  }
+
+  .admin-container.has-breadcrumb .admin-sidebar {
+    top: 96px !important;
+  }
+
+  .admin-container:not(.collapsed) .admin-sidebar {
+    transform: translateX(0);
+  }
+
+  .admin-container.collapsed .admin-sidebar {
+    transform: translateX(-105%);
+  }
+
+  .admin-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
 }
