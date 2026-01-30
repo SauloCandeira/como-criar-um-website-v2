@@ -259,6 +259,36 @@
   gap: 6px;
 }
 
+@media (max-width: 768px) {
+  .projects-table th:nth-child(3),
+  .projects-table td:nth-child(3),
+  .projects-table th:nth-child(5),
+  .projects-table td:nth-child(5),
+  .projects-table th:nth-child(6),
+  .projects-table td:nth-child(6),
+  .projects-table th:nth-child(7),
+  .projects-table td:nth-child(7) {
+    display: none;
+  }
+
+  .marketplace-table th:nth-child(2),
+  .marketplace-table td:nth-child(2),
+  .marketplace-table th:nth-child(4),
+  .marketplace-table td:nth-child(4) {
+    display: none;
+  }
+
+  .projects-table th,
+  .projects-table td,
+  .marketplace-table th,
+  .marketplace-table td,
+  .costs-table th,
+  .costs-table td {
+    padding: 8px;
+    font-size: 12px;
+  }
+}
+
 .investor-costs-summary span {
   color: var(--text-muted);
   font-size: 0.85rem;

@@ -3,9 +3,22 @@ import { useTranslation } from 'react-i18next';
 
 const Footer = () => {
   const { t } = useTranslation();
+  const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER as string | undefined;
+  const whatsappLink = whatsappNumber ? `https://wa.me/${whatsappNumber}` : undefined;
 
   return (
     <footer className="footer">
+      {whatsappLink && (
+        <a
+          href={whatsappLink}
+          className="whatsapp-fab"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Falar no WhatsApp"
+        >
+          <i className="fab fa-whatsapp"></i>
+        </a>
+      )}
       <div className="footer-container">
 
         {/* Logo & About */}

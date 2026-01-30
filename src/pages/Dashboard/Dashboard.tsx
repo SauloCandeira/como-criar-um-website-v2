@@ -3,6 +3,9 @@ import './Dashboard.css';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
 import { fetchProjects, ProjectDTO, updateProject } from '../../services/projectsApi';
+import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
+import { fetchUserByEmail, UserDTO } from '../../services/usersApi';
+import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -10,6 +13,11 @@ const Dashboard: React.FC = () => {
   const [projects, setProjects] = useState<ProjectDTO[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [purchases, setPurchases] = useState<PurchaseDTO[]>([]);
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [purchasesError, setPurchasesError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserDTO | null>(null);
+  const [userProfileError, setUserProfileError] = useState<string | null>(null);
   const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
   const [editProjectData, setEditProjectData] = useState({
     id: '',
@@ -30,34 +38,45 @@ const Dashboard: React.FC = () => {
     navigate('/manager');
   };
 
-  const userInfo = {
-    name: 'Saulo Candeira',
-    enrollment: '202501234',
-    status: 'Ativo',
-    level: 'Junior',
-    area: 'Front-end',
-    stars: 4
+  const userId = (localStorage.getItem('email') || '').toLowerCase();
+
+  const loadUserProfile = async () => {
+    if (!userId) return;
+    setUserProfileError(null);
+    try {
+      const profile = await fetchUserByEmail(userId);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Erro ao buscar perfil:', error);
+      setUserProfileError('Não foi possível carregar seu perfil.');
+    }
   };
-
-  const cartItems = [
-    { id: 1, title: 'Landingpage Institucional', price: 'R$ 499,99' }
-  ];
-
-  const purchases = [
-    { id: 1, title: 'Landingpage Institucional', date: '27/01/2026', status: 'Entregue' }
-  ];
 
   const loadProjects = async () => {
     setProjectsLoading(true);
     setProjectsError(null);
     try {
-      const data = await fetchProjects();
+      const data = await fetchProjects(userId || undefined);
       setProjects(data);
     } catch (error) {
       console.error('Erro ao buscar projetos:', error);
       setProjectsError('Não foi possível carregar os projetos.');
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const loadPurchases = async () => {
+    setPurchasesLoading(true);
+    setPurchasesError(null);
+    try {
+      const data = await fetchPurchases(userId || undefined);
+      setPurchases(data);
+    } catch (error) {
+      console.error('Erro ao buscar compras:', error);
+      setPurchasesError('Não foi possível carregar as compras.');
+    } finally {
+      setPurchasesLoading(false);
     }
   };
 
@@ -124,6 +143,17 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadProjects();
+    loadPurchases();
+    loadUserProfile();
+  }, []);
+
+  useEffect(() => {
+    const handlePurchase = () => {
+      loadProjects();
+      loadPurchases();
+    };
+    window.addEventListener('marketplace:purchase', handlePurchase);
+    return () => window.removeEventListener('marketplace:purchase', handlePurchase);
   }, []);
 
   return (
@@ -142,6 +172,9 @@ const Dashboard: React.FC = () => {
             <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
               PROJETOS
             </li>
+            <li className={activeTab === 'marketplace' ? 'active' : ''} onClick={() => setActiveTab('marketplace')}>
+              MARKETPLACE
+            </li>
             <li className={activeTab === 'cart' ? 'active' : ''} onClick={() => setActiveTab('cart')}>
               CARRINHO
             </li>
@@ -157,12 +190,13 @@ const Dashboard: React.FC = () => {
               <section className="account-info">
                 <h2>👤 Minha Conta</h2>
                 <div className="account-details">
-                  <p><strong>Nome:</strong> {userInfo.name}</p>
-                  <p><strong>Matrícula:</strong> {userInfo.enrollment}</p>
-                  <p><strong>Status:</strong> <span className={`status ${userInfo.status.toLowerCase()}`}>{userInfo.status}</span></p>
-                  <p><strong>Nível:</strong> {userInfo.level}</p>
-                  <p><strong>Área:</strong> {userInfo.area}</p>
-                  <p><strong>Estrelas:</strong> {'★'.repeat(userInfo.stars)}{'☆'.repeat(5 - userInfo.stars)}</p>
+                  {userProfileError && <p>{userProfileError}</p>}
+                  <p><strong>Nome:</strong> {userProfile?.name || 'Usuário'}</p>
+                  <p><strong>Email:</strong> {userProfile?.email || userId}</p>
+                  <p><strong>Status:</strong> <span className={`status ${(userProfile?.status || 'Ativo').toLowerCase()}`}>{userProfile?.status || 'Ativo'}</span></p>
+                  {userProfile?.permissionLevel && (
+                    <p><strong>Perfil:</strong> {userProfile.permissionLevel}</p>
+                  )}
                 </div>
               </section>
 
@@ -349,34 +383,41 @@ const Dashboard: React.FC = () => {
             </section>
           )}
 
+          {activeTab === 'marketplace' && (
+            <section>
+              <h2>🪐 Marketplace</h2>
+              <p>Escolha produtos disponíveis e finalize sua compra.</p>
+              <MarketPlaceCard />
+            </section>
+          )}
+
           {activeTab === 'cart' && (
             <section>
               <h2>🛒 Carrinho</h2>
-              <ul className="courses-list">
-                {cartItems.map((item) => (
-                  <li key={item.id} className="course-item">
-                    <div className="course-info">
-                      <h3>{item.title}</h3>
-                      <span className="course-status">{item.price}</span>
-                    </div>
-                    <button className="view-all-button">Finalizar</button>
-                  </li>
-                ))}
-              </ul>
+              <p>Seu carrinho está vazio.</p>
             </section>
           )}
 
           {activeTab === 'purchases' && (
             <section>
               <h2>🧾 Compras</h2>
+              {purchasesLoading && <p>Carregando compras...</p>}
+              {purchasesError && <p>{purchasesError}</p>}
               <ul className="courses-list">
+                {!purchasesLoading && purchases.length === 0 && (
+                  <li className="course-item">
+                    <div className="course-info">
+                      <h3>Nenhuma compra registrada</h3>
+                    </div>
+                  </li>
+                )}
                 {purchases.map((item) => (
                   <li key={item.id} className="course-item">
                     <div className="course-info">
-                      <h3>{item.title}</h3>
+                      <h3>{item.productName || 'Produto'}</h3>
                       <span className="course-status">{item.status}</span>
                     </div>
-                    <p>Data: {item.date}</p>
+                    <p>Data: {item.createdAt ? new Date(item.createdAt).toLocaleDateString('pt-BR') : '-'}</p>
                     <button className="view-all-button" onClick={managerProject}>Acessar Projeto</button>
                   </li>
                 ))}

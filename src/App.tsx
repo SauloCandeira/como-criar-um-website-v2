@@ -1,6 +1,6 @@
 import './App.css'
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Home from './pages/Home/Home';
 import Login from './pages/Login/Login';
 import Signup from './pages/Signup/Signup';
@@ -20,10 +20,14 @@ import LoadingOverlay from './components/LoadingOverlay/LoadingOverlay';
 const RouteLoader = () => {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
+  const randomVariant = useMemo(() => {
+    const variants = ['planet', 'moon', 'sun', 'saturn'] as const;
+    return variants[Math.floor(Math.random() * variants.length)];
+  }, [location.pathname]);
 
   useEffect(() => {
     setLoading(true);
-    const delay = location.pathname === '/' ? 900 : 600;
+    const delay = location.pathname === '/' ? 1600 : 700;
     const timer = window.setTimeout(() => setLoading(false), delay);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
@@ -31,7 +35,7 @@ const RouteLoader = () => {
   return (
     <LoadingOverlay
       visible={loading}
-      variant={location.pathname === '/' ? 'rocket' : 'default'}
+      variant={location.pathname === '/' ? 'rocket' : randomVariant}
     />
   );
 };

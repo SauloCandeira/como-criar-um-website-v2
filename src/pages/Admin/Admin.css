@@ -378,6 +378,19 @@ h2 {
   box-shadow: var(--shadow);
 }
 
+@media (max-width: 768px) {
+  .admin-content table th:nth-child(n + 6),
+  .admin-content table td:nth-child(n + 6) {
+    display: none;
+  }
+
+  .admin-content table th,
+  .admin-content table td {
+    padding: 8px;
+    font-size: 12px;
+  }
+}
+
 .report-chart h3 {
   margin: 0 0 8px;
   font-size: 0.95rem;

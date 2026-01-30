@@ -10,6 +10,33 @@
   font-size: 14px;
 }
 
+.whatsapp-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #25d366;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  z-index: 1200;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.whatsapp-fab:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.3);
+}
+
+.whatsapp-fab i {
+  font-size: 26px;
+}
+
 .footer-container {
   display: flex;
   flex-wrap: wrap;

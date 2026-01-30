@@ -50,7 +50,7 @@
   .admin-content {
     flex: 1;
     padding: 30px;
-    background: #f5f5f5;
+    background: var(--surface);
     margin-left: 300px;
   }
 
@@ -63,13 +63,13 @@
   }
   
   h2 {
-    color: #092554;
+    color: var(--text);
   }
   
   table {
     width: 100%;
     border-collapse: collapse;
-    background: white;
+    background: var(--surface);
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -78,15 +78,15 @@
   th, td {
     padding: 12px;
     text-align: left;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border);
   }
   
   th {
-    background: #1e90ff;
-    color: white;
+    background: var(--table-header);
+    color: var(--text);
   }
   
   tr:hover {
-    background: #f1f1f1;
+    background: var(--surface-2);
   }
   

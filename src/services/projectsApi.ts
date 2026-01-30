@@ -14,6 +14,7 @@ export interface ProjectDTO {
   status: string;
   paid: boolean;
   isPublic: boolean;
+  ownerUserId?: string;
 }
 
 const normalizeProject = (project: any): ProjectDTO => ({
@@ -22,13 +23,15 @@ const normalizeProject = (project: any): ProjectDTO => ({
   projectType: project.projectType ?? project.project_type ?? '',
   salePrice: project.salePrice ?? project.sale_price ?? '',
   productionCost: project.productionCost ?? project.production_cost ?? '',
+  ownerUserId: project.ownerUserId ?? project.owner_user_id ?? '',
   purchaseCount: Number.isFinite(Number(project.purchaseCount ?? project.purchase_count))
     ? Number(project.purchaseCount ?? project.purchase_count)
     : 0,
 });
 
-export async function fetchProjects(): Promise<ProjectDTO[]> {
-  const res = await fetch(`${API_BASE}/projects`);
+export async function fetchProjects(userId?: string): Promise<ProjectDTO[]> {
+  const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+  const res = await fetch(`${API_BASE}/projects${query}`);
   if (!res.ok) throw new Error("Falha ao carregar projetos");
   const data = await res.json();
   return data.map(normalizeProject);
@@ -44,6 +47,7 @@ export async function createProject(payload: Omit<ProjectDTO, "id">) {
       salePrice: payload.salePrice,
       productionCost: payload.productionCost,
       purchaseCount: payload.purchaseCount,
+      ownerUserId: payload.ownerUserId,
     }),
   });
   if (!res.ok) throw new Error("Falha ao criar projeto");
@@ -61,6 +65,7 @@ export async function updateProject(id: string, payload: Omit<ProjectDTO, "id">)
       salePrice: payload.salePrice,
       productionCost: payload.productionCost,
       purchaseCount: payload.purchaseCount,
+      ownerUserId: payload.ownerUserId,
     }),
   });
   if (!res.ok) throw new Error("Falha ao editar projeto");

@@ -1,101 +1,84 @@
 import './MarketPlaceCard.css';
-import { useState } from 'react';
-
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  subcategory: string;
-  price: string | number;
-  image: string;
-}
+import { useEffect, useMemo, useState } from 'react';
+import { createPurchase } from '../../services/purchasesApi';
+import { fetchProducts, ProductDTO } from '../../services/productsApi';
 
 const MarketPlaceCard = () => {
-  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [products, setProducts] = useState<ProductDTO[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [purchaseLoadingId, setPurchaseLoadingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
-  const products: Product[] = [
-    // CURSOS
-    { id: 1, name: 'Curso de Python para Iniciantes', category: 'Cursos', subcategory: 'Linguagens de Programação - Python', price: 'R$ 200,00', image: 'https://via.placeholder.com/150?text=Curso+Python' },
-    { id: 2, name: 'Curso de JavaScript Moderno', category: 'Cursos', subcategory: 'Linguagens de Programação - JavaScript', price: 'R$ 250,00', image: 'https://via.placeholder.com/150?text=Curso+JS' },
-    { id: 3, name: 'Curso de Introdução à Programação', category: 'Cursos', subcategory: 'Fundamentos da Programação', price: 'R$ 180,00', image: 'https://via.placeholder.com/150?text=Curso+Intro+Programacao' },
-    { id: 4, name: 'Curso de Desenvolvimento Web Completo', category: 'Cursos', subcategory: 'Desenvolvimento Web', price: 'R$ 300,00', image: 'https://via.placeholder.com/150?text=Curso+Web+Completo' },
-    { id: 5, name: 'Curso de Arduino para Iniciantes', category: 'Cursos', subcategory: 'Robótica', price: 'R$ 220,00', image: 'https://via.placeholder.com/150?text=Curso+Arduino' },
-    { id: 6, name: 'Curso de Eletrônica Básica', category: 'Cursos', subcategory: 'Eletrônica', price: 'R$ 190,00', image: 'https://via.placeholder.com/150?text=Curso+Eletronica' },
+  const userId = (localStorage.getItem('email') || '').toLowerCase();
 
-    // COMPONENTES ELETRÔNICOS E KITS
-    { id: 7, name: 'Kit Arduino Braço Robótico', category: 'Componentes Eletrônicos', subcategory: 'Kits', price: 349.99, image: 'https://via.placeholder.com/150?text=Kit+Arduino+Braco+Robotico' },
-    { id: 8, name: 'Kit ESP32 Carro com Câmera', category: 'Componentes Eletrônicos', subcategory: 'Kits', price: 499.99, image: 'https://via.placeholder.com/150?text=Kit+ESP32+Carro' },
-    { id: 9, name: 'ESP32 WiFi Bluetooth', category: 'Componentes Eletrônicos', subcategory: 'Placas de Desenvolvimento', price: 149.99, image: 'https://via.placeholder.com/150?text=ESP32' },
-    { id: 10, name: 'Resistores e LEDs 100 peças', category: 'Componentes Eletrônicos', subcategory: 'Componentes Eletrônicos', price: 59.99, image: 'https://via.placeholder.com/150?text=Resistores+LEDs' },
-  ];
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchProducts();
+        setProducts(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Falha ao carregar produtos.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
-  const filters = {
-    'Cursos': {
-      'Linguagens de Programação': ['Python', 'JavaScript'],
-      'Fundamentos da Programação': ['Introdução à Programação'],
-      'Desenvolvimento Web': ['Desenvolvimento Web Completo'],
-      'Robótica': ['Arduino para Iniciantes'],
-      'Eletrônica': ['Eletrônica Básica'],
-    },
-    'Componentes Eletrônicos': {
-      'Kits': ['Kit Arduino Braço Robótico', 'Kit ESP32 Carro com Câmera'],
-      'Placas de Desenvolvimento': ['Arduino', 'ESP32'],
-      'Componentes Eletrônicos': ['LED', 'Resistor'],
+  const formatCurrency = (value: string | number) => {
+    const raw = typeof value === 'number' ? value : Number(String(value || '0').replace(',', '.')) || 0;
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(raw);
+  };
+
+  const handlePurchase = async (productId: string) => {
+    if (!userId) {
+      setFeedback('Faça login para concluir a compra.');
+      return;
+    }
+    setPurchaseLoadingId(productId);
+    setFeedback(null);
+    try {
+      await createPurchase({ userId, productId });
+      setFeedback('Compra registrada! Seu projeto já está disponível no dashboard.');
+      window.dispatchEvent(new Event('marketplace:purchase'));
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : 'Falha ao registrar compra.');
+    } finally {
+      setPurchaseLoadingId(null);
     }
   };
 
-  const toggleFilter = (subcategory: string) => {
-    setSelectedFilters((prev) =>
-      prev.includes(subcategory) ? prev.filter((c) => c !== subcategory) : [...prev, subcategory]
-    );
-  };
-
-  const filteredProducts = products.filter((product) =>
-    selectedFilters.length > 0
-      ? selectedFilters.some((filter) => product.subcategory.includes(filter))
-      : true
-  );
+  const sortedProducts = useMemo(() => products, [products]);
 
   return (
     <div className="marketplace-container">
-      <aside className="sidebar">
-        <h2>Filtrar por Categoria</h2>
-        {Object.entries(filters).map(([category, subcategories]) => (
-          <div key={category} className="filter-category">
-            <h3>{category}</h3>
-            {Object.entries(subcategories).map(([subcat, options]) => (
-              <div key={subcat} className="filter-subcategory">
-                <strong>{subcat}</strong>
-                {options.length > 0 ? (
-                  options.map((option) => (
-                    <label key={option}>
-                      <input type="checkbox" onChange={() => toggleFilter(option)} checked={selectedFilters.includes(option)} />
-                      {option}
-                    </label>
-                  ))
-                ) : (
-                  <label>
-                    <input type="checkbox" onChange={() => toggleFilter(subcat)} checked={selectedFilters.includes(subcat)} />
-                    {subcat}
-                  </label>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-      </aside>
-
       <div className="products-container">
-        {filteredProducts.map((product) => (
+        {loading && <p>Carregando produtos...</p>}
+        {error && <p>{error}</p>}
+        {feedback && <p className="marketplace-feedback">{feedback}</p>}
+        {!loading && sortedProducts.length === 0 && <p>Nenhum produto disponível.</p>}
+        {sortedProducts.map((product) => (
           <div className="product-card" key={product.id}>
-            <img src={product.image} alt={product.name} className="product-image" />
+            <div className="product-image" aria-hidden="true">
+              <span>🛰️</span>
+            </div>
             <div className="product-info">
               <h3>{product.name}</h3>
-              <p className="product-category">{product.category} - {product.subcategory}</p>
-              <p className="product-price">
-                {typeof product.price === 'number' ? `R$ ${product.price.toFixed(2)}` : product.price}
-              </p>
-              <button className="view-product-btn">Ver Produto</button>
+              <p className="product-description">{product.description || 'Produto pronto para entrega imediata.'}</p>
+              <div className="product-price">
+                <span className="price-original">{formatCurrency(product.price)}</span>
+                <span className="price-sale">{formatCurrency(product.salePrice || product.price)}</span>
+              </div>
+              <button
+                className="view-product-btn"
+                onClick={() => handlePurchase(product.id)}
+                disabled={purchaseLoadingId === product.id}
+              >
+                {purchaseLoadingId === product.id ? 'Processando...' : 'Comprar'}
+              </button>
             </div>
           </div>
         ))}

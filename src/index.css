@@ -75,6 +75,7 @@ table {
   max-width: 100%;
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 input,
@@ -85,19 +86,12 @@ button {
 }
 
 @media (max-width: 768px) {
-  table {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    white-space: nowrap;
-  }
-
   table th,
   table td {
-    white-space: nowrap;
+    font-size: 12px;
+    padding: 8px;
+    white-space: normal;
+    word-break: break-word;
   }
 
   .admin-container {
@@ -156,7 +150,5 @@ button {
     margin-left: 0 !important;
     width: 100% !important;
     height: auto !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
   }
 }

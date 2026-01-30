@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import './LoadingOverlay.css';
 
+type LoadingVariant = 'rocket' | 'planet' | 'moon' | 'sun' | 'saturn';
+
 interface LoadingOverlayProps {
   visible: boolean;
-  variant?: 'default' | 'rocket';
+  variant?: LoadingVariant;
 }
 
-const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ visible, variant = 'default' }) => {
+const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ visible, variant = 'planet' }) => {
   useEffect(() => {
     if (visible) {
       const previous = document.body.style.overflow;
@@ -37,8 +39,11 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ visible, variant = 'def
             <div className="loading-text">Carregando...</div>
           </div>
         ) : (
-          <div className="spinner-wrap">
-            <div className="spinner"></div>
+          <div className={`space-loader ${variant}`}>
+            <div className="space-stars" aria-hidden="true"></div>
+            <div className="space-body" aria-hidden="true"></div>
+            <div className="space-ring" aria-hidden="true"></div>
+            <div className="space-moon" aria-hidden="true"></div>
             <div className="loading-text">Carregando...</div>
           </div>
         )}

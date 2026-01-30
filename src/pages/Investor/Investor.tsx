@@ -442,7 +442,7 @@ const Investor: React.FC = () => {
               <p>Projetos cadastrados com indicação de visibilidade e cobrança.</p>
               {projectsLoading && <p>Carregando projetos...</p>}
               {projectsError && <p>{projectsError}</p>}
-              <table className="projects-table">
+              <table className="costs-table">
                 <thead>
                   <tr>
                     <th>Projeto</th>
@@ -548,7 +548,7 @@ const Investor: React.FC = () => {
               <p>Valores de compra/venda e margem estimada de lucro.</p>
               {productsLoading && <p>Carregando produtos...</p>}
               {productsError && <p>{productsError}</p>}
-              <table className="projects-table">
+              <table className="marketplace-table">
                 <thead>
                   <tr>
                     <th>Produto</th>

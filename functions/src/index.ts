@@ -28,11 +28,40 @@ async function ensureProductsColumns(client: { query: (sql: string, params?: any
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
 }
 
+async function ensureDefaultProduct(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureProductsColumns(client);
+  await client.query(
+    "INSERT INTO products (name, price, description, show_on_home, purchase_price, sale_price) SELECT $1, $2, $3, $4, $5, $6 WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = $1)",
+    [
+      "Landing Page Institucional",
+      "999,00",
+      "Landing page institucional pronta para publicação",
+      true,
+      "0,00",
+      "0,00",
+    ]
+  );
+}
+
 async function ensureProjectsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS production_cost TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_user_id TEXT DEFAULT ''");
+}
+
+async function ensurePurchasesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS purchases (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, product_id UUID REFERENCES products(id) ON DELETE CASCADE, price NUMERIC(12,2) DEFAULT 0, status TEXT DEFAULT 'completed', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+function inferProjectType(name: string) {
+  const label = name.toLowerCase();
+  if (label.includes("landing")) return "Landingpage";
+  if (label.includes("e-commerce") || label.includes("ecommerce")) return "E-commerce";
+  return "Marketplace";
 }
 
 async function ensureAssetsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -137,6 +166,7 @@ app.get("/products", async (_req, res) => {
     const pool = await getPool();
     const client = await pool.connect();
     try {
+      await ensureDefaultProduct(client);
       const result = await client.query(
         "SELECT id, name, price, description, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
       );
@@ -145,6 +175,7 @@ app.get("/products", async (_req, res) => {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
+        await ensureDefaultProduct(client);
         const retry = await client.query(
           "SELECT id, name, price, description, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
         );
@@ -248,21 +279,127 @@ app.delete("/products/:id", async (req, res) => {
   }
 });
 
-app.get("/projects", async (_req, res) => {
+app.get("/purchases", async (req, res) => {
+  try {
+    const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensurePurchasesTable(client);
+      const result = await client.query(
+        userId
+          ? "SELECT pu.id, pu.user_id, pu.product_id, pu.price, pu.status, pu.created_at, pr.name as product_name, pr.description as product_description, pr.sale_price, pr.purchase_price FROM purchases pu JOIN products pr ON pr.id = pu.product_id WHERE pu.user_id = $1 ORDER BY pu.created_at DESC"
+          : "SELECT pu.id, pu.user_id, pu.product_id, pu.price, pu.status, pu.created_at, pr.name as product_name, pr.description as product_description, pr.sale_price, pr.purchase_price FROM purchases pu JOIN products pr ON pr.id = pu.product_id ORDER BY pu.created_at DESC",
+        userId ? [userId] : []
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar compras." });
+  }
+});
+
+app.post("/purchases", async (req, res) => {
+  const { userId, productId } = req.body ?? {};
+  if (!userId || !productId) {
+    return res.status(400).json({ message: "userId e productId são obrigatórios." });
+  }
   try {
     const pool = await getPool();
     const client = await pool.connect();
     try {
+      await ensureProductsColumns(client);
+      await ensurePurchasesTable(client);
+      await ensureProjectsColumns(client);
+
+      const productResult = await client.query(
+        "SELECT id, name, description, price, purchase_price, sale_price FROM products WHERE id = $1",
+        [productId]
+      );
+
+      if (!productResult.rows[0]) {
+        return res.status(404).json({ message: "Produto não encontrado." });
+      }
+
+      const product = productResult.rows[0];
+      const saleValue = Number(String(product.sale_price ?? product.price ?? "0").replace(",", ".")) || 0;
+
+      const purchase = await client.query(
+        "INSERT INTO purchases (user_id, product_id, price, status) VALUES ($1, $2, $3, $4) RETURNING id, user_id, product_id, price, status, created_at",
+        [userId, product.id, saleValue, "completed"]
+      );
+
+      const existingProject = await client.query(
+        "SELECT id FROM projects WHERE owner_user_id = $1 AND name = $2 LIMIT 1",
+        [userId, product.name]
+      );
+
+      if (!existingProject.rows[0]) {
+        await client.query(
+          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+          [
+            product.name,
+            product.description ?? "",
+            inferProjectType(product.name),
+            product.sale_price ?? product.price ?? "",
+            product.purchase_price ?? "",
+            1,
+            "",
+            "",
+            "Vercel",
+            "Ativo",
+            true,
+            true,
+            userId,
+          ]
+        );
+      }
+
+      res.status(201).json({
+        purchase: purchase.rows[0],
+        product: {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          salePrice: product.sale_price,
+        },
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao registrar compra." });
+  }
+});
+
+app.get("/projects", async (req, res) => {
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      const userId = typeof req.query.userId === "string" ? req.query.userId : null;
       const result = await client.query(
-        "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public FROM projects ORDER BY created_at DESC"
+        userId
+          ? "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects WHERE owner_user_id = $1 ORDER BY created_at DESC"
+          : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects ORDER BY created_at DESC",
+        userId ? [userId] : []
       );
       res.json(result.rows);
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
+        const userId = typeof req.query.userId === "string" ? req.query.userId : null;
         const retry = await client.query(
-          "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public FROM projects ORDER BY created_at DESC"
+          userId
+            ? "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects WHERE owner_user_id = $1 ORDER BY created_at DESC"
+            : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects ORDER BY created_at DESC",
+          userId ? [userId] : []
         );
         res.json(retry.rows);
       } else {
@@ -278,7 +415,7 @@ app.get("/projects", async (_req, res) => {
 });
 
 app.post("/projects", async (req, res) => {
-  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic } = req.body ?? {};
+  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId } = req.body ?? {};
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
@@ -287,7 +424,7 @@ app.post("/projects", async (req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public",
+        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
         [
           name,
           description ?? "",
@@ -301,6 +438,7 @@ app.post("/projects", async (req, res) => {
           status ?? "Ativo",
           !!paid,
           isPublic === undefined ? true : !!isPublic,
+          ownerUserId ?? "",
         ]
       );
       res.status(201).json(result.rows[0]);
@@ -309,7 +447,7 @@ app.post("/projects", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
         const retry = await client.query(
-          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public",
+          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
           [
             name,
             description ?? "",
@@ -323,6 +461,7 @@ app.post("/projects", async (req, res) => {
             status ?? "Ativo",
             !!paid,
             isPublic === undefined ? true : !!isPublic,
+            ownerUserId ?? "",
           ]
         );
         res.status(201).json(retry.rows[0]);
@@ -340,7 +479,7 @@ app.post("/projects", async (req, res) => {
 
 app.put("/projects/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic } = req.body ?? {};
+  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId } = req.body ?? {};
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
@@ -349,7 +488,7 @@ app.put("/projects/:id", async (req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12 WHERE id = $13 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public",
+        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13 WHERE id = $14 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
         [
           name,
           description ?? "",
@@ -363,6 +502,7 @@ app.put("/projects/:id", async (req, res) => {
           status ?? "Ativo",
           !!paid,
           isPublic === undefined ? true : !!isPublic,
+          ownerUserId ?? "",
           id,
         ]
       );
@@ -372,7 +512,7 @@ app.put("/projects/:id", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
         const retry = await client.query(
-          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12 WHERE id = $13 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public",
+          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13 WHERE id = $14 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
           [
             name,
             description ?? "",
@@ -386,6 +526,7 @@ app.put("/projects/:id", async (req, res) => {
             status ?? "Ativo",
             !!paid,
             isPublic === undefined ? true : !!isPublic,
+            ownerUserId ?? "",
             id,
           ]
         );

@@ -37,15 +37,6 @@
   gap: 10px;
 }
 
-.spinner {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--accent-blue);
-  animation: spin 0.9s linear infinite;
-}
-
 
 .rocket-launch {
   position: relative;
@@ -54,7 +45,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  animation: rocket-launch 4s ease-in-out infinite;
+  animation: rocket-launch 1.6s ease-in-out forwards;
 }
 
 .rocket-body {
@@ -145,15 +136,95 @@
   animation: smoke 0.6s ease-in-out infinite;
 }
 
+.space-loader {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.space-stars {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: 0.5;
+  animation: twinkle 2.2s ease-in-out infinite;
+}
+
+.space-body {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #a5b4fc, #4f46e5);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.5);
+  z-index: 1;
+  animation: float 1.6s ease-in-out infinite;
+}
+
+.space-ring {
+  position: absolute;
+  width: 86px;
+  height: 22px;
+  border: 2px solid rgba(226, 232, 240, 0.7);
+  border-radius: 50%;
+  transform: rotate(-12deg);
+  opacity: 0;
+  z-index: 0;
+}
+
+.space-moon {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fef9c3, #facc15);
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.6);
+  animation: orbit 1.8s linear infinite;
+  z-index: 2;
+}
+
+.space-loader.planet .space-body {
+  background: radial-gradient(circle at 30% 30%, #93c5fd, #2563eb);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.5);
+}
+
+.space-loader.moon .space-body {
+  background: radial-gradient(circle at 30% 30%, #e2e8f0, #64748b);
+  box-shadow: 0 0 14px rgba(226, 232, 240, 0.4);
+}
+
+.space-loader.moon .space-moon {
+  background: radial-gradient(circle at 30% 30%, #e2e8f0, #94a3b8);
+  box-shadow: 0 0 10px rgba(226, 232, 240, 0.4);
+}
+
+.space-loader.sun .space-body {
+  background: radial-gradient(circle at 30% 30%, #fde68a, #f59e0b);
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.7);
+}
+
+.space-loader.sun .space-moon {
+  background: radial-gradient(circle at 30% 30%, #fef08a, #f97316);
+  box-shadow: 0 0 14px rgba(251, 146, 60, 0.6);
+}
+
+.space-loader.saturn .space-ring {
+  opacity: 1;
+}
+
+.space-loader.saturn .space-body {
+  background: radial-gradient(circle at 30% 30%, #fecaca, #f43f5e);
+  box-shadow: 0 0 18px rgba(244, 63, 94, 0.5);
+}
+
 .loading-text {
   font-size: 14px;
   color: var(--text-muted);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes flame {
@@ -184,18 +255,47 @@
 
 @keyframes rocket-launch {
   0% {
-    transform: translateY(16px) scale(0.95);
-  }
-  25% {
-    transform: translateY(-10px) scale(1);
-  }
-  50% {
-    transform: translateY(-50px) scale(1.05);
-  }
-  75% {
-    transform: translateY(-10px) scale(1);
+    transform: translateY(24px) scale(0.95);
+    opacity: 1;
   }
   100% {
-    transform: translateY(16px) scale(0.95);
+    transform: translateY(-140px) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes orbit {
+  0% {
+    transform: translate(30px, 10px);
+  }
+  50% {
+    transform: translate(-30px, -12px);
+  }
+  100% {
+    transform: translate(30px, 10px);
+  }
+}
+
+@keyframes twinkle {
+  0% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0.35;
   }
 }

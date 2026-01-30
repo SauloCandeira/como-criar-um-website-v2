@@ -408,4 +408,17 @@
     margin-left: 0;
     order: 1;
   }
+
+  .projects-table th:nth-child(2),
+  .projects-table td:nth-child(2),
+  .projects-table th:nth-child(3),
+  .projects-table td:nth-child(3) {
+    display: none;
+  }
+
+  .projects-table th,
+  .projects-table td {
+    padding: 8px;
+    font-size: 12px;
+  }
 }

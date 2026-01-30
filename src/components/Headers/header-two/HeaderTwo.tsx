@@ -19,7 +19,6 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
 
   const [user, setUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [roleLabel, setRoleLabel] = useState<string | null>(null);
 
   // Detecta scroll para mostrar botão "voltar ao topo" (se houver)
   useEffect(() => {
@@ -57,23 +56,6 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
     document.documentElement.setAttribute('data-theme', initial);
   }, []);
 
-  useEffect(() => {
-    const resolveRole = () => {
-      const storedRole = localStorage.getItem('role');
-      const permissionLevel = localStorage.getItem('permissionLevel');
-      const roleFromPermission = permissionLevel === 'C' ? 'investor' : permissionLevel === 'B' ? 'admin' : 'user';
-      const effectiveRole = storedRole || roleFromPermission;
-      const labelMap: Record<string, string> = {
-        admin: 'Administrador',
-        user: 'Usuário',
-        investor: 'Investidor',
-      };
-      setRoleLabel(labelMap[effectiveRole] || null);
-    };
-    resolveRole();
-    window.addEventListener('storage', resolveRole);
-    return () => window.removeEventListener('storage', resolveRole);
-  }, []);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -140,11 +122,9 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
             >
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
-            {roleLabel !== 'Investidor' && (
-              <button className="btn-account" onClick={handleMyAccountClick}>
-                <i className="fas fa-user"></i>
-              </button>
-            )}
+            <button className="btn-account" onClick={handleMyAccountClick}>
+              <i className="fas fa-user"></i>
+            </button>
             <button className="btn-login" onClick={handleLogoutClick}>
               <i className="fas fa-sign-out-alt"></i>
             </button>

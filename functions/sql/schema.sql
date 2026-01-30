@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS projects (
   status TEXT DEFAULT 'Ativo',
   paid BOOLEAN DEFAULT false,
   is_public BOOLEAN DEFAULT true,
+  owner_user_id TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -52,6 +53,18 @@ ALTER TABLE projects
 
 ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0;
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS owner_user_id TEXT DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  price NUMERIC(12,2) DEFAULT 0,
+  status TEXT DEFAULT 'completed',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS costs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -218,6 +231,12 @@ INSERT INTO projects (name, description, project_type, sale_price, production_co
 SELECT 'Landingpage Institucional', 'Landingpage institucional pronta para uso', 'Landingpage', '999,99', '', 0, 'Ativo', false, true
 WHERE NOT EXISTS (
   SELECT 1 FROM projects WHERE name = 'Landingpage Institucional'
+);
+
+INSERT INTO products (name, price, description, show_on_home, purchase_price, sale_price)
+SELECT 'Landing Page Institucional', '999,00', 'Landing page institucional pronta para publicação', true, '0,00', '0,00'
+WHERE NOT EXISTS (
+  SELECT 1 FROM products WHERE name = 'Landing Page Institucional'
 );
 
 INSERT INTO assets (name, asset_class, ticker, risk_level, current_price, total_supply, available_supply, is_primary, currency)
