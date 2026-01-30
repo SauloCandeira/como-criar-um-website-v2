@@ -115,12 +115,10 @@ const HeaderTwo: React.FC<HeaderTwoProps> = ({ onToggleSidebar, sidebarCollapsed
               className={`header-toggle ${sidebarCollapsed ? '' : 'open'}`}
               aria-label={sidebarCollapsed ? 'Abrir menu lateral' : 'Fechar menu lateral'}
               onClick={onToggleSidebar}
-              title={roleLabel || undefined}
             >
               <span></span>
               <span></span>
               <span></span>
-              {roleLabel && <span className="header-toggle__role">{roleLabel}</span>}
             </button>
           )}
           <img
