@@ -5,6 +5,7 @@ export interface ProductDTO {
   name: string;
   price: string;
   description: string;
+  productType?: string;
   showOnHome?: boolean;
   purchasePrice?: string;
   salePrice?: string;
@@ -12,6 +13,7 @@ export interface ProductDTO {
 
 const normalizeProduct = (product: any): ProductDTO => ({
   ...product,
+  productType: product.productType ?? product.product_type ?? "digital",
   showOnHome: product.showOnHome ?? product.show_on_home ?? false,
   purchasePrice: product.purchasePrice ?? product.purchase_price ?? "",
   salePrice: product.salePrice ?? product.sale_price ?? product.price ?? "",

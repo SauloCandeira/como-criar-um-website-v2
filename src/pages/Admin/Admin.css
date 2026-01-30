@@ -97,6 +97,17 @@
   flex-wrap: wrap;
 }
 
+.admin-actions .admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-action-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .admin-btn {
   background: var(--accent-blue);
   color: var(--text-inverse);
@@ -128,6 +139,19 @@
 
 .admin-btn--ghost:hover {
   background: var(--surface-2);
+}
+
+.admin-home-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.admin-home-toggle input {
+  width: 16px;
+  height: 16px;
 }
 
 .admin-modal-backdrop {
@@ -379,15 +403,58 @@ h2 {
 }
 
 @media (max-width: 768px) {
-  .admin-content table th:nth-child(n + 6),
-  .admin-content table td:nth-child(n + 6) {
+  .admin-table--users th:nth-child(2),
+  .admin-table--users td:nth-child(2),
+  .admin-table--users th:nth-child(3),
+  .admin-table--users td:nth-child(3) {
     display: none;
   }
 
+  .admin-table--projects th:nth-child(2),
+  .admin-table--projects td:nth-child(2),
+  .admin-table--projects th:nth-child(4),
+  .admin-table--projects td:nth-child(4),
+  .admin-table--projects th:nth-child(5),
+  .admin-table--projects td:nth-child(5),
+  .admin-table--projects th:nth-child(6),
+  .admin-table--projects td:nth-child(6),
+  .admin-table--projects th:nth-child(7),
+  .admin-table--projects td:nth-child(7),
+  .admin-table--projects th:nth-child(8),
+  .admin-table--projects td:nth-child(8),
+  .admin-table--projects th:nth-child(10),
+  .admin-table--projects td:nth-child(10),
+  .admin-table--projects th:nth-child(11),
+  .admin-table--projects td:nth-child(11) {
+    display: none;
+  }
+
+  .admin-table--products th:nth-child(3),
+  .admin-table--products td:nth-child(3),
+  .admin-table--products th:nth-child(4),
+  .admin-table--products td:nth-child(4) {
+    display: none;
+  }
+
+  .admin-table--costs th:nth-child(4),
+  .admin-table--costs td:nth-child(4) {
+    display: none;
+  }
+
+  .admin-table--sales th,
+  .admin-table--sales td,
   .admin-content table th,
   .admin-content table td {
     padding: 8px;
     font-size: 12px;
+  }
+
+  .admin-action-text {
+    display: none;
+  }
+
+  .admin-actions .admin-btn {
+    padding: 6px 8px;
   }
 }
 

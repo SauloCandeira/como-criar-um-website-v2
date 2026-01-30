@@ -5,14 +5,43 @@ CREATE TABLE IF NOT EXISTS products (
   name TEXT NOT NULL,
   price TEXT NOT NULL,
   description TEXT DEFAULT '',
+  product_type TEXT DEFAULT 'digital',
   purchase_price TEXT DEFAULT '',
   sale_price TEXT DEFAULT '',
   show_on_home BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS product_types (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL
+);
+
+INSERT INTO product_types (id, label)
+VALUES
+  ('digital', 'Produto digital'),
+  ('fisico', 'Produto físico'),
+  ('servico', 'Serviço'),
+  ('assinatura', 'Assinatura'),
+  ('projeto', 'Projeto')
+ON CONFLICT (id) DO NOTHING;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'products_product_type_fkey'
+  ) THEN
+    ALTER TABLE products
+      ADD CONSTRAINT products_product_type_fkey
+      FOREIGN KEY (product_type) REFERENCES product_types(id);
+  END IF;
+END $$;
+
 ALTER TABLE products
   ADD COLUMN IF NOT EXISTS show_on_home BOOLEAN DEFAULT false;
+
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'digital';
 
 ALTER TABLE products
   ADD COLUMN IF NOT EXISTS purchase_price TEXT DEFAULT '';
@@ -63,6 +92,92 @@ CREATE TABLE IF NOT EXISTS purchases (
   product_id UUID REFERENCES products(id) ON DELETE CASCADE,
   price NUMERIC(12,2) DEFAULT 0,
   status TEXT DEFAULT 'completed',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_gamification (
+  user_id TEXT PRIMARY KEY,
+  plan TEXT DEFAULT 'free',
+  usage_score INTEGER DEFAULT 0,
+  xp INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_cards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL UNIQUE,
+  seed BIGINT NOT NULL,
+  hash_seed TEXT NOT NULL,
+  name TEXT NOT NULL,
+  species TEXT NOT NULL,
+  class TEXT NOT NULL,
+  rarity TEXT NOT NULL,
+  attributes JSONB NOT NULL,
+  visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  market_value NUMERIC(12,2) DEFAULT 10,
+  image_url TEXT DEFAULT '',
+  level INTEGER DEFAULT 1,
+  xp INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_cards
+  ADD COLUMN IF NOT EXISTS hash_seed TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE user_cards
+  ADD COLUMN IF NOT EXISTS visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE user_cards
+  ADD COLUMN IF NOT EXISTS market_value NUMERIC(12,2) DEFAULT 10;
+
+ALTER TABLE user_cards
+  ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS internal_accounts (
+  user_id TEXT PRIMARY KEY,
+  balance NUMERIC(14,2) DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS internal_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  from_user_id TEXT,
+  to_user_id TEXT,
+  amount NUMERIC(14,2) NOT NULL,
+  reason TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS card_listings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id UUID REFERENCES user_cards(id) ON DELETE CASCADE,
+  seller_user_id TEXT NOT NULL,
+  price NUMERIC(12,2) NOT NULL,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS card_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id UUID REFERENCES user_cards(id) ON DELETE SET NULL,
+  seller_user_id TEXT NOT NULL,
+  buyer_user_id TEXT NOT NULL,
+  price NUMERIC(12,2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS commerce_orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  amount NUMERIC(12,2) DEFAULT 0,
+  currency TEXT DEFAULT 'BRL',
+  status TEXT DEFAULT 'completed',
+  payment_method TEXT DEFAULT 'pix',
+  payment_reference TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -238,6 +353,10 @@ SELECT 'Landing Page Institucional', '999,00', 'Landing page institucional pront
 WHERE NOT EXISTS (
   SELECT 1 FROM products WHERE name = 'Landing Page Institucional'
 );
+
+UPDATE products
+SET product_type = 'servico'
+WHERE name = 'Landing Page Institucional' AND (product_type IS NULL OR product_type = '');
 
 INSERT INTO assets (name, asset_class, ticker, risk_level, current_price, total_supply, available_supply, is_primary, currency)
 SELECT 'Cotas SPE Principal', 'SPE', 'SPE-PRINC', 'Médio', 1.00, 1000000, 1000000, true, 'BRL'

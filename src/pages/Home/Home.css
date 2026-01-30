@@ -3,7 +3,7 @@
   min-height: 100vh;
   height: calc(100vh - 100px);
   overflow: auto;
-  color: #ffffff;
+  color: var(--text);
 }
 
 /* Seções Individuais */

@@ -31,7 +31,7 @@
   align-items: center;
 
   margin-bottom: var(--margin-bottom);
-  background-color: rgba(9, 37, 84, 0.9);
+  background-color: color-mix(in srgb, var(--surface) 88%, transparent);
   padding: 1.5rem 2rem;
   border-radius: var(--border-radius);
 
@@ -51,6 +51,13 @@
 }
 
 .product-header .product-description {
+  font-size: var(--font-size-body);
+  color: var(--text-muted);
+  line-height: 1.6;
+  text-align: justify;
+}
+
+.product-header .product-header-description {
   font-size: var(--font-size-body);
   color: var(--text-muted);
   line-height: 1.6;
@@ -84,25 +91,53 @@
   margin: 0 auto;
 }
 
+.product-slider {
+  width: 100%;
+}
+
+.product-slider .slick-list {
+  overflow: hidden;
+}
+
+.product-slider .slick-track {
+  display: flex !important;
+}
+
+.product-slider .slick-slide {
+  display: block !important;
+  float: left;
+  height: auto;
+  width: 33.333% !important;
+}
+
+.product-slider .slick-slide > div {
+  height: 100%;
+}
+
 /* =========================
    CARD WRAPPER
 ========================= */
 .product-card-wrapper {
-  padding: 0 10px;
-  display: flex;
-  justify-content: center;
+  padding: 8px 12px 16px;
+  display: block;
+  height: 100%;
 }
 
 /* =========================
    CARD
 ========================= */
 .product-card {
-  background: var(--secondary-bg);
+  background: var(--surface);
   border-radius: var(--border-radius);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0),
+    0 10px 24px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(56, 189, 248, 0.2);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 45%, transparent);
 
   padding: var(--padding-card);
-  height: 420px;
+  min-height: 360px;
+  width: 100%;
+  overflow: hidden;
 
   display: flex;
   flex-direction: column;
@@ -113,6 +148,9 @@
 
 .product-card:hover {
   transform: translateY(-8px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35),
+    0 0 28px rgba(56, 189, 248, 0.35),
+    0 0 48px rgba(34, 211, 238, 0.2);
 }
 
 /* =========================
@@ -120,11 +158,17 @@
 ========================= */
 .product-image {
   width: 100%;
-  max-width: 180px;
-  height: 120px;
-  margin: 0 auto 0.75rem;
+  max-width: 220px;
+  height: 140px;
+  margin: 0 auto 1rem;
   border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--surface-2);
+  transition: transform var(--transition);
+}
+
+.product-card:hover .product-image {
+  transform: scale(1.05);
 }
 
 /* =========================
@@ -134,6 +178,7 @@
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  gap: 6px;
 }
 
 /* Badge */
@@ -150,10 +195,33 @@
 
 .product-badge.product {
   background-color: var(--accent-blue);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
 }
 
+.product-badge.servico,
 .product-badge.service {
   background-color: var(--accent-teal);
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.6);
+}
+
+.product-badge.digital {
+  background-color: var(--accent-blue);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+}
+
+.product-badge.fisico {
+  background-color: var(--accent-green);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+}
+
+.product-badge.assinatura {
+  background: linear-gradient(120deg, var(--accent-blue), var(--accent-teal));
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6), 0 0 18px rgba(45, 212, 191, 0.35);
+}
+
+.product-badge.projeto {
+  background: linear-gradient(120deg, var(--accent-blue), var(--accent-green));
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6), 0 0 18px rgba(34, 197, 94, 0.35);
 }
 
 /* Title */
@@ -171,8 +239,9 @@
   line-height: 1.5;
 
   margin-bottom: 0.75rem;
-  height: 80px;
-  overflow-y: auto;
+  min-height: 72px;
+  max-height: 96px;
+  overflow: hidden;
   text-align: justify;
 }
 
@@ -210,24 +279,28 @@
 .product-action.buy {
   background-color: var(--accent-blue);
   color: var(--primary-text);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
 }
 
 .product-action.quote {
   background-color: var(--accent-teal);
   color: var(--primary-text);
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.5);
 }
 
 /* =========================
    RESPONSIVE
 ========================= */
 @media (max-width: 1024px) {
+  .product-slider .slick-slide {
+    width: 50% !important;
+  }
   .product-header h1 {
     font-size: 1.9rem;
   }
 
   .product-card {
-    height: auto;
-    min-height: 400px;
+    min-height: 360px;
   }
 }
 
@@ -256,14 +329,13 @@
   }
 
   .product-card {
-    height: auto;
-    min-height: 350px;
+    min-height: 340px;
     padding: 1rem;
   }
 
   .product-image {
-    max-width: 150px;
-    height: 100px;
+    max-width: 180px;
+    height: 120px;
   }
 
   .product-info h2 {
@@ -271,7 +343,7 @@
   }
 
   .product-description {
-    height: 60px;
+    min-height: 56px;
     font-size: 0.9rem;
   }
 
@@ -286,6 +358,9 @@
 }
 
 @media (max-width: 600px) {
+  .product-slider .slick-slide {
+    width: 100% !important;
+  }
   .product-header {
     padding: 0.8rem;
   }
@@ -295,9 +370,8 @@
   }
 
   .product-card {
-    min-height: 300px;
+    min-height: 320px;
     width: 100%;
-    max-width: none;
   }
 
   .product-image {
@@ -311,6 +385,6 @@
   }
 
   .product-card-wrapper {
-    padding: 0 5px;
+    padding: 6px 5px 12px;
   }
 }

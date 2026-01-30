@@ -6,6 +6,18 @@ import { fetchProjects, ProjectDTO, updateProject } from '../../services/project
 import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
 import { fetchUserByEmail, UserDTO } from '../../services/usersApi';
 import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
+import {
+  fetchUserCard,
+  addCardXp,
+  fetchCardListings,
+  createCardListing,
+  buyCardListing,
+  fetchInternalAccount,
+  createUserCard,
+  CardDTO,
+  CardListingDTO,
+  InternalAccountDTO,
+} from '../../services/cardsApi';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -18,6 +30,19 @@ const Dashboard: React.FC = () => {
   const [purchasesError, setPurchasesError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserDTO | null>(null);
   const [userProfileError, setUserProfileError] = useState<string | null>(null);
+  const [alienCard, setAlienCard] = useState<CardDTO | null>(null);
+  const [alienLoading, setAlienLoading] = useState(false);
+  const [alienError, setAlienError] = useState<string | null>(null);
+  const [alienListings, setAlienListings] = useState<CardListingDTO[]>([]);
+  const [alienListingsLoading, setAlienListingsLoading] = useState(false);
+  const [alienListingsError, setAlienListingsError] = useState<string | null>(null);
+  const [listingPrice, setListingPrice] = useState('');
+  const [listingLoading, setListingLoading] = useState(false);
+  const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
+  const [internalAccount, setInternalAccount] = useState<InternalAccountDTO | null>(null);
+  const [internalAccountError, setInternalAccountError] = useState<string | null>(null);
+  const [cpfInput, setCpfInput] = useState('');
+  const [cpfError, setCpfError] = useState<string | null>(null);
   const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
   const [editProjectData, setEditProjectData] = useState({
     id: '',
@@ -80,6 +105,154 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const loadAlienCard = async (refresh?: boolean) => {
+    if (!userId) return;
+    setAlienLoading(true);
+    setAlienError(null);
+    try {
+      const card = await fetchUserCard(userId, refresh);
+      setAlienCard(card);
+    } catch (error) {
+      console.error('Erro ao carregar carta:', error);
+      setAlienError(error instanceof Error ? error.message : 'Não foi possível carregar sua carta alienígena.');
+    } finally {
+      setAlienLoading(false);
+    }
+  };
+
+  const handleCreateAlien = async () => {
+    if (!userId) return;
+    setCpfError(null);
+    setAlienError(null);
+    if (!cpfInput.trim()) {
+      setCpfError('Informe seu CPF para gerar a carta.');
+      return;
+    }
+    setAlienLoading(true);
+    try {
+      const card = await createUserCard(userId, cpfInput.trim());
+      setAlienCard(card);
+      setCpfInput('');
+    } catch (error) {
+      console.error('Erro ao criar carta:', error);
+      setAlienError(error instanceof Error ? error.message : 'Não foi possível criar sua carta.');
+    } finally {
+      setAlienLoading(false);
+    }
+  };
+
+  const loadAlienListings = async () => {
+    setAlienListingsLoading(true);
+    setAlienListingsError(null);
+    try {
+      const listings = await fetchCardListings('active');
+      setAlienListings(listings);
+    } catch (error) {
+      console.error('Erro ao carregar marketplace:', error);
+      setAlienListingsError('Não foi possível carregar o marketplace de aliens.');
+    } finally {
+      setAlienListingsLoading(false);
+    }
+  };
+
+  const loadInternalAccount = async () => {
+    if (!userId) return;
+    setInternalAccountError(null);
+    try {
+      const account = await fetchInternalAccount(userId);
+      setInternalAccount(account);
+    } catch (error) {
+      console.error('Erro ao carregar saldo interno:', error);
+      setInternalAccountError('Não foi possível carregar seu saldo interno.');
+    }
+  };
+
+  const handleCreateListing = async () => {
+    if (!alienCard) return;
+    const value = Number(listingPrice.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
+      setAlienListingsError('Informe um preço válido para listar sua carta.');
+      return;
+    }
+    setListingLoading(true);
+    setAlienListingsError(null);
+    try {
+      await createCardListing({ userId, cardId: alienCard.id, price: value });
+      setListingPrice('');
+      loadAlienListings();
+    } catch (error) {
+      console.error('Erro ao criar anúncio:', error);
+      setAlienListingsError('Não foi possível listar a carta no marketplace.');
+    } finally {
+      setListingLoading(false);
+    }
+  };
+
+  const handleBuyListing = async (listingId: string) => {
+    setBuyingListingId(listingId);
+    setAlienListingsError(null);
+    try {
+      await buyCardListing(listingId, userId);
+      await loadAlienCard(true);
+      await loadInternalAccount();
+      await loadAlienListings();
+    } catch (error) {
+      console.error('Erro ao comprar carta:', error);
+      setAlienListingsError('Não foi possível concluir a compra.');
+    } finally {
+      setBuyingListingId(null);
+    }
+  };
+
+  const handleAddXp = async () => {
+    if (!userId) return;
+    setAlienLoading(true);
+    setAlienError(null);
+    try {
+      const updated = await addCardXp(userId, 25);
+      setAlienCard(updated);
+    } catch (error) {
+      console.error('Erro ao adicionar XP:', error);
+      setAlienError('Não foi possível atualizar o XP.');
+    } finally {
+      setAlienLoading(false);
+    }
+  };
+
+  const buildAlienSvg = (card: CardDTO) => {
+    const palette = card.visualMeta?.palette || { primary: '#38bdf8', secondary: '#0f172a', accent: '#22d3ee' };
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${palette.secondary}" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="${palette.primary}" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="${palette.secondary}" stop-opacity="0.9" />
+    </radialGradient>
+  </defs>
+  <rect width="480" height="640" rx="32" fill="url(#bg)" />
+  <g>
+    <ellipse cx="240" cy="260" rx="120" ry="150" fill="url(#core)" />
+    <ellipse cx="200" cy="240" rx="22" ry="30" fill="${palette.accent}" />
+    <ellipse cx="280" cy="240" rx="22" ry="30" fill="${palette.accent}" />
+    <circle cx="200" cy="245" r="8" fill="#0f172a" />
+    <circle cx="280" cy="245" r="8" fill="#0f172a" />
+    <path d="M210 300 Q240 320 270 300" stroke="${palette.accent}" stroke-width="8" fill="none" stroke-linecap="round" />
+  </g>
+  <text x="50%" y="560" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${card.name}</text>
+  <text x="50%" y="592" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="'Segoe UI', sans-serif">${card.rarity.toUpperCase()}</text>
+</svg>`;
+  };
+
+  const alienImageSrc = (card: CardDTO) => {
+    if (card.imageUrl) return card.imageUrl;
+    const svg = buildAlienSvg(card);
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  };
+
   const handleEditProject = (project: ProjectDTO) => {
     setProjectsError(null);
     setEditProjectData({
@@ -126,7 +299,8 @@ const Dashboard: React.FC = () => {
     'home': 'Home',
     'projects': 'Projetos',
     'cart': 'Carrinho',
-    'purchases': 'Compras'
+    'purchases': 'Compras',
+    'alien': 'My Alien',
   };
 
   const crumbs = [
@@ -136,7 +310,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get('tab');
-    if (tab && ['home', 'projects', 'cart', 'purchases'].includes(tab)) {
+    if (tab && ['home', 'projects', 'cart', 'purchases', 'alien', 'marketplace'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [location.search]);
@@ -146,6 +320,14 @@ const Dashboard: React.FC = () => {
     loadPurchases();
     loadUserProfile();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'alien') {
+      loadAlienCard();
+      loadAlienListings();
+      loadInternalAccount();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const handlePurchase = () => {
@@ -180,6 +362,9 @@ const Dashboard: React.FC = () => {
             </li>
             <li className={activeTab === 'purchases' ? 'active' : ''} onClick={() => setActiveTab('purchases')}>
               COMPRAS
+            </li>
+            <li className={activeTab === 'alien' ? 'active' : ''} onClick={() => setActiveTab('alien')}>
+              MY ALIEN
             </li>
           </ul>
         </aside>
@@ -422,6 +607,142 @@ const Dashboard: React.FC = () => {
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {activeTab === 'alien' && (
+            <section className="alien-panel">
+              <div className="alien-header">
+                <h2>👾 My Alien</h2>
+                <div className="alien-balance">
+                  <span>Saldo interno</span>
+                  <strong>{internalAccount ? `R$ ${internalAccount.balance.toFixed(2).replace('.', ',')}` : '—'}</strong>
+                </div>
+              </div>
+              <p>Suas cartas alienígenas evoluem com seu uso no SaaS e podem ser negociadas no marketplace interno.</p>
+
+              {internalAccountError && <p className="alien-error">{internalAccountError}</p>}
+              {alienLoading && <p>Carregando carta...</p>}
+              {alienError && <p className="alien-error">{alienError}</p>}
+
+              {!alienLoading && !alienCard && (
+                <div className="alien-card">
+                  <h3>Gerar sua carta alienígena</h3>
+                  <p>Seu CPF é usado apenas para gerar o hash da carta. Ele não é armazenado.</p>
+                  <div className="alien-create">
+                    <input
+                      type="text"
+                      placeholder="Digite seu CPF"
+                      value={cpfInput}
+                      onChange={(e) => setCpfInput(e.target.value)}
+                    />
+                    <button className="action-button" onClick={handleCreateAlien}>Criar alien</button>
+                  </div>
+                  {cpfError && <span className="alien-error">{cpfError}</span>}
+                </div>
+              )}
+
+              {alienCard && (
+                <div className="alien-card">
+                  <div>
+                    <span className={`alien-rarity alien-rarity--${alienCard.rarity}`}>{alienCard.rarity}</span>
+                    <h3>{alienCard.name}</h3>
+                    <p>{alienCard.species} • {alienCard.className}</p>
+                    <p>Nível {alienCard.level} • XP {alienCard.xp}</p>
+                    {alienCard.visualMeta?.palette && (
+                      <p className="alien-meta">
+                        Paleta: {alienCard.visualMeta.palette.primary}, {alienCard.visualMeta.palette.secondary}, {alienCard.visualMeta.palette.accent}
+                      </p>
+                    )}
+                    {alienCard.marketValue !== undefined && (
+                      <p className="alien-meta">Valor de mercado: R$ {Number(alienCard.marketValue).toFixed(2).replace('.', ',')}</p>
+                    )}
+                  </div>
+                  <div className="alien-image">
+                    <img src={alienImageSrc(alienCard)} alt={alienCard.name} />
+                  </div>
+                  <div className="alien-attributes">
+                    <div>
+                      <span>Força</span>
+                      <strong>{alienCard.attributes.strength}</strong>
+                    </div>
+                    <div>
+                      <span>Velocidade</span>
+                      <strong>{alienCard.attributes.speed}</strong>
+                    </div>
+                    <div>
+                      <span>Inteligência</span>
+                      <strong>{alienCard.attributes.intelligence}</strong>
+                    </div>
+                    <div>
+                      <span>Resistência</span>
+                      <strong>{alienCard.attributes.endurance}</strong>
+                    </div>
+                  </div>
+                  <div className="alien-actions">
+                    <button className="action-button" onClick={() => loadAlienCard(true)}>Atualizar perfil</button>
+                    <button className="action-button action-button--ghost" onClick={handleAddXp}>Ganhar XP</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="alien-marketplace">
+                <div className="alien-marketplace__header">
+                  <h3>Mercado secundário</h3>
+                  <div className="alien-listing-form">
+                    <input
+                      type="text"
+                      placeholder="Preço para listar sua carta"
+                      value={listingPrice}
+                      onChange={(e) => setListingPrice(e.target.value)}
+                    />
+                    <button className="action-button" disabled={listingLoading || !alienCard} onClick={handleCreateListing}>
+                      {listingLoading ? 'Listando...' : 'Listar carta'}
+                    </button>
+                  </div>
+                </div>
+
+                {alienListingsLoading && <p>Carregando anúncios...</p>}
+                {alienListingsError && <p className="alien-error">{alienListingsError}</p>}
+
+                <div className="alien-marketplace__grid">
+                  {!alienListingsLoading && alienListings.length === 0 && (
+                    <div className="alien-marketplace__empty">Nenhuma carta disponível no momento.</div>
+                  )}
+                  {alienListings.map((listing) => (
+                    <div key={listing.id} className="alien-marketplace__card">
+                      <div className="alien-marketplace__info">
+                        <span className={`alien-rarity alien-rarity--${listing.rarity || 'comum'}`}>{listing.rarity || 'comum'}</span>
+                        <h4>{listing.name || 'Alien sem nome'}</h4>
+                        <p>{listing.species} • {listing.className}</p>
+                        {listing.imageUrl && (
+                          <div className="alien-marketplace__image">
+                            <img src={listing.imageUrl} alt={listing.name || 'Alien'} />
+                          </div>
+                        )}
+                        {listing.attributes && (
+                          <div className="alien-marketplace__stats">
+                            <span>FOR {listing.attributes.strength}</span>
+                            <span>VEL {listing.attributes.speed}</span>
+                            <span>INT {listing.attributes.intelligence}</span>
+                            <span>RES {listing.attributes.endurance}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="alien-marketplace__footer">
+                        <strong>R$ {Number(listing.price).toFixed(2).replace('.', ',')}</strong>
+                        <button
+                          className="action-button"
+                          disabled={listing.sellerUserId === userId || buyingListingId === listing.id}
+                          onClick={() => handleBuyListing(listing.id)}
+                        >
+                          {listing.sellerUserId === userId ? 'Sua carta' : buyingListingId === listing.id ? 'Comprando...' : 'Comprar'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </section>
           )}
         </main>

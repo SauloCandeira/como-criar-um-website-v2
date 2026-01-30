@@ -6,7 +6,7 @@
   width: 100vw;
   min-height: 100vh;
 
-  background-color: #092554;
+  background-color: var(--app-bg);
   background-image: url('../../assets/img/stars.png');
   background-size: cover;
   background-repeat: no-repeat;
@@ -31,7 +31,7 @@
   box-sizing: border-box;
 
   text-align: center;
-  color: #ffffff;
+  color: var(--text);
 }
 
 /* =========================
@@ -42,7 +42,7 @@
   font-size: 2.6rem;
   font-weight: bold;
   margin-bottom: 50px;
-  color: #ffffff;
+  color: var(--text);
 }
 
 /* =========================
@@ -60,6 +60,7 @@
   padding: 0;
   margin: 0;
   list-style: none;
+  border-bottom: none !important;
 }
 
 /* =========================
@@ -68,22 +69,38 @@
 
 .react-tabs__tab {
   padding: 16px 22px;
-  background-color: #1f1f1f;
-  color: #ffffff;
+  background-color: color-mix(in srgb, var(--surface-2) 85%, transparent);
+  color: var(--text);
   font-weight: bold;
   border-radius: 8px;
   cursor: pointer;
   text-align: center;
 
   position: relative;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
   transition: all 0.3s ease;
+  border-bottom: none !important;
+  outline: none;
+}
+
+.services-tab-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.services-tab-icon {
+  font-size: 1.05rem;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
 }
 
 .react-tabs__tab::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(45deg, #00ffcc, #ff00ff, #00ffff);
+  background: linear-gradient(45deg, var(--accent-teal), var(--accent-blue), var(--accent-green));
   border-radius: 8px;
   z-index: -1;
   opacity: 0;
@@ -96,15 +113,28 @@
 
 .react-tabs__tab:hover {
   transform: scale(1.05);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.45), 0 0 26px rgba(34, 211, 238, 0.25);
 }
 
 .react-tabs__tab--selected {
-  background: linear-gradient(90deg, #1d4ed8, #2563eb);
-  box-shadow: 0 0 18px rgba(37, 99, 235, 0.8);
+  background: linear-gradient(90deg, var(--accent-blue), color-mix(in srgb, var(--accent-blue) 70%, var(--surface) 30%));
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.6), 0 0 26px rgba(34, 211, 238, 0.35);
+  border-bottom: none !important;
 }
 
 .react-tabs__tab--selected::before {
   opacity: 1;
+}
+
+.react-tabs__tab--selected::after,
+.react-tabs__tab::after {
+  display: none !important;
+}
+
+.react-tabs__tab:focus,
+.react-tabs__tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.6), 0 0 26px rgba(34, 211, 238, 0.35);
 }
 
 /* =========================
@@ -123,27 +153,57 @@
 ========================= */
 
 .service-item {
-  background: linear-gradient(180deg, #ffffff, #f1f5f9);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
   padding: 24px;
   border-radius: 12px;
 
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 0 18px rgba(56, 189, 248, 0.15);
   text-align: left;
   transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .service-item:hover {
   transform: translateY(-10px);
-  box-shadow: 0 16px 32px rgba(0, 123, 255, 0.45);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35), 0 0 24px rgba(56, 189, 248, 0.45), 0 0 40px rgba(34, 211, 238, 0.25);
+}
+
+.service-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: linear-gradient(120deg, rgba(56, 189, 248, 0.55), rgba(34, 211, 238, 0.3), rgba(16, 185, 129, 0.45)) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.service-item:hover::after {
+  opacity: 1;
 }
 
 .service-item h2 {
-  color: #1d4ed8;
+  color: var(--accent-blue);
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.service-item-icon {
+  font-size: 1.15rem;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
 }
 
 .service-item p {
-  color: #334155;
+  color: var(--text-muted);
   line-height: 1.6;
 }
 

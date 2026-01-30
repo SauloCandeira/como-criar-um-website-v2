@@ -53,6 +53,14 @@ const MarketPlaceCard = () => {
 
   const sortedProducts = useMemo(() => products, [products]);
 
+  const typeLabel = (type?: string) => {
+    if (type === 'servico') return 'Serviço';
+    if (type === 'fisico') return 'Produto físico';
+    if (type === 'assinatura') return 'Assinatura';
+    if (type === 'projeto') return 'Projeto';
+    return 'Produto digital';
+  };
+
   return (
     <div className="marketplace-container">
       <div className="products-container">
@@ -61,19 +69,22 @@ const MarketPlaceCard = () => {
         {feedback && <p className="marketplace-feedback">{feedback}</p>}
         {!loading && sortedProducts.length === 0 && <p>Nenhum produto disponível.</p>}
         {sortedProducts.map((product) => (
-          <div className="product-card" key={product.id}>
-            <div className="product-image" aria-hidden="true">
+          <div className="marketplace-card" key={product.id}>
+            <div className="marketplace-image" aria-hidden="true">
               <span>🛰️</span>
             </div>
-            <div className="product-info">
+            <div className="marketplace-info">
+              <span className={`marketplace-badge ${product.productType || 'digital'}`}>
+                {typeLabel(product.productType)}
+              </span>
               <h3>{product.name}</h3>
-              <p className="product-description">{product.description || 'Produto pronto para entrega imediata.'}</p>
-              <div className="product-price">
-                <span className="price-original">{formatCurrency(product.price)}</span>
-                <span className="price-sale">{formatCurrency(product.salePrice || product.price)}</span>
+              <p className="marketplace-description">{product.description || 'Produto pronto para entrega imediata.'}</p>
+              <div className="marketplace-price">
+                <span className="marketplace-price-original">{formatCurrency(product.price)}</span>
+                <span className="marketplace-price-sale">{formatCurrency(product.salePrice || product.price)}</span>
               </div>
               <button
-                className="view-product-btn"
+                className="marketplace-action-btn"
                 onClick={() => handlePurchase(product.id)}
                 disabled={purchaseLoadingId === product.id}
               >

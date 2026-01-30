@@ -14,7 +14,7 @@
   flex: 1;
 }
 
-.product-card {
+.marketplace-card {
   background-color: var(--surface);
   border-radius: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -28,12 +28,12 @@
   border: 1px solid var(--border);
 }
 
-.product-card:hover {
+.marketplace-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
-.product-image {
+.marketplace-image {
   width: 100%;
   max-width: 200px;
   height: 150px;
@@ -45,7 +45,7 @@
   font-size: 42px;
 }
 
-.product-info {
+.marketplace-info {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -53,25 +53,64 @@
   width: 100%;
 }
 
-.product-description {
+.marketplace-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-inverse);
+}
+
+.marketplace-badge.digital {
+  background: var(--accent-blue);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+.marketplace-badge.servico,
+.marketplace-badge.service {
+  background: var(--accent-teal);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.5);
+}
+
+.marketplace-badge.fisico {
+  background: var(--accent-green);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+}
+
+.marketplace-badge.assinatura {
+  background: linear-gradient(120deg, var(--accent-blue), var(--accent-teal));
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5), 0 0 14px rgba(45, 212, 191, 0.35);
+}
+
+.marketplace-badge.projeto {
+  background: linear-gradient(120deg, var(--accent-blue), var(--accent-green));
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5), 0 0 14px rgba(34, 197, 94, 0.35);
+}
+
+.marketplace-description {
   font-size: 13px;
   color: var(--text-muted);
 }
 
-.product-price {
+.marketplace-price {
   display: flex;
   gap: 8px;
   align-items: baseline;
   font-weight: 600;
 }
 
-.price-original {
+.marketplace-price-original {
   font-size: 14px;
   color: var(--text-muted);
   text-decoration: line-through;
 }
 
-.price-sale {
+.marketplace-price-sale {
   font-size: 18px;
   color: var(--accent-blue);
 }
@@ -85,7 +124,7 @@
   color: var(--text);
 }
 
-.view-product-btn {
+.marketplace-action-btn {
   padding: 8px 15px;
   background-color: var(--accent-blue);
   color: var(--text-inverse);
@@ -97,11 +136,11 @@
   max-width: 150px;
 }
 
-.view-product-btn:hover {
+.marketplace-action-btn:hover {
   background-color: var(--link-hover);
 }
 
-.view-product-btn:disabled {
+.marketplace-action-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }

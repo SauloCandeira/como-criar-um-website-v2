@@ -23,6 +23,7 @@ interface ProductItem {
   name: string;
   price: string;
   description: string;
+  productType?: string;
   showOnHome?: boolean;
   purchasePrice?: string;
   salePrice?: string;
@@ -112,9 +113,9 @@ const Admin: React.FC = () => {
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', showOnHome: false, purchasePrice: '', salePrice: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
-  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', showOnHome: false, purchasePrice: '', salePrice: '' });
+  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -348,11 +349,12 @@ const Admin: React.FC = () => {
         name: newProduct.name.trim(),
         price: newProduct.price.trim(),
         description: newProduct.description.trim(),
-        showOnHome: newProduct.showOnHome
-        ,purchasePrice: newProduct.purchasePrice.trim(),
+        productType: newProduct.productType,
+        showOnHome: newProduct.showOnHome,
+        purchasePrice: newProduct.purchasePrice.trim(),
         salePrice: newProduct.salePrice.trim() || newProduct.price.trim()
       });
-      setNewProduct({ name: '', price: '', description: '', showOnHome: false, purchasePrice: '', salePrice: '' });
+      setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
       setIsProductModalOpen(false);
       loadProducts();
     } catch (error) {
@@ -368,6 +370,7 @@ const Admin: React.FC = () => {
       name: product.name,
       price: product.price,
       description: product.description,
+      productType: product.productType ?? 'digital',
       showOnHome: product.showOnHome ?? false,
       purchasePrice: product.purchasePrice ?? '',
       salePrice: product.salePrice ?? product.price
@@ -385,6 +388,7 @@ const Admin: React.FC = () => {
         name: editProductData.name.trim(),
         price: editProductData.price.trim(),
         description: editProductData.description.trim(),
+        productType: editProductData.productType,
         showOnHome: editProductData.showOnHome,
         purchasePrice: editProductData.purchasePrice.trim(),
         salePrice: editProductData.salePrice.trim() || editProductData.price.trim()
@@ -394,6 +398,25 @@ const Admin: React.FC = () => {
     } catch (error) {
       console.error('Erro ao editar produto:', error);
       setProductsError('Não foi possível editar o produto.');
+    }
+  };
+
+  const handleToggleProductHome = async (product: ProductItem, nextValue: boolean) => {
+    setProductsError(null);
+    try {
+      await updateProduct(product.id, {
+        name: product.name,
+        price: product.price,
+        description: product.description,
+        productType: product.productType ?? 'digital',
+        showOnHome: nextValue,
+        purchasePrice: product.purchasePrice ?? '',
+        salePrice: product.salePrice ?? product.price,
+      });
+      loadProducts();
+    } catch (error) {
+      console.error('Erro ao atualizar exibição na Home:', error);
+      setProductsError('Não foi possível atualizar a exibição na Home.');
     }
   };
 
@@ -935,10 +958,9 @@ const Admin: React.FC = () => {
               </select>
               <button className="admin-btn" onClick={handleCreateUser}>Criar novo</button>
             </div>
-            <table>
+            <table className="admin-table admin-table--users">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Nome</th>
                   <th>Email</th>
                   <th>Cadastro</th>
@@ -950,22 +972,33 @@ const Admin: React.FC = () => {
               <tbody>
                 {!usersLoading && users.length === 0 && (
                   <tr>
-                    <td colSpan={7}>Nenhum usuário encontrado.</td>
+                    <td colSpan={6}>Nenhum usuário encontrado.</td>
                   </tr>
                 )}
                 {users.map((user) => (
                   <tr key={user.id}>
-                    <td>{user.id}</td>
                     <td>{user.name}</td>
                     <td>{user.email}</td>
                     <td>{user.authProvider}</td>
                     <td>{permissionLabels[user.permissionLevel || 'A']}</td>
                     <td>{user.status}</td>
                     <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => setSelectedUser(user)}>Visualizar</button>
-                      <button className="admin-btn" onClick={() => handleEditUser(user)}>Editar</button>
-                      <button className="admin-btn" onClick={() => handleDeactivateUser(user)}>Desativar</button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteUser(user)}>Excluir</button>
+                      <button className="admin-btn" onClick={() => setSelectedUser(user)} aria-label="Visualizar">
+                        <span className="admin-action-icon">👁️</span>
+                        <span className="admin-action-text">Visualizar</span>
+                      </button>
+                      <button className="admin-btn" onClick={() => handleEditUser(user)} aria-label="Editar">
+                        <span className="admin-action-icon">✏️</span>
+                        <span className="admin-action-text">Editar</span>
+                      </button>
+                      <button className="admin-btn" onClick={() => handleDeactivateUser(user)} aria-label="Desativar">
+                        <span className="admin-action-icon">⏸️</span>
+                        <span className="admin-action-text">Desativar</span>
+                      </button>
+                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteUser(user)} aria-label="Excluir">
+                        <span className="admin-action-icon">🗑️</span>
+                        <span className="admin-action-text">Excluir</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1067,10 +1100,9 @@ const Admin: React.FC = () => {
             <h2>Vendas Realizadas</h2>
             {salesLoading && <p>Carregando vendas...</p>}
             {salesError && <p>{salesError}</p>}
-            <table>
+            <table className="admin-table admin-table--sales">
               <thead>
                 <tr>
-                  <th>ID Venda</th>
                   <th>Usuário</th>
                   <th>Valor</th>
                   <th>Data</th>
@@ -1079,12 +1111,11 @@ const Admin: React.FC = () => {
               <tbody>
                 {!salesLoading && sales.length === 0 && (
                   <tr>
-                    <td colSpan={4}>Nenhuma venda encontrada.</td>
+                    <td colSpan={3}>Nenhuma venda encontrada.</td>
                   </tr>
                 )}
                 {sales.map((sale) => (
                   <tr key={sale.id}>
-                    <td>{sale.id}</td>
                     <td>{sale.user}</td>
                     <td>{sale.value}</td>
                     <td>{sale.date}</td>
@@ -1127,10 +1158,9 @@ const Admin: React.FC = () => {
               </button>
             </div>
 
-            <table>
+            <table className="admin-table admin-table--projects">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Nome</th>
                   <th>Tipo</th>
                   <th>Venda</th>
@@ -1148,12 +1178,11 @@ const Admin: React.FC = () => {
               <tbody>
                 {!projectsLoading && projects.length === 0 && (
                   <tr>
-                    <td colSpan={12}>Nenhum projeto encontrado.</td>
+                    <td colSpan={11}>Nenhum projeto encontrado.</td>
                   </tr>
                 )}
                 {projects.map((project) => (
                   <tr key={project.id}>
-                    <td>{project.id}</td>
                     <td>{project.name}</td>
                     <td>{project.projectType || '-'}</td>
                     <td>{project.salePrice || '-'}</td>
@@ -1166,8 +1195,14 @@ const Admin: React.FC = () => {
                     <td>{project.paid ? 'Pago' : 'Não pago'}</td>
                     <td>{project.isPublic ? 'Sim' : 'Não'}</td>
                     <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => handleEditProject(project)}>Editar</button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)}>Excluir</button>
+                      <button className="admin-btn" onClick={() => handleEditProject(project)} aria-label="Editar">
+                        <span className="admin-action-icon">✏️</span>
+                        <span className="admin-action-text">Editar</span>
+                      </button>
+                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)} aria-label="Excluir">
+                        <span className="admin-action-icon">🗑️</span>
+                        <span className="admin-action-text">Excluir</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1444,7 +1479,7 @@ const Admin: React.FC = () => {
                 className="admin-btn"
                 onClick={() => {
                   setProductsError(null);
-                  setNewProduct({ name: '', price: '', description: '', showOnHome: false, purchasePrice: '', salePrice: '' });
+                  setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
                   setIsProductModalOpen(true);
                 }}
               >
@@ -1452,11 +1487,11 @@ const Admin: React.FC = () => {
               </button>
             </div>
 
-            <table>
+            <table className="admin-table admin-table--products">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Nome</th>
+                  <th>Tipo</th>
                   <th>Preço venda</th>
                   <th>Preço compra</th>
                   <th>Descrição</th>
@@ -1467,20 +1502,35 @@ const Admin: React.FC = () => {
               <tbody>
                 {!productsLoading && products.length === 0 && (
                   <tr>
-                    <td colSpan={7}>Nenhum produto encontrado.</td>
+                    <td colSpan={6}>Nenhum produto encontrado.</td>
                   </tr>
                 )}
                 {products.map((product) => (
                   <tr key={product.id}>
-                    <td>{product.id}</td>
                     <td>{product.name}</td>
+                    <td>{product.productType || 'digital'}</td>
                     <td>{product.salePrice || product.price}</td>
                     <td>{product.purchasePrice || '-'}</td>
                     <td>{product.description}</td>
-                    <td>{product.showOnHome ? 'Sim' : 'Não'}</td>
+                    <td>
+                      <label className="admin-home-toggle">
+                        <input
+                          type="checkbox"
+                          checked={!!product.showOnHome}
+                          onChange={(e) => handleToggleProductHome(product, e.target.checked)}
+                        />
+                        <span>{product.showOnHome ? 'Sim' : 'Não'}</span>
+                      </label>
+                    </td>
                     <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => handleEditProduct(product)}>Editar</button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProduct(product)}>Excluir</button>
+                      <button className="admin-btn" onClick={() => handleEditProduct(product)} aria-label="Editar">
+                        <span className="admin-action-icon">✏️</span>
+                        <span className="admin-action-text">Editar</span>
+                      </button>
+                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProduct(product)} aria-label="Excluir">
+                        <span className="admin-action-icon">🗑️</span>
+                        <span className="admin-action-text">Excluir</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1503,6 +1553,19 @@ const Admin: React.FC = () => {
                         value={newProduct.name}
                         onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
                       />
+                    </label>
+                    <label>
+                      <span>Tipo</span>
+                      <select
+                        value={newProduct.productType}
+                        onChange={(e) => setNewProduct({ ...newProduct, productType: e.target.value })}
+                      >
+                        <option value="servico">Serviço</option>
+                        <option value="digital">Produto digital</option>
+                        <option value="fisico">Produto físico</option>
+                        <option value="assinatura">Assinatura</option>
+                        <option value="projeto">Projeto</option>
+                      </select>
                     </label>
                     <label>
                       <span>Preço venda</span>
@@ -1562,6 +1625,19 @@ const Admin: React.FC = () => {
                         value={editProductData.name}
                         onChange={(e) => setEditProductData({ ...editProductData, name: e.target.value })}
                       />
+                    </label>
+                    <label>
+                      <span>Tipo</span>
+                      <select
+                        value={editProductData.productType}
+                        onChange={(e) => setEditProductData({ ...editProductData, productType: e.target.value })}
+                      >
+                        <option value="servico">Serviço</option>
+                        <option value="digital">Produto digital</option>
+                        <option value="fisico">Produto físico</option>
+                        <option value="assinatura">Assinatura</option>
+                        <option value="projeto">Projeto</option>
+                      </select>
                     </label>
                     <label>
                       <span>Preço venda</span>
@@ -1647,10 +1723,9 @@ const Admin: React.FC = () => {
               <button className="admin-btn" onClick={handleCreateCost}>Adicionar custo</button>
             </div>
 
-            <table>
+            <table className="admin-table admin-table--costs">
               <thead>
                 <tr>
-                  <th>ID</th>
                   <th>Nome</th>
                   <th>Valor</th>
                   <th>Ciclo</th>
@@ -1661,19 +1736,24 @@ const Admin: React.FC = () => {
               <tbody>
                 {!costsLoading && costs.length === 0 && (
                   <tr>
-                    <td colSpan={6}>Nenhum custo encontrado.</td>
+                    <td colSpan={5}>Nenhum custo encontrado.</td>
                   </tr>
                 )}
                 {costs.map((cost) => (
                   <tr key={cost.id}>
-                    <td>{cost.id}</td>
                     <td>{cost.name}</td>
                     <td>{cost.costValue || '-'}</td>
                     <td>{cost.billingCycle === 'annual' ? 'Anual' : 'Mensal'}</td>
                     <td>R$ {getMonthlyCost(cost).toFixed(2).replace('.', ',')}</td>
                     <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => handleEditCost(cost)}>Editar</button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteCost(cost)}>Excluir</button>
+                      <button className="admin-btn" onClick={() => handleEditCost(cost)} aria-label="Editar">
+                        <span className="admin-action-icon">✏️</span>
+                        <span className="admin-action-text">Editar</span>
+                      </button>
+                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteCost(cost)} aria-label="Excluir">
+                        <span className="admin-action-icon">🗑️</span>
+                        <span className="admin-action-text">Excluir</span>
+                      </button>
                     </td>
                   </tr>
                 ))}

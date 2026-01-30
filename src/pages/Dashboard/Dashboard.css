@@ -231,6 +231,233 @@
   background-color: var(--surface-2);
 }
 
+.alien-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.alien-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.alien-balance {
+  display: grid;
+  gap: 4px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+}
+
+.alien-balance span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.alien-balance strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.alien-card {
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.95));
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(56, 189, 248, 0.2);
+  display: grid;
+  gap: 16px;
+}
+
+.alien-image {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.alien-image img {
+  width: min(280px, 100%);
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+  background: var(--surface);
+}
+
+.alien-card h3 {
+  margin: 8px 0 4px;
+}
+
+.alien-attributes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.alien-attributes div {
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+}
+
+.alien-attributes span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.alien-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.alien-create {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.alien-create input {
+  min-width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.alien-meta {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.alien-rarity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.alien-rarity--comum {
+  background: color-mix(in srgb, var(--surface-2) 75%, var(--accent-blue) 25%);
+}
+
+.alien-rarity--raro {
+  background: color-mix(in srgb, var(--accent-blue) 40%, var(--surface-2));
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.alien-rarity--epico {
+  background: linear-gradient(120deg, rgba(56, 189, 248, 0.75), rgba(45, 212, 191, 0.65));
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.45);
+}
+
+.alien-rarity--lendario {
+  background: linear-gradient(120deg, rgba(34, 197, 94, 0.75), rgba(56, 189, 248, 0.65));
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.45);
+}
+
+.alien-marketplace {
+  background: var(--surface-2);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+
+.alien-marketplace__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.alien-listing-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.alien-listing-form input {
+  min-width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.alien-marketplace__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.alien-marketplace__card {
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  display: grid;
+  gap: 12px;
+}
+
+.alien-marketplace__image {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.alien-marketplace__image img {
+  width: 100%;
+  max-width: 180px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
+  background: var(--surface-2);
+}
+
+.alien-marketplace__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.alien-marketplace__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.alien-marketplace__empty {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+}
+
+.alien-error {
+  color: var(--pill-danger);
+}
+
 .project-actions {
   display: flex;
   gap: 8px;

@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import { Pool } from "pg";
 import { Connector, IpAddressTypes } from "@google-cloud/cloud-sql-connector";
+import crypto from "crypto";
 
 admin.initializeApp();
 setGlobalOptions({ region: "us-central1" });
@@ -23,9 +24,44 @@ async function ensureCostsBillingCycleColumn(client: { query: (sql: string, para
 }
 
 async function ensureProductsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureProductTypesTable(client);
+  await ensureProductTypeConstraint(client);
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS show_on_home BOOLEAN DEFAULT false");
+  await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'digital'");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
+}
+
+async function ensureProductTypesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS product_types (id TEXT PRIMARY KEY, label TEXT NOT NULL)"
+  );
+  await client.query(
+    "INSERT INTO product_types (id, label) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+    ["digital", "Produto digital"]
+  );
+  await client.query(
+    "INSERT INTO product_types (id, label) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+    ["fisico", "Produto físico"]
+  );
+  await client.query(
+    "INSERT INTO product_types (id, label) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+    ["servico", "Serviço"]
+  );
+  await client.query(
+    "INSERT INTO product_types (id, label) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+    ["assinatura", "Assinatura"]
+  );
+  await client.query(
+    "INSERT INTO product_types (id, label) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+    ["projeto", "Projeto"]
+  );
+}
+
+async function ensureProductTypeConstraint(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_product_type_fkey') THEN ALTER TABLE products ADD CONSTRAINT products_product_type_fkey FOREIGN KEY (product_type) REFERENCES product_types(id); END IF; END $$;"
+  );
 }
 
 async function ensureDefaultProduct(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -44,11 +80,18 @@ async function ensureDefaultProduct(client: { query: (sql: string, params?: any[
 }
 
 async function ensureProjectsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureProjectsTable(client);
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS production_cost TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_user_id TEXT DEFAULT ''");
+}
+
+async function ensureProjectsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS projects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', project_type TEXT DEFAULT '', sale_price TEXT DEFAULT '', production_cost TEXT DEFAULT '', purchase_count INTEGER DEFAULT 0, repository TEXT DEFAULT '', domain TEXT DEFAULT '', hosting TEXT DEFAULT '', status TEXT DEFAULT 'Ativo', paid BOOLEAN DEFAULT false, is_public BOOLEAN DEFAULT true, owner_user_id TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
 }
 
 async function ensurePurchasesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -57,11 +100,277 @@ async function ensurePurchasesTable(client: { query: (sql: string, params?: any[
   );
 }
 
+async function ensureUserGamificationTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_gamification (user_id TEXT PRIMARY KEY, plan TEXT DEFAULT 'free', usage_score INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+async function ensureUserCardsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_cards (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL UNIQUE, seed BIGINT NOT NULL, hash_seed TEXT NOT NULL, name TEXT NOT NULL, species TEXT NOT NULL, class TEXT NOT NULL, rarity TEXT NOT NULL, attributes JSONB NOT NULL, visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb, level INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS hash_seed TEXT NOT NULL DEFAULT ''");
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb");
+}
+
+async function ensureInternalAccountsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS internal_accounts (user_id TEXT PRIMARY KEY, balance NUMERIC(14,2) DEFAULT 0, updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS internal_transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), from_user_id TEXT, to_user_id TEXT, amount NUMERIC(14,2) NOT NULL, reason TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+async function ensureCardMarketplaceTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS card_listings (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), card_id UUID REFERENCES user_cards(id) ON DELETE CASCADE, seller_user_id TEXT NOT NULL, price NUMERIC(12,2) NOT NULL, status TEXT DEFAULT 'active', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS card_transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), card_id UUID REFERENCES user_cards(id) ON DELETE SET NULL, seller_user_id TEXT NOT NULL, buyer_user_id TEXT NOT NULL, price NUMERIC(12,2) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+async function ensureCommerceOrdersTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, item_type TEXT NOT NULL, item_id TEXT NOT NULL, amount NUMERIC(12,2) DEFAULT 0, currency TEXT DEFAULT 'BRL', status TEXT DEFAULT 'completed', payment_method TEXT DEFAULT 'pix', payment_reference TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
 function inferProjectType(name: string) {
   const label = name.toLowerCase();
   if (label.includes("landing")) return "Landingpage";
   if (label.includes("e-commerce") || label.includes("ecommerce")) return "E-commerce";
   return "Marketplace";
+}
+
+const CARD_SPECIES = ["Zyphor", "Orionid", "Nebulon", "Vortexian", "Aetheri", "Krylon", "Lunari"];
+const CARD_CLASSES = ["Explorador", "Guardião", "Tecnomante", "Cronista", "Batedor", "Alquimista"];
+const NAME_PREFIX = ["Xen", "Kael", "Zor", "Lum", "Ar", "Nyx", "Vex", "Sol"];
+const NAME_SUFFIX = ["ar", "ion", "yx", "a", "os", "en", "is", "or"];
+
+const VISUAL_PALETTES = [
+  { primary: "#38bdf8", secondary: "#0f172a", accent: "#22d3ee" },
+  { primary: "#22c55e", secondary: "#052e16", accent: "#86efac" },
+  { primary: "#f97316", secondary: "#1f2937", accent: "#fdba74" },
+  { primary: "#a855f7", secondary: "#1e1b4b", accent: "#c4b5fd" },
+  { primary: "#14b8a6", secondary: "#0f172a", accent: "#5eead4" },
+];
+
+const RARITY_MULTIPLIER: Record<string, number> = {
+  comum: 1.0,
+  raro: 1.4,
+  epico: 1.9,
+  lendario: 2.6,
+};
+
+function normalizeCpf(cpf: string) {
+  return String(cpf || "").replace(/\D/g, "");
+}
+
+function hashCpfUser(cpf: string, userId: string) {
+  const normalized = normalizeCpf(cpf);
+  if (normalized.length !== 11) {
+    throw new Error("CPF inválido.");
+  }
+  const hash = crypto.createHash("sha256").update(`${normalized}|${userId}`).digest("hex");
+  return hash;
+}
+
+function seedFromHash(hash: string) {
+  const slice = hash.slice(0, 16);
+  return Number(BigInt(`0x${slice}`) % BigInt(2 ** 31 - 1));
+}
+
+function mulberry32(seed: number) {
+  let t = seed;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), t | 1);
+    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function planMultiplier(plan: string) {
+  if (plan === "enterprise") return 1.2;
+  if (plan === "pro") return 1.1;
+  return 1.0;
+}
+
+function calculateRarity(score: number, rng: () => number) {
+  const jitter = rng() * 6;
+  const finalScore = score + jitter;
+  if (finalScore >= 130) return "lendario";
+  if (finalScore >= 115) return "epico";
+  if (finalScore >= 95) return "raro";
+  return "comum";
+}
+
+function generateVisualMeta(seed: number) {
+  const rng = mulberry32(seed);
+  const palette = VISUAL_PALETTES[Math.floor(rng() * VISUAL_PALETTES.length)];
+  return {
+    palette,
+    pattern: Math.floor(rng() * 6),
+    eyes: Math.floor(rng() * 5),
+    horns: Math.floor(rng() * 4),
+    glow: rng() > 0.65,
+  };
+}
+
+function computeMarketValue(attributes: { strength: number; speed: number; intelligence: number; endurance: number }, rarity: string) {
+  const base = 10;
+  const avg = (attributes.strength + attributes.speed + attributes.intelligence + attributes.endurance) / 4;
+  const rarityBoost = RARITY_MULTIPLIER[rarity] ?? 1.0;
+  const attributeBoost = 0.8 + Math.min(0.6, avg / 150);
+  return Number((base * rarityBoost * attributeBoost).toFixed(2));
+}
+
+function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
+  const palette = visualMeta?.palette ?? VISUAL_PALETTES[0];
+  const glow = visualMeta?.glow ? `filter="url(#glow)"` : "";
+  const patternId = `pattern-${visualMeta?.pattern ?? 0}`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${palette.secondary}" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="${palette.primary}" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="${palette.secondary}" stop-opacity="0.9" />
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <pattern id="pattern-0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="8" cy="8" r="3" fill="${palette.accent}" fill-opacity="0.35" />
+    </pattern>
+    <pattern id="pattern-1" width="48" height="48" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="48" height="48" fill="${palette.secondary}" />
+      <path d="M0 0 L48 48 M48 0 L0 48" stroke="${palette.accent}" stroke-opacity="0.25" />
+    </pattern>
+    <pattern id="pattern-2" width="36" height="36" patternUnits="userSpaceOnUse">
+      <circle cx="18" cy="18" r="9" fill="${palette.accent}" fill-opacity="0.25" />
+    </pattern>
+    <pattern id="pattern-3" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="60" height="60" fill="${palette.secondary}" />
+      <circle cx="30" cy="30" r="12" fill="${palette.accent}" fill-opacity="0.3" />
+    </pattern>
+    <pattern id="pattern-4" width="50" height="50" patternUnits="userSpaceOnUse">
+      <path d="M0 25 L50 25" stroke="${palette.accent}" stroke-opacity="0.2" />
+      <path d="M25 0 L25 50" stroke="${palette.accent}" stroke-opacity="0.2" />
+    </pattern>
+    <pattern id="pattern-5" width="42" height="42" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="32" r="4" fill="${palette.accent}" fill-opacity="0.3" />
+      <circle cx="32" cy="10" r="4" fill="${palette.accent}" fill-opacity="0.3" />
+    </pattern>
+  </defs>
+  <rect width="480" height="640" rx="32" fill="url(#bg)" />
+  <rect x="32" y="48" width="416" height="480" rx="28" fill="url(#${patternId})" opacity="0.5" />
+  <g ${glow}>
+    <ellipse cx="240" cy="260" rx="120" ry="150" fill="url(#core)" />
+    <ellipse cx="200" cy="240" rx="22" ry="30" fill="${palette.accent}" />
+    <ellipse cx="280" cy="240" rx="22" ry="30" fill="${palette.accent}" />
+    <circle cx="200" cy="245" r="8" fill="#0f172a" />
+    <circle cx="280" cy="245" r="8" fill="#0f172a" />
+    <path d="M210 300 Q240 320 270 300" stroke="${palette.accent}" stroke-width="8" fill="none" stroke-linecap="round" />
+  </g>
+  <text x="50%" y="560" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${name}</text>
+  <text x="50%" y="592" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="'Segoe UI', sans-serif">${rarity.toUpperCase()}</text>
+</svg>`;
+}
+
+async function ensureAlienImage(userId: string, name: string, rarity: string, visualMeta: any) {
+  const bucket = admin.storage().bucket();
+  const file = bucket.file(`aliens/${userId}.svg`);
+  const svg = generateAlienSvg(name, rarity, visualMeta);
+  await file.save(svg, { contentType: "image/svg+xml", resumable: false, public: true });
+  try {
+    await file.makePublic();
+    return file.publicUrl();
+  } catch (error) {
+    console.warn("Falha ao tornar imagem pública", error);
+    const [signedUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: "01-01-2036",
+    });
+    return signedUrl;
+  }
+}
+
+function generateCardProfile(seed: number, context: { accountAgeDays: number; usageScore: number; plan: string; level: number }) {
+  const rng = mulberry32(seed);
+  const species = CARD_SPECIES[Math.floor(rng() * CARD_SPECIES.length)];
+  const className = CARD_CLASSES[Math.floor(rng() * CARD_CLASSES.length)];
+  const name = `${NAME_PREFIX[Math.floor(rng() * NAME_PREFIX.length)]}${NAME_SUFFIX[Math.floor(rng() * NAME_SUFFIX.length)]}`;
+
+  const ageBonus = clamp(Math.floor(context.accountAgeDays / 30) * 2, 0, 20);
+  const usageBonus = clamp(Math.floor(context.usageScore / 10), 0, 25);
+  const multiplier = planMultiplier(context.plan);
+  const levelBonus = clamp(Math.floor(context.level / 5), 0, 10);
+
+  const base = () => 40 + Math.floor(rng() * 40);
+  const strength = clamp(Math.round((base() + ageBonus + usageBonus + levelBonus) * multiplier), 1, 99);
+  const speed = clamp(Math.round((base() + ageBonus + usageBonus + levelBonus) * multiplier), 1, 99);
+  const intelligence = clamp(Math.round((base() + ageBonus + usageBonus + levelBonus) * multiplier), 1, 99);
+  const endurance = clamp(Math.round((base() + ageBonus + usageBonus + levelBonus) * multiplier), 1, 99);
+
+  const avgScore = (strength + speed + intelligence + endurance) / 4 + usageBonus + ageBonus + levelBonus;
+  const rarity = calculateRarity(avgScore, rng);
+
+  return {
+    name,
+    species,
+    className,
+    rarity,
+    attributes: { strength, speed, intelligence, endurance },
+  };
+}
+
+async function getOrCreateGamification(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureUserGamificationTable(client);
+  const existing = await client.query(
+    "SELECT user_id, plan, usage_score, xp, created_at, updated_at FROM user_gamification WHERE user_id = $1",
+    [userId]
+  );
+  if (existing.rows[0]) return existing.rows[0];
+  const created = await client.query(
+    "INSERT INTO user_gamification (user_id, plan, usage_score, xp) VALUES ($1, $2, $3, $4) RETURNING user_id, plan, usage_score, xp, created_at, updated_at",
+    [userId, "free", 0, 0]
+  );
+  return created.rows[0];
+}
+
+async function getUserCreatedAt(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureUsersTable(client);
+  const result = await client.query("SELECT created_at FROM users WHERE email = $1 OR id::text = $1 LIMIT 1", [userId]);
+  return result.rows[0]?.created_at ? new Date(result.rows[0].created_at) : null;
+}
+
+async function getOrCreateInternalAccount(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureInternalAccountsTable(client);
+  const existing = await client.query(
+    "SELECT user_id, balance, updated_at FROM internal_accounts WHERE user_id = $1",
+    [userId]
+  );
+  if (existing.rows[0]) return existing.rows[0];
+  const created = await client.query(
+    "INSERT INTO internal_accounts (user_id, balance) VALUES ($1, $2) RETURNING user_id, balance, updated_at",
+    [userId, 0]
+  );
+  return created.rows[0];
 }
 
 async function ensureAssetsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -118,6 +427,15 @@ async function getOrCreateDepositAccount(client: { query: (sql: string, params?:
   return created.rows[0];
 }
 
+async function hasPixConfirmation(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureDepositTables(client);
+  const result = await client.query(
+    "SELECT dt.id FROM deposit_transactions dt JOIN deposit_accounts da ON da.id = dt.account_id WHERE da.user_id = $1 AND dt.status = 'confirmed' AND dt.method = 'pix' AND dt.amount >= 1 ORDER BY dt.created_at DESC LIMIT 1",
+    [userId]
+  );
+  return !!result.rows[0];
+}
+
 async function getMasterEmail(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await ensureSettingsTable(client);
   const result = await client.query("SELECT value FROM settings WHERE key = 'master_email' LIMIT 1");
@@ -168,7 +486,7 @@ app.get("/products", async (_req, res) => {
     try {
       await ensureDefaultProduct(client);
       const result = await client.query(
-        "SELECT id, name, price, description, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+        "SELECT id, name, price, description, product_type, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
       );
       res.json(result.rows);
     } catch (error) {
@@ -177,7 +495,7 @@ app.get("/products", async (_req, res) => {
         await ensureProductsColumns(client);
         await ensureDefaultProduct(client);
         const retry = await client.query(
-          "SELECT id, name, price, description, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+          "SELECT id, name, price, description, product_type, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
         );
         res.json(retry.rows);
       } else {
@@ -193,7 +511,7 @@ app.get("/products", async (_req, res) => {
 });
 
 app.post("/products", async (req, res) => {
-  const { name, price, description, showOnHome, purchasePrice, salePrice } = req.body ?? {};
+  const { name, price, description, showOnHome, purchasePrice, salePrice, productType } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -203,8 +521,8 @@ app.post("/products", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "INSERT INTO products (name, price, description, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, price, description, show_on_home, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", !!showOnHome, purchasePrice ?? "", finalSalePrice]
+        "INSERT INTO products (name, price, description, product_type, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice]
       );
       res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -212,8 +530,8 @@ app.post("/products", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "INSERT INTO products (name, price, description, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, price, description, show_on_home, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", !!showOnHome, purchasePrice ?? "", finalSalePrice]
+          "INSERT INTO products (name, price, description, product_type, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice]
         );
         res.status(201).json(retry.rows[0]);
       } else {
@@ -230,7 +548,7 @@ app.post("/products", async (req, res) => {
 
 app.put("/products/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, price, description, showOnHome, purchasePrice, salePrice } = req.body ?? {};
+  const { name, price, description, showOnHome, purchasePrice, salePrice, productType } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -240,8 +558,8 @@ app.put("/products/:id", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "UPDATE products SET name = $1, price = $2, description = $3, show_on_home = $4, purchase_price = $5, sale_price = $6 WHERE id = $7 RETURNING id, name, price, description, show_on_home, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
+        "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, show_on_home = $5, purchase_price = $6, sale_price = $7 WHERE id = $8 RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
       );
       res.json(result.rows[0]);
     } catch (error) {
@@ -249,8 +567,8 @@ app.put("/products/:id", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "UPDATE products SET name = $1, price = $2, description = $3, show_on_home = $4, purchase_price = $5, sale_price = $6 WHERE id = $7 RETURNING id, name, price, description, show_on_home, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
+          "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, show_on_home = $5, purchase_price = $6, sale_price = $7 WHERE id = $8 RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
         );
         res.json(retry.rows[0]);
       } else {
@@ -299,6 +617,62 @@ app.get("/purchases", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao listar compras." });
+  }
+});
+
+app.get("/commerce-orders", async (req, res) => {
+  try {
+    const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureCommerceOrdersTable(client);
+      const result = await client.query(
+        userId
+          ? "SELECT id, user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference, created_at FROM commerce_orders WHERE user_id = $1 ORDER BY created_at DESC"
+          : "SELECT id, user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference, created_at FROM commerce_orders ORDER BY created_at DESC",
+        userId ? [userId] : []
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar compras gerais." });
+  }
+});
+
+app.post("/commerce-orders", async (req, res) => {
+  const { userId, itemType, itemId, amount, currency, status, paymentMethod, paymentReference } = req.body ?? {};
+  if (!userId || !itemType || !itemId) {
+    return res.status(400).json({ message: "userId, itemType e itemId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureCommerceOrdersTable(client);
+      const result = await client.query(
+        "INSERT INTO commerce_orders (user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference, created_at",
+        [
+          userId,
+          itemType,
+          itemId,
+          Number(amount) || 0,
+          currency ?? "BRL",
+          status ?? "completed",
+          paymentMethod ?? "pix",
+          paymentReference ?? "",
+        ]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao registrar compra geral." });
   }
 });
 
@@ -377,6 +751,389 @@ app.post("/purchases", async (req, res) => {
   }
 });
 
+app.get("/cards/:userId", async (req, res) => {
+  const { userId } = req.params;
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      const existing = await client.query(
+        "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp, created_at, updated_at FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (!existing.rows[0]) {
+        return res.status(404).json({ message: "Carta não encontrada." });
+      }
+      res.json(existing.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao carregar carta." });
+  }
+});
+
+app.post("/cards/:userId", async (req, res) => {
+  const { userId } = req.params;
+  const { cpf } = req.body ?? {};
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      const existing = await client.query(
+        "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp, created_at, updated_at FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (existing.rows[0] && existing.rows[0].hash_seed) {
+        return res.json(existing.rows[0]);
+      }
+
+      const hashSeed = hashCpfUser(String(cpf || ""), userId);
+      const seed = seedFromHash(hashSeed);
+      const gamification = await getOrCreateGamification(client, userId);
+      const createdAt = await getUserCreatedAt(client, userId);
+      const accountAgeDays = createdAt ? Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 86400000)) : 0;
+      const level = Math.floor(Number(gamification.xp || 0) / 100) + 1;
+      const profile = generateCardProfile(seed, {
+        accountAgeDays,
+        usageScore: Number(gamification.usage_score || 0),
+        plan: gamification.plan || "free",
+        level,
+      });
+      const visualMeta = generateVisualMeta(seed);
+      const marketValue = computeMarketValue(profile.attributes, profile.rarity);
+      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta);
+      if (existing.rows[0]) {
+        const updated = await client.query(
+          "UPDATE user_cards SET seed = $2, hash_seed = $3, name = $4, species = $5, class = $6, rarity = $7, attributes = $8, visual_meta = $9, market_value = $10, image_url = $11, level = $12, xp = $13, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
+          [
+            userId,
+            seed,
+            hashSeed,
+            profile.name,
+            profile.species,
+            profile.className,
+            profile.rarity,
+            profile.attributes,
+            visualMeta,
+            marketValue,
+            imageUrl,
+            level,
+            Number(gamification.xp || 0),
+          ]
+        );
+        return res.json(updated.rows[0]);
+      }
+
+      const created = await client.query(
+        "INSERT INTO user_cards (user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
+        [
+          userId,
+          seed,
+          hashSeed,
+          profile.name,
+          profile.species,
+          profile.className,
+          profile.rarity,
+          profile.attributes,
+          visualMeta,
+          marketValue,
+          imageUrl,
+          level,
+          Number(gamification.xp || 0),
+        ]
+      );
+      return res.status(201).json(created.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao criar carta.";
+    if (message.toLowerCase().includes("cpf")) {
+      return res.status(400).json({ message });
+    }
+    res.status(500).json({ message });
+  }
+});
+
+app.post("/cards/:userId/xp", async (req, res) => {
+  const { userId } = req.params;
+  const { amount } = req.body ?? {};
+  const increment = Number(amount);
+  if (!userId || !Number.isFinite(increment)) {
+    return res.status(400).json({ message: "userId e amount são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      const gamification = await getOrCreateGamification(client, userId);
+      const newXp = Math.max(0, Number(gamification.xp || 0) + increment);
+      const level = Math.floor(newXp / 100) + 1;
+      await client.query(
+        "UPDATE user_gamification SET xp = $2, updated_at = NOW() WHERE user_id = $1",
+        [userId, newXp]
+      );
+      const existingCard = await client.query(
+        "SELECT hash_seed FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (!existingCard.rows[0]) {
+        return res.status(404).json({ message: "Carta não encontrada." });
+      }
+      const createdAt = await getUserCreatedAt(client, userId);
+      const accountAgeDays = createdAt ? Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / 86400000)) : 0;
+      const seed = seedFromHash(String(existingCard.rows[0].hash_seed || ""));
+      const profile = generateCardProfile(seed, {
+        accountAgeDays,
+        usageScore: Number(gamification.usage_score || 0),
+        plan: gamification.plan || "free",
+        level,
+      });
+      const visualMeta = generateVisualMeta(seed);
+      const marketValue = computeMarketValue(profile.attributes, profile.rarity);
+      const imageUrl = await ensureAlienImage(userId, profile.name, profile.rarity, visualMeta);
+      const updated = await client.query(
+        "UPDATE user_cards SET name = $3, species = $4, class = $5, rarity = $6, attributes = $7, visual_meta = $8, market_value = $9, image_url = $10, level = $11, xp = $12, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
+        [userId, seed, profile.name, profile.species, profile.className, profile.rarity, profile.attributes, visualMeta, marketValue, imageUrl, level, newXp]
+      );
+      res.json(updated.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao adicionar XP." });
+  }
+});
+
+app.post("/gamification", async (req, res) => {
+  const { userId, plan, usageScore } = req.body ?? {};
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserGamificationTable(client);
+      const existing = await client.query("SELECT user_id FROM user_gamification WHERE user_id = $1", [userId]);
+      if (existing.rows[0]) {
+        const updated = await client.query(
+          "UPDATE user_gamification SET plan = $2, usage_score = $3, updated_at = NOW() WHERE user_id = $1 RETURNING user_id, plan, usage_score, xp, created_at, updated_at",
+          [userId, plan ?? "free", Number(usageScore) || 0]
+        );
+        return res.json(updated.rows[0]);
+      }
+      const created = await client.query(
+        "INSERT INTO user_gamification (user_id, plan, usage_score, xp) VALUES ($1, $2, $3, $4) RETURNING user_id, plan, usage_score, xp, created_at, updated_at",
+        [userId, plan ?? "free", Number(usageScore) || 0, 0]
+      );
+      res.status(201).json(created.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao salvar gamificação." });
+  }
+});
+
+app.get("/internal-accounts", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      const account = await getOrCreateInternalAccount(client, userId);
+      res.json(account);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao carregar saldo interno." });
+  }
+});
+
+app.post("/internal-accounts/credit", async (req, res) => {
+  const { userId, amount, reason } = req.body ?? {};
+  const value = Number(amount);
+  if (!userId || !Number.isFinite(value) || value <= 0) {
+    return res.status(400).json({ message: "userId e amount são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureInternalAccountsTable(client);
+      await client.query("BEGIN");
+      await getOrCreateInternalAccount(client, userId);
+      const updated = await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1 RETURNING user_id, balance, updated_at",
+        [userId, value]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [null, userId, value, reason ?? "credit"]
+      );
+      await client.query("COMMIT");
+      res.status(201).json(updated.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao creditar saldo interno." });
+  }
+});
+
+app.get("/card-listings", async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : "active";
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      await ensureCardMarketplaceTables(client);
+      const result = await client.query(
+        "SELECT cl.id, cl.card_id, cl.seller_user_id, cl.price, cl.status, cl.created_at, uc.name, uc.species, uc.class, uc.rarity, uc.attributes, uc.level, uc.xp, uc.image_url FROM card_listings cl JOIN user_cards uc ON uc.id = cl.card_id WHERE cl.status = $1 ORDER BY cl.created_at DESC",
+        [status]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar marketplace." });
+  }
+});
+
+app.post("/card-listings", async (req, res) => {
+  const { userId, cardId, price } = req.body ?? {};
+  const value = Number(price);
+  if (!userId || !cardId || !Number.isFinite(value) || value <= 0) {
+    return res.status(400).json({ message: "userId, cardId e price são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      await ensureCardMarketplaceTables(client);
+      const card = await client.query("SELECT id, user_id FROM user_cards WHERE id = $1", [cardId]);
+      if (!card.rows[0] || card.rows[0].user_id !== userId) {
+        return res.status(403).json({ message: "Você não pode listar esta carta." });
+      }
+      const listing = await client.query(
+        "INSERT INTO card_listings (card_id, seller_user_id, price, status) VALUES ($1, $2, $3, $4) RETURNING id, card_id, seller_user_id, price, status, created_at",
+        [cardId, userId, value, "active"]
+      );
+      res.status(201).json(listing.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao criar anúncio." });
+  }
+});
+
+app.post("/card-listings/:id/buy", async (req, res) => {
+  const { id } = req.params;
+  const { buyerId } = req.body ?? {};
+  if (!buyerId) {
+    return res.status(400).json({ message: "buyerId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureUserCardsTable(client);
+      await ensureCardMarketplaceTables(client);
+      await ensureInternalAccountsTable(client);
+      await ensureCommerceOrdersTable(client);
+
+      await client.query("BEGIN");
+      const listing = await client.query(
+        "SELECT id, card_id, seller_user_id, price, status FROM card_listings WHERE id = $1 FOR UPDATE",
+        [id]
+      );
+      const entry = listing.rows[0];
+      if (!entry || entry.status !== "active") {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Anúncio não disponível." });
+      }
+      if (entry.seller_user_id === buyerId) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Você não pode comprar sua própria carta." });
+      }
+
+      const buyerAccount = await getOrCreateInternalAccount(client, buyerId);
+      if (Number(buyerAccount.balance) < Number(entry.price)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Saldo insuficiente." });
+      }
+
+      await getOrCreateInternalAccount(client, entry.seller_user_id);
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [buyerId, entry.price]
+      );
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+        [entry.seller_user_id, entry.price]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [buyerId, entry.seller_user_id, entry.price, "card_purchase"]
+      );
+
+      await client.query(
+        "UPDATE user_cards SET user_id = $2, updated_at = NOW() WHERE id = $1",
+        [entry.card_id, buyerId]
+      );
+      await client.query(
+        "UPDATE card_listings SET status = 'sold' WHERE id = $1",
+        [id]
+      );
+      const tx = await client.query(
+        "INSERT INTO card_transactions (card_id, seller_user_id, buyer_user_id, price) VALUES ($1, $2, $3, $4) RETURNING id, card_id, seller_user_id, buyer_user_id, price, created_at",
+        [entry.card_id, entry.seller_user_id, buyerId, entry.price]
+      );
+      await client.query(
+        "INSERT INTO commerce_orders (user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [buyerId, "card", String(entry.card_id), entry.price, "BRL", "completed", "internal", "card_listing"]
+      );
+      await client.query("COMMIT");
+      res.status(201).json(tx.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao comprar carta." });
+  }
+});
+
 app.get("/projects", async (req, res) => {
   try {
     const pool = await getPool();
@@ -419,10 +1176,17 @@ app.post("/projects", async (req, res) => {
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
+  if (!ownerUserId) {
+    return res.status(400).json({ message: "ownerUserId é obrigatório." });
+  }
   try {
     const pool = await getPool();
     const client = await pool.connect();
     try {
+      const confirmed = await hasPixConfirmation(client, ownerUserId);
+      if (!confirmed) {
+        return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
+      }
       const result = await client.query(
         "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
         [
@@ -438,7 +1202,7 @@ app.post("/projects", async (req, res) => {
           status ?? "Ativo",
           !!paid,
           isPublic === undefined ? true : !!isPublic,
-          ownerUserId ?? "",
+          ownerUserId,
         ]
       );
       res.status(201).json(result.rows[0]);
@@ -446,6 +1210,10 @@ app.post("/projects", async (req, res) => {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
+        const confirmed = await hasPixConfirmation(client, ownerUserId);
+        if (!confirmed) {
+          return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
+        }
         const retry = await client.query(
           "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
           [
@@ -461,7 +1229,7 @@ app.post("/projects", async (req, res) => {
             status ?? "Ativo",
             !!paid,
             isPublic === undefined ? true : !!isPublic,
-            ownerUserId ?? "",
+            ownerUserId,
           ]
         );
         res.status(201).json(retry.rows[0]);

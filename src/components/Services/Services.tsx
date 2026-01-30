@@ -27,19 +27,31 @@ const Services: React.FC = () => {
           <TabPanel>
             <div className="service-category">
               <div className="service-item">
-                <h2>{t('services.software.webDevelopment')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🌐</span>
+                  {t('services.software.webDevelopment')}
+                </h2>
                 <p>{t('services.software.webDevelopmentDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.software.mobileDevelopment')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">📱</span>
+                  {t('services.software.mobileDevelopment')}
+                </h2>
                 <p>{t('services.software.mobileDevelopmentDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.software.cloud')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">☁️</span>
+                  {t('services.software.cloud')}
+                </h2>
                 <p>{t('services.software.cloudDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.software.iot')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">📡</span>
+                  {t('services.software.iot')}
+                </h2>
                 <p>{t('services.software.iotDesc')}</p>
               </div>
             </div>
@@ -49,11 +61,17 @@ const Services: React.FC = () => {
           <TabPanel>
             <div className="service-category">
               <div className="service-item">
-                <h2>{t('services.electronics.vehicleMaintenance')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🚗</span>
+                  {t('services.electronics.vehicleMaintenance')}
+                </h2>
                 <p>{t('services.electronics.vehicleMaintenanceDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.electronics.lithiumBatteryRecovery')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🔋</span>
+                  {t('services.electronics.lithiumBatteryRecovery')}
+                </h2>
                 <p>{t('services.electronics.lithiumBatteryRecoveryDesc')}</p>
               </div>
             </div>
@@ -63,11 +81,17 @@ const Services: React.FC = () => {
           <TabPanel>
             <div className="service-category">
               <div className="service-item">
-                <h2>{t('services.prototyping.drawing3d')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🧱</span>
+                  {t('services.prototyping.drawing3d')}
+                </h2>
                 <p>{t('services.prototyping.drawing3dDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.prototyping.3dPrinting')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🖨️</span>
+                  {t('services.prototyping.3dPrinting')}
+                </h2>
                 <p>{t('services.prototyping.3dPrintingDesc')}</p>
               </div>
             </div>
@@ -77,22 +101,34 @@ const Services: React.FC = () => {
           <TabPanel>
             <div className="service-category">
               <div className="service-item">
-                <h2>{t('services.education.lectures')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🎤</span>
+                  {t('services.education.lectures')}
+                </h2>
                 <p>{t('services.education.lecturesDesc')}</p>
               </div>
 
               <div className="service-item">
-                <h2>{t('services.education.privateClasses')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">👨‍🏫</span>
+                  {t('services.education.privateClasses')}
+                </h2>
                 <p>{t('services.education.privateClassesDesc')}</p>
               </div>
 
               <div className="service-item">
-                <h2>{t('services.education.stem')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🧠</span>
+                  {t('services.education.stem')}
+                </h2>
                 <p>{t('services.education.stemDesc')}</p>
               </div>
 
               <div className="service-item">
-                <h2>{t('services.education.kits')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🧰</span>
+                  {t('services.education.kits')}
+                </h2>
                 <p>{t('services.education.kitsDesc')}</p>
               </div>
             </div>
@@ -102,15 +138,24 @@ const Services: React.FC = () => {
           <TabPanel>
             <div className="service-category">
               <div className="service-item">
-                <h2>{t('services.business.businessPlan')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">📝</span>
+                  {t('services.business.businessPlan')}
+                </h2>
                 <p>{t('services.business.businessPlanDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.business.agileMethodology')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🔁</span>
+                  {t('services.business.agileMethodology')}
+                </h2>
                 <p>{t('services.business.agileMethodologyDesc')}</p>
               </div>
               <div className="service-item">
-                <h2>{t('services.business.managementSystem')}</h2>
+                <h2>
+                  <span className="service-item-icon" aria-hidden="true">🗂️</span>
+                  {t('services.business.managementSystem')}
+                </h2>
                 <p>{t('services.business.managementSystemDesc')}</p>
               </div>
             </div>

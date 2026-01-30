@@ -14,6 +14,7 @@ interface Item {
   description: string;
   price?: number;
   image: string;
+  type: string;
 }
 
 const ProductCard: React.FC = () => {
@@ -42,41 +43,61 @@ const ProductCard: React.FC = () => {
   }, []);
 
   const items: Item[] = useMemo(() => {
-    return products
-      .filter((product) => product.showOnHome)
-      .map((product, index) => {
-        const numericPrice = Number(
-          String(product.salePrice ?? product.price)
-            .replace('R$', '')
-            .replace('.', '')
-            .replace(',', '.')
-            .trim()
-        );
-        return {
-          name: product.name,
-          description: product.description,
-          price: Number.isNaN(numericPrice) ? undefined : numericPrice,
-          image: imagePool[index % imagePool.length],
-        };
-      });
+    const featured = products.filter((product) => product.showOnHome);
+    return featured.map((product, index) => {
+      const numericPrice = Number(
+        String(product.salePrice ?? product.price)
+          .replace('R$', '')
+          .replace('.', '')
+          .replace(',', '.')
+          .trim()
+      );
+      return {
+        name: product.name,
+        description: product.description,
+        price: Number.isNaN(numericPrice) ? undefined : numericPrice,
+        image: imagePool[index % imagePool.length],
+        type: product.productType || 'digital',
+      };
+    });
   }, [products]);
+
+  const typeLabel = (type: string) => {
+    if (type === 'servico') return 'Serviço';
+    if (type === 'fisico') return 'Produto físico';
+    if (type === 'assinatura') return 'Assinatura';
+    if (type === 'projeto') return 'Projeto';
+    return 'Produto digital';
+  };
+
+  const slidesToShow = Math.min(items.length || 1, 3);
+  const slidesToShowTablet = Math.min(items.length || 1, 2);
+  const slidesToShowMobile = 1;
 
   const settings = {
     dots: true,
-    infinite: true,
+    infinite: items.length > slidesToShow,
     speed: 500,
-    slidesToShow: 3,
+    slidesToShow,
     slidesToScroll: 1,
-    autoplay: true,
+    autoplay: items.length > slidesToShow,
     autoplaySpeed: 4000,
     responsive: [
       {
         breakpoint: 1024,
-        settings: { slidesToShow: 2 },
+        settings: {
+          slidesToShow: slidesToShowTablet,
+          infinite: items.length > slidesToShowTablet,
+          autoplay: items.length > slidesToShowTablet,
+        },
       },
       {
         breakpoint: 600,
-        settings: { slidesToShow: 1 },
+        settings: {
+          slidesToShow: slidesToShowMobile,
+          infinite: items.length > slidesToShowMobile,
+          autoplay: items.length > slidesToShowMobile,
+        },
       },
     ],
   };
@@ -87,7 +108,7 @@ const ProductCard: React.FC = () => {
         <div className="product-header">
           <div className="text-container">
             <h1>Produtos & Serviços</h1>
-            <p className="product-description">
+            <p className="product-header-description">
               Oferecemos kits educacionais, produtos tecnológicos e serviços
               especializados como impressão 3D, sempre com foco em aprendizado
               prático e soluções reais.
@@ -106,7 +127,7 @@ const ProductCard: React.FC = () => {
           {loading && <p>Carregando produtos...</p>}
           {!loading && error && <p>{error}</p>}
           {!loading && !error && items.length === 0 && (
-            <p>Nenhum produto disponível para a Home.</p>
+            <p>Nenhum produto marcado para exibição na Home.</p>
           )}
           {!loading && !error && items.length > 0 && (
             <Slider {...settings}>
@@ -120,9 +141,11 @@ const ProductCard: React.FC = () => {
                     />
 
                     <div className="product-info">
-                      <span className="product-badge product">Produto</span>
+                      <span className={`product-badge ${item.type}`}>
+                        {typeLabel(item.type)}
+                      </span>
                       <h2>{item.name}</h2>
-                      <p className="product-text">{item.description}</p>
+                      <p className="product-description">{item.description}</p>
                       {item.price !== undefined && !Number.isNaN(item.price) && (
                         <p className="product-price">
                           R$ {item.price.toFixed(2).replace('.', ',')}
