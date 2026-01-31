@@ -276,68 +276,85 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
   const eyes = Math.max(1, Number(visualMeta?.eyes ?? 2));
   const horns = Math.max(0, Number(visualMeta?.horns ?? 0));
   const aura = Number(visualMeta?.aura ?? 0);
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
+  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 480 640\" width=\"480\" height=\"640\">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${palette.secondary}" />
-      <stop offset="100%" stop-color="#020617" />
+    <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
+      <stop offset=\"0%\" stop-color=\"${palette.secondary}\" />
+      <stop offset=\"100%\" stop-color=\"#020617\" />
     </linearGradient>
-    <radialGradient id="core" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="${palette.primary}" stop-opacity="0.9" />
-      <stop offset="100%" stop-color="${palette.secondary}" stop-opacity="0.9" />
+    <radialGradient id=\"core\" cx=\"50%\" cy=\"35%\" r=\"60%\">
+      <stop offset=\"0%\" stop-color=\"${palette.primary}\" stop-opacity=\"0.95\" />
+      <stop offset=\"100%\" stop-color=\"${palette.secondary}\" stop-opacity=\"0.9\" />
     </radialGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="12" result="coloredBlur" />
+    <linearGradient id=\"glass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">
+      <stop offset=\"0%\" stop-color=\"rgba(255,255,255,0.16)\" />
+      <stop offset=\"100%\" stop-color=\"rgba(255,255,255,0.02)\" />
+    </linearGradient>
+    <filter id=\"glow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\">
+      <feGaussianBlur stdDeviation=\"14\" result=\"coloredBlur\" />
       <feMerge>
-        <feMergeNode in="coloredBlur" />
-        <feMergeNode in="SourceGraphic" />
+        <feMergeNode in=\"coloredBlur\" />
+        <feMergeNode in=\"SourceGraphic\" />
       </feMerge>
     </filter>
-    <pattern id="pattern-0" width="40" height="40" patternUnits="userSpaceOnUse">
-      <circle cx="8" cy="8" r="3" fill="${palette.accent}" fill-opacity="0.35" />
+    <pattern id=\"stars\" width=\"80\" height=\"80\" patternUnits=\"userSpaceOnUse\">
+      <circle cx=\"10\" cy=\"12\" r=\"2\" fill=\"#e2e8f0\" opacity=\"0.3\" />
+      <circle cx=\"60\" cy=\"20\" r=\"1.5\" fill=\"#f8fafc\" opacity=\"0.4\" />
+      <circle cx=\"40\" cy=\"60\" r=\"1.2\" fill=\"#cbd5f5\" opacity=\"0.35\" />
     </pattern>
-    <pattern id="pattern-1" width="48" height="48" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="48" height="48" fill="${palette.secondary}" />
-      <path d="M0 0 L48 48 M48 0 L0 48" stroke="${palette.accent}" stroke-opacity="0.25" />
+    <pattern id=\"pattern-0\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\">
+      <circle cx=\"8\" cy=\"8\" r=\"3\" fill=\"${palette.accent}\" fill-opacity=\"0.35\" />
     </pattern>
-    <pattern id="pattern-2" width="36" height="36" patternUnits="userSpaceOnUse">
-      <circle cx="18" cy="18" r="9" fill="${palette.accent}" fill-opacity="0.25" />
+    <pattern id=\"pattern-1\" width=\"48\" height=\"48\" patternUnits=\"userSpaceOnUse\">
+      <rect x=\"0\" y=\"0\" width=\"48\" height=\"48\" fill=\"${palette.secondary}\" />
+      <path d=\"M0 0 L48 48 M48 0 L0 48\" stroke=\"${palette.accent}\" stroke-opacity=\"0.25\" />
     </pattern>
-    <pattern id="pattern-3" width="60" height="60" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="60" height="60" fill="${palette.secondary}" />
-      <circle cx="30" cy="30" r="12" fill="${palette.accent}" fill-opacity="0.3" />
+    <pattern id=\"pattern-2\" width=\"36\" height=\"36\" patternUnits=\"userSpaceOnUse\">
+      <circle cx=\"18\" cy=\"18\" r=\"9\" fill=\"${palette.accent}\" fill-opacity=\"0.25\" />
     </pattern>
-    <pattern id="pattern-4" width="50" height="50" patternUnits="userSpaceOnUse">
-      <path d="M0 25 L50 25" stroke="${palette.accent}" stroke-opacity="0.2" />
-      <path d="M25 0 L25 50" stroke="${palette.accent}" stroke-opacity="0.2" />
+    <pattern id=\"pattern-3\" width=\"60\" height=\"60\" patternUnits=\"userSpaceOnUse\">
+      <rect x=\"0\" y=\"0\" width=\"60\" height=\"60\" fill=\"${palette.secondary}\" />
+      <circle cx=\"30\" cy=\"30\" r=\"12\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
     </pattern>
-    <pattern id="pattern-5" width="42" height="42" patternUnits="userSpaceOnUse">
-      <circle cx="10" cy="32" r="4" fill="${palette.accent}" fill-opacity="0.3" />
-      <circle cx="32" cy="10" r="4" fill="${palette.accent}" fill-opacity="0.3" />
+    <pattern id=\"pattern-4\" width=\"50\" height=\"50\" patternUnits=\"userSpaceOnUse\">
+      <path d=\"M0 25 L50 25\" stroke=\"${palette.accent}\" stroke-opacity=\"0.2\" />
+      <path d=\"M25 0 L25 50\" stroke=\"${palette.accent}\" stroke-opacity=\"0.2\" />
+    </pattern>
+    <pattern id=\"pattern-5\" width=\"42\" height=\"42\" patternUnits=\"userSpaceOnUse\">
+      <circle cx=\"10\" cy=\"32\" r=\"4\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
+      <circle cx=\"32\" cy=\"10\" r=\"4\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
     </pattern>
   </defs>
-  <rect width="480" height="640" rx="32" fill="url(#bg)" />
-  <rect x="32" y="48" width="416" height="480" rx="28" fill="url(#${patternId})" opacity="0.5" />
-  ${aura === 1 ? `<circle cx="240" cy="260" r="175" fill="${palette.accent}" opacity="0.08" />` : ""}
-  ${aura === 2 ? `<circle cx="240" cy="260" r="185" fill="${palette.primary}" opacity="0.08" />` : ""}
+  <rect width=\"480\" height=\"640\" rx=\"32\" fill=\"url(#bg)\" />
+  <rect width=\"480\" height=\"640\" fill=\"url(#stars)\" opacity=\"0.3\" />
+  <rect x=\"36\" y=\"54\" width=\"408\" height=\"512\" rx=\"28\" fill=\"url(#glass)\" stroke=\"rgba(148,163,184,0.2)\" />
+  <rect x=\"50\" y=\"70\" width=\"380\" height=\"460\" rx=\"24\" fill=\"url(#${patternId})\" opacity=\"0.25\" />
+  ${aura === 1 ? `<circle cx=\"240\" cy=\"260\" r=\"200\" fill=\"${palette.accent}\" opacity=\"0.08\" />` : ""}
+  ${aura === 2 ? `<circle cx=\"240\" cy=\"260\" r=\"210\" fill=\"${palette.primary}\" opacity=\"0.08\" />` : ""}
   <g ${glow}>
-    <ellipse cx="240" cy="260" rx="120" ry="150" fill="url(#core)" />
-    ${Array.from({ length: eyes }).map((_, idx) => {
-      const offset = eyes === 1 ? 0 : (idx - (eyes - 1) / 2) * 50;
-      return `
-    <ellipse cx="${240 + offset}" cy="240" rx="18" ry="26" fill="${palette.accent}" />
-    <circle cx="${240 + offset}" cy="245" r="7" fill="#0f172a" />`;
-    }).join("")}
+    <circle cx=\"240\" cy=\"250\" r=\"125\" fill=\"${palette.primary}\" />
+    <ellipse cx=\"240\" cy=\"360\" rx=\"120\" ry=\"100\" fill=\"${palette.secondary}\" opacity=\"0.2\" />
     ${Array.from({ length: horns }).map((_, idx) => {
-      const offset = horns === 1 ? 0 : (idx - (horns - 1) / 2) * 40;
+      const offset = horns === 1 ? 0 : (idx - (horns - 1) / 2) * 48;
       return `
-    <path d="M${240 + offset - 10} 140 Q${240 + offset} 90 ${240 + offset + 10} 140" stroke="${palette.accent}" stroke-width="6" fill="none" />`;
+    <path d=\"M${240 + offset - 18} 120 Q${240 + offset} 70 ${240 + offset + 18} 120\" stroke=\"${palette.accent}\" stroke-width=\"10\" fill=\"none\" />`;
     }).join("")}
-    <path d="M210 300 Q240 320 270 300" stroke="${palette.accent}" stroke-width="8" fill="none" stroke-linecap="round" />
+    ${Array.from({ length: eyes }).map((_, idx) => {
+      const offset = eyes === 1 ? 0 : (idx - (eyes - 1) / 2) * 58;
+      return `
+    <circle cx=\"${240 + offset}\" cy=\"235\" r=\"26\" fill=\"#f8fafc\" />
+    <circle cx=\"${240 + offset}\" cy=\"235\" r=\"12\" fill=\"#0f172a\" />
+    <circle cx=\"${240 + offset + 6}\" cy=\"230\" r=\"4\" fill=\"#ffffff\" opacity=\"0.8\" />`;
+    }).join("")}
+    <path d=\"M210 300 Q240 330 270 300\" stroke=\"${palette.accent}\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\" />
+    <circle cx=\"190\" cy=\"290\" r=\"8\" fill=\"${palette.accent}\" opacity=\"0.6\" />
+    <circle cx=\"290\" cy=\"290\" r=\"8\" fill=\"${palette.accent}\" opacity=\"0.6\" />
+    <ellipse cx=\"180\" cy=\"360\" rx=\"55\" ry=\"35\" fill=\"${palette.primary}\" opacity=\"0.8\" />
+    <ellipse cx=\"300\" cy=\"360\" rx=\"55\" ry=\"35\" fill=\"${palette.primary}\" opacity=\"0.8\" />
   </g>
-  <text x="50%" y="560" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${name}</text>
-  <text x="50%" y="592" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="'Segoe UI', sans-serif">${rarity.toUpperCase()}</text>
+  <text x=\"50%\" y=\"565\" text-anchor=\"middle\" fill=\"#e2e8f0\" font-size=\"24\" font-family=\"'Segoe UI', sans-serif\">${name}</text>
+  <text x=\"50%\" y=\"595\" text-anchor=\"middle\" fill=\"#94a3b8\" font-size=\"13\" font-family=\"'Segoe UI', sans-serif\">${rarity.toUpperCase()}</text>
 </svg>`;
 }
 
@@ -354,16 +371,20 @@ async function ensureAlienImage(userId: string, name: string, rarity: string, vi
   const file = bucket.file(`aliens/${userId}-${hashSeed.slice(0, 12)}.svg`);
   const svg = generateAlienSvg(name, rarity, visualMeta);
   await file.save(svg, { contentType: "image/svg+xml", resumable: false, public: true });
+  const withVersion = (url: string) => {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}v=${Date.now()}`;
+  };
   try {
     await file.makePublic();
-    return file.publicUrl();
+    return withVersion(file.publicUrl());
   } catch (error) {
     console.warn("Falha ao tornar imagem pública", error);
     const [signedUrl] = await file.getSignedUrl({
       action: "read",
       expires: "01-01-2036",
     });
-    return signedUrl;
+    return withVersion(signedUrl);
   }
 }
 
@@ -825,7 +846,18 @@ app.get("/cards/:userId", async (req, res) => {
       if (!existing.rows[0]) {
         return res.status(404).json({ message: "Carta não encontrada." });
       }
-      res.json(existing.rows[0]);
+      const row = existing.rows[0];
+      const visualMetaEmpty = !row.visual_meta || Object.keys(row.visual_meta || {}).length === 0;
+      if (row.hash_seed && (visualMetaEmpty || !row.image_url)) {
+        const visualMeta = generateVisualMetaFromHash(String(row.hash_seed));
+        const imageUrl = await ensureAlienImage(row.user_id, row.name, row.rarity, visualMeta, String(row.hash_seed));
+        const updated = await client.query(
+          "UPDATE user_cards SET visual_meta = $2, image_url = $3, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, market_value, image_url, level, xp, created_at, updated_at",
+          [row.user_id, visualMeta, imageUrl]
+        );
+        return res.json(updated.rows[0]);
+      }
+      res.json(row);
     } finally {
       client.release();
     }

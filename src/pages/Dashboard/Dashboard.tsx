@@ -111,13 +111,9 @@ const Dashboard: React.FC = () => {
     setAlienLoading(true);
     setAlienError(null);
     try {
-      const card = await fetchUserCard(userId);
-      if (!card.imageUrl) {
-        const refreshed = await refreshAlienCard(userId);
-        setAlienCard(refreshed);
-      } else {
-        setAlienCard(card);
-      }
+      await fetchUserCard(userId);
+      const refreshed = await refreshAlienCard(userId);
+      setAlienCard(refreshed);
     } catch (error) {
       console.error('Erro ao carregar carta:', error);
       setAlienError(error instanceof Error ? error.message : 'Não foi possível carregar sua carta alienígena.');
@@ -225,8 +221,25 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleRefreshVisual = async () => {
+    if (!userId) return;
+    setAlienLoading(true);
+    setAlienError(null);
+    try {
+      const refreshed = await refreshAlienCard(userId);
+      setAlienCard(refreshed);
+    } catch (error) {
+      console.error('Erro ao atualizar visual:', error);
+      setAlienError(error instanceof Error ? error.message : 'Não foi possível atualizar o visual.');
+    } finally {
+      setAlienLoading(false);
+    }
+  };
+
   const buildAlienSvg = (card: CardDTO) => {
     const palette = card.visualMeta?.palette || { primary: '#38bdf8', secondary: '#0f172a', accent: '#22d3ee' };
+    const eyes = Math.max(1, Number(card.visualMeta?.eyes ?? 2));
+    const horns = Math.max(0, Number(card.visualMeta?.horns ?? 0));
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
   <defs>
@@ -234,22 +247,46 @@ const Dashboard: React.FC = () => {
       <stop offset="0%" stop-color="${palette.secondary}" />
       <stop offset="100%" stop-color="#020617" />
     </linearGradient>
-    <radialGradient id="core" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="${palette.primary}" stop-opacity="0.9" />
+    <radialGradient id="core" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="${palette.primary}" stop-opacity="0.95" />
       <stop offset="100%" stop-color="${palette.secondary}" stop-opacity="0.9" />
     </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.16)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.02)" />
+    </linearGradient>
+    <pattern id="stars" width="80" height="80" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="12" r="2" fill="#e2e8f0" opacity="0.3" />
+      <circle cx="60" cy="20" r="1.5" fill="#f8fafc" opacity="0.4" />
+      <circle cx="40" cy="60" r="1.2" fill="#cbd5f5" opacity="0.35" />
+    </pattern>
   </defs>
   <rect width="480" height="640" rx="32" fill="url(#bg)" />
+  <rect width="480" height="640" fill="url(#stars)" opacity="0.3" />
+  <rect x="36" y="54" width="408" height="512" rx="28" fill="url(#glass)" stroke="rgba(148,163,184,0.2)" />
   <g>
-    <ellipse cx="240" cy="260" rx="120" ry="150" fill="url(#core)" />
-    <ellipse cx="200" cy="240" rx="22" ry="30" fill="${palette.accent}" />
-    <ellipse cx="280" cy="240" rx="22" ry="30" fill="${palette.accent}" />
-    <circle cx="200" cy="245" r="8" fill="#0f172a" />
-    <circle cx="280" cy="245" r="8" fill="#0f172a" />
-    <path d="M210 300 Q240 320 270 300" stroke="${palette.accent}" stroke-width="8" fill="none" stroke-linecap="round" />
+    <circle cx="240" cy="250" r="125" fill="${palette.primary}" />
+    <ellipse cx="240" cy="360" rx="120" ry="100" fill="${palette.secondary}" opacity="0.2" />
+    ${Array.from({ length: horns }).map((_, idx) => {
+      const offset = horns === 1 ? 0 : (idx - (horns - 1) / 2) * 48;
+      return `
+    <path d="M${240 + offset - 18} 120 Q${240 + offset} 70 ${240 + offset + 18} 120" stroke="${palette.accent}" stroke-width="10" fill="none" />`;
+    }).join("")}
+    ${Array.from({ length: eyes }).map((_, idx) => {
+      const offset = eyes === 1 ? 0 : (idx - (eyes - 1) / 2) * 58;
+      return `
+    <circle cx="${240 + offset}" cy="235" r="26" fill="#f8fafc" />
+    <circle cx="${240 + offset}" cy="235" r="12" fill="#0f172a" />
+    <circle cx="${240 + offset + 6}" cy="230" r="4" fill="#ffffff" opacity="0.8" />`;
+    }).join("")}
+    <path d="M210 300 Q240 330 270 300" stroke="${palette.accent}" stroke-width="10" fill="none" stroke-linecap="round" />
+    <circle cx="190" cy="290" r="8" fill="${palette.accent}" opacity="0.6" />
+    <circle cx="290" cy="290" r="8" fill="${palette.accent}" opacity="0.6" />
+    <ellipse cx="180" cy="360" rx="55" ry="35" fill="${palette.primary}" opacity="0.8" />
+    <ellipse cx="300" cy="360" rx="55" ry="35" fill="${palette.primary}" opacity="0.8" />
   </g>
-  <text x="50%" y="560" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${card.name}</text>
-  <text x="50%" y="592" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="'Segoe UI', sans-serif">${card.rarity.toUpperCase()}</text>
+  <text x="50%" y="565" text-anchor="middle" fill="#e2e8f0" font-size="24" font-family="'Segoe UI', sans-serif">${card.name}</text>
+  <text x="50%" y="595" text-anchor="middle" fill="#94a3b8" font-size="13" font-family="'Segoe UI', sans-serif">${card.rarity.toUpperCase()}</text>
 </svg>`;
   };
 
@@ -687,7 +724,7 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="alien-actions">
                     <button className="action-button" onClick={loadAlienCard}>Atualizar perfil</button>
-                    <button className="action-button action-button--ghost" onClick={() => refreshAlienCard(userId).then(setAlienCard).catch((err) => setAlienError(err.message))}>
+                    <button className="action-button action-button--ghost" onClick={handleRefreshVisual}>
                       Atualizar visual
                     </button>
                     <button className="action-button action-button--ghost" onClick={handleAddXp}>Ganhar XP</button>
