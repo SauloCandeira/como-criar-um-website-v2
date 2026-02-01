@@ -138,6 +138,27 @@ async function ensureCommerceOrdersTable(client: { query: (sql: string, params?:
   );
 }
 
+async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybots (user_id TEXT PRIMARY KEY, myalien_user_id TEXT DEFAULT '', stage TEXT DEFAULT 'assistant', stage_reason TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_stats (user_id TEXT PRIMARY KEY, content_accessed_count INTEGER DEFAULT 0, projects_purchased_count INTEGER DEFAULT 0, projects_created_count INTEGER DEFAULT 0, courses_started_count INTEGER DEFAULT 0, courses_completed_count INTEGER DEFAULT 0, marketplace_interactions_count INTEGER DEFAULT 0, tool_usage_count INTEGER DEFAULT 0, feedback_score INTEGER DEFAULT 0, last_event_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_events (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, event_type TEXT NOT NULL, source TEXT DEFAULT '', payload JSONB NOT NULL DEFAULT '{}'::jsonb, reversible BOOLEAN DEFAULT true, occurred_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW(), reverted_at TIMESTAMPTZ, correlation_id TEXT DEFAULT '', version INTEGER DEFAULT 1)"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_memory (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, layer TEXT NOT NULL, memory_key TEXT NOT NULL, value JSONB NOT NULL, version INTEGER DEFAULT 1, is_active BOOLEAN DEFAULT true, last_event_id UUID, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE INDEX IF NOT EXISTS mybot_memory_user_layer_idx ON mybot_memory (user_id, layer)"
+  );
+  await client.query(
+    "CREATE INDEX IF NOT EXISTS mybot_events_user_idx ON mybot_events (user_id, occurred_at DESC)"
+  );
+}
+
 function inferProjectType(name: string) {
   const label = name.toLowerCase();
   if (label.includes("landing")) return "Landingpage";
@@ -164,6 +185,196 @@ const RARITY_MULTIPLIER: Record<string, number> = {
   epico: 1.9,
   lendario: 2.6,
 };
+
+const MYBOT_EVENT_TYPES = new Set([
+  "content_accessed",
+  "project_purchased",
+  "project_created",
+  "course_started",
+  "course_completed",
+  "marketplace_interaction",
+  "tool_usage",
+  "feedback_submitted",
+  "user_message",
+  "mybot_response",
+  "memory_reset",
+  "memory_updated",
+]);
+
+const MYBOT_MEMORY_LAYERS = new Set(["short", "mid", "long"]);
+
+type MyBotStage = "assistant" | "copilot" | "representative";
+
+const MYBOT_STAGE_RULES = {
+  assistantToCopilot: {
+    minCoursesCompleted: 2,
+    minProjectsCreated: 1,
+    minToolUsage: 10,
+  },
+  copilotToRepresentative: {
+    minProjectsCreated: 3,
+    minMarketplaceInteractions: 5,
+    minFeedbackScore: 5,
+  },
+};
+
+async function getOrCreateMyBot(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureMyBotTables(client);
+  const existing = await client.query("SELECT * FROM mybots WHERE user_id = $1", [userId]);
+  if (existing.rows[0]) return existing.rows[0];
+  const created = await client.query(
+    "INSERT INTO mybots (user_id, myalien_user_id) VALUES ($1, $1) RETURNING *",
+    [userId]
+  );
+  return created.rows[0];
+}
+
+async function getOrCreateMyBotStats(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  await ensureMyBotTables(client);
+  const existing = await client.query("SELECT * FROM mybot_stats WHERE user_id = $1", [userId]);
+  if (existing.rows[0]) return existing.rows[0];
+  const created = await client.query(
+    "INSERT INTO mybot_stats (user_id) VALUES ($1) RETURNING *",
+    [userId]
+  );
+  return created.rows[0];
+}
+
+function normalizeMyBotEventType(eventType: string) {
+  if (MYBOT_EVENT_TYPES.has(eventType)) return eventType;
+  if (eventType.startsWith("custom:")) return eventType;
+  return "custom:unknown";
+}
+
+function getMyBotEventDelta(eventType: string, payload: any) {
+  const score = Number(payload?.score ?? 1);
+  switch (eventType) {
+    case "content_accessed":
+      return { content_accessed_count: 1 };
+    case "project_purchased":
+      return { projects_purchased_count: 1 };
+    case "project_created":
+      return { projects_created_count: 1 };
+    case "course_started":
+      return { courses_started_count: 1 };
+    case "course_completed":
+      return { courses_completed_count: 1 };
+    case "marketplace_interaction":
+      return { marketplace_interactions_count: 1 };
+    case "tool_usage":
+      return { tool_usage_count: 1 };
+    case "feedback_submitted":
+      return { feedback_score: Number.isFinite(score) ? score : 1 };
+    default:
+      return {};
+  }
+}
+
+function evaluateMyBotStage(stats: any, currentStage: MyBotStage) {
+  const targetStage = deriveMyBotStageFromStats(stats);
+  const stageOrder: Record<MyBotStage, number> = {
+    assistant: 0,
+    copilot: 1,
+    representative: 2,
+  };
+  if (stageOrder[targetStage] > stageOrder[currentStage]) {
+    const reason =
+      targetStage === "copilot"
+        ? "Evoluiu por completar cursos e criar projetos com uso consistente de ferramentas."
+        : "Evoluiu por maturidade técnica e interações consistentes no marketplace.";
+    return { stage: targetStage, reason };
+  }
+  return { stage: currentStage, reason: "" };
+}
+
+function deriveMyBotStageFromStats(stats: any): MyBotStage {
+  const assistantRule = MYBOT_STAGE_RULES.assistantToCopilot;
+  const copilotRule = MYBOT_STAGE_RULES.copilotToRepresentative;
+  const qualifiesCopilot =
+    Number(stats.courses_completed_count || 0) >= assistantRule.minCoursesCompleted &&
+    Number(stats.projects_created_count || 0) >= assistantRule.minProjectsCreated &&
+    Number(stats.tool_usage_count || 0) >= assistantRule.minToolUsage;
+  const qualifiesRepresentative =
+    Number(stats.projects_created_count || 0) >= copilotRule.minProjectsCreated &&
+    Number(stats.marketplace_interactions_count || 0) >= copilotRule.minMarketplaceInteractions &&
+    Number(stats.feedback_score || 0) >= copilotRule.minFeedbackScore;
+
+  if (qualifiesRepresentative) return "representative";
+  if (qualifiesCopilot) return "copilot";
+  return "assistant";
+}
+
+async function upsertMyBotMemory(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  params: { userId: string; layer: string; key: string; value: any; lastEventId?: string }
+) {
+  const layer = params.layer;
+  if (!MYBOT_MEMORY_LAYERS.has(layer)) {
+    throw new Error("Camada de memória inválida.");
+  }
+  const result = await client.query(
+    "SELECT COALESCE(MAX(version), 0) AS max_version FROM mybot_memory WHERE user_id = $1 AND layer = $2 AND memory_key = $3",
+    [params.userId, layer, params.key]
+  );
+  const nextVersion = Number(result.rows[0]?.max_version || 0) + 1;
+  await client.query(
+    "UPDATE mybot_memory SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND layer = $2 AND memory_key = $3 AND is_active = true",
+    [params.userId, layer, params.key]
+  );
+  const inserted = await client.query(
+    "INSERT INTO mybot_memory (user_id, layer, memory_key, value, version, is_active, last_event_id) VALUES ($1, $2, $3, $4, $5, true, $6) RETURNING *",
+    [params.userId, layer, params.key, params.value, nextVersion, params.lastEventId || null]
+  );
+  return inserted.rows[0];
+}
+
+function buildMyBotResponse(params: {
+  message: string;
+  stage: MyBotStage;
+  stats: any;
+  memory: Array<{ layer: string; memory_key: string; value: any }>;
+}) {
+  const stageLabel: Record<MyBotStage, string> = {
+    assistant: "Assistente",
+    copilot: "Copiloto técnico",
+    representative: "Representante técnico",
+  };
+
+  const statsParts: string[] = [];
+  if (Number(params.stats?.courses_completed_count || 0) > 0) {
+    statsParts.push(`cursos concluídos: ${params.stats.courses_completed_count}`);
+  }
+  if (Number(params.stats?.projects_created_count || 0) > 0) {
+    statsParts.push(`projetos criados: ${params.stats.projects_created_count}`);
+  }
+  if (Number(params.stats?.tool_usage_count || 0) > 0) {
+    statsParts.push(`uso de ferramentas: ${params.stats.tool_usage_count}`);
+  }
+
+  const memoryHints: string[] = [];
+  for (const item of params.memory) {
+    const key = String(item.memory_key || "").toLowerCase();
+    if (key.includes("learning") || key.includes("aprend")) {
+      memoryHints.push("preferência de aprendizagem registrada");
+    }
+    if (key.includes("stack") || key.includes("tecnologia") || key.includes("domain") || key.includes("dominio")) {
+      memoryHints.push("área técnica registrada");
+    }
+  }
+
+  const lines: string[] = [];
+  lines.push(`Meu papel agora: ${stageLabel[params.stage]}.`);
+  if (statsParts.length) {
+    lines.push(`Resumo rápido do seu progresso: ${statsParts.join(", ")}.`);
+  }
+  if (memoryHints.length) {
+    lines.push(`Vou considerar ${[...new Set(memoryHints)].join(" e ")}.`);
+  }
+  lines.push("Posso explicar o passo a passo e sugerir próximos movimentos dentro da plataforma.");
+  lines.push("Quer que eu organize um plano curto ou uma explicação detalhada?");
+
+  return lines.join(" ");
+}
 
 function normalizeCpf(cpf: string) {
   return String(cpf || "").replace(/\D/g, "");
@@ -839,6 +1050,8 @@ app.get("/cards/:userId", async (req, res) => {
     const client = await pool.connect();
     try {
       await ensureUserCardsTable(client);
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
       const existing = await client.query(
         "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp, created_at, updated_at FROM user_cards WHERE user_id = $1",
         [userId]
@@ -878,6 +1091,8 @@ app.post("/cards/:userId", async (req, res) => {
     const client = await pool.connect();
     try {
       await ensureUserCardsTable(client);
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
       const existing = await client.query(
         "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp, created_at, updated_at FROM user_cards WHERE user_id = $1",
         [userId]
@@ -965,16 +1180,18 @@ app.post("/cards/:userId/refresh", async (req, res) => {
     const client = await pool.connect();
     try {
       await ensureUserCardsTable(client);
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
       const existing = await client.query(
         "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp FROM user_cards WHERE user_id = $1",
         [userId]
       );
       if (!existing.rows[0]) {
-        return res.status(404).json({ message: "Carta não encontrada." });
+        return res.status(404).json({ message: "My Bot não encontrado." });
       }
       const hashSeedValue = String(existing.rows[0].hash_seed || "");
       if (!hashSeedValue) {
-        return res.status(400).json({ message: "Informe o CPF para gerar o hash da carta." });
+        return res.status(400).json({ message: "Informe o CPF para ativar seu My Bot." });
       }
       const visualMeta = generateVisualMetaFromHash(hashSeedValue);
       const imageUrl = await ensureAlienImage(userId, existing.rows[0].name, existing.rows[0].rarity, visualMeta, hashSeedValue);
@@ -988,7 +1205,7 @@ app.post("/cards/:userId/refresh", async (req, res) => {
     }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Erro ao atualizar visual do alien." });
+    res.status(500).json({ message: "Erro ao atualizar visual do My Bot." });
   }
 });
 
@@ -1004,6 +1221,8 @@ app.post("/cards/:userId/xp", async (req, res) => {
     const client = await pool.connect();
     try {
       await ensureUserCardsTable(client);
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
       const gamification = await getOrCreateGamification(client, userId);
       const newXp = Math.max(0, Number(gamification.xp || 0) + increment);
       const level = Math.floor(newXp / 100) + 1;
@@ -1074,6 +1293,412 @@ app.post("/gamification", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao salvar gamificação." });
+  }
+});
+
+app.get("/mybot/:userId", async (req, res) => {
+  const { userId } = req.params;
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      const bot = await getOrCreateMyBot(client, userId);
+      const stats = await getOrCreateMyBotStats(client, userId);
+      const memorySummary = await client.query(
+        "SELECT layer, COUNT(*)::int AS count FROM mybot_memory WHERE user_id = $1 AND is_active = true GROUP BY layer",
+        [userId]
+      );
+      const events = await client.query(
+        "SELECT id, event_type, source, payload, reversible, occurred_at, created_at, reverted_at, correlation_id, version FROM mybot_events WHERE user_id = $1 ORDER BY occurred_at DESC LIMIT 20",
+        [userId]
+      );
+      res.json({ bot, stats, memorySummary: memorySummary.rows, recentEvents: events.rows });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao carregar My Bot." });
+  }
+});
+
+app.get("/mybot/:userId/events", async (req, res) => {
+  const { userId } = req.params;
+  const limit = Number(req.query.limit ?? 50);
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      const events = await client.query(
+        "SELECT id, event_type, source, payload, reversible, occurred_at, created_at, reverted_at, correlation_id, version FROM mybot_events WHERE user_id = $1 ORDER BY occurred_at DESC LIMIT $2",
+        [userId, Number.isFinite(limit) ? Math.min(200, Math.max(1, limit)) : 50]
+      );
+      res.json(events.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar eventos do My Bot." });
+  }
+});
+
+app.post("/mybot/:userId/events", async (req, res) => {
+  const { userId } = req.params;
+  const { type, source, payload, reversible, occurredAt, correlationId, memoryUpdates } = req.body ?? {};
+  if (!userId || !type) {
+    return res.status(400).json({ message: "userId e type são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      const bot = await getOrCreateMyBot(client, userId);
+      await getOrCreateMyBotStats(client, userId);
+
+      const eventType = normalizeMyBotEventType(String(type));
+      const eventPayload = payload ?? {};
+      const insertedEvent = await client.query(
+        "INSERT INTO mybot_events (user_id, event_type, source, payload, reversible, occurred_at, correlation_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        [
+          userId,
+          eventType,
+          String(source || ""),
+          eventPayload,
+          reversible !== undefined ? Boolean(reversible) : true,
+          occurredAt ? new Date(occurredAt) : new Date(),
+          String(correlationId || ""),
+        ]
+      );
+
+      const delta = getMyBotEventDelta(eventType, eventPayload);
+      const updatedStats = await client.query(
+        "UPDATE mybot_stats SET content_accessed_count = GREATEST(0, content_accessed_count + $2), projects_purchased_count = GREATEST(0, projects_purchased_count + $3), projects_created_count = GREATEST(0, projects_created_count + $4), courses_started_count = GREATEST(0, courses_started_count + $5), courses_completed_count = GREATEST(0, courses_completed_count + $6), marketplace_interactions_count = GREATEST(0, marketplace_interactions_count + $7), tool_usage_count = GREATEST(0, tool_usage_count + $8), feedback_score = GREATEST(0, feedback_score + $9), last_event_at = NOW() WHERE user_id = $1 RETURNING *",
+        [
+          userId,
+          Number(delta.content_accessed_count || 0),
+          Number(delta.projects_purchased_count || 0),
+          Number(delta.projects_created_count || 0),
+          Number(delta.courses_started_count || 0),
+          Number(delta.courses_completed_count || 0),
+          Number(delta.marketplace_interactions_count || 0),
+          Number(delta.tool_usage_count || 0),
+          Number(delta.feedback_score || 0),
+        ]
+      );
+
+      const memoryResults: any[] = [];
+      const memoryItems = Array.isArray(memoryUpdates) ? memoryUpdates : [];
+      for (const item of memoryItems) {
+        if (!item?.layer || !item?.key) continue;
+        const inserted = await upsertMyBotMemory(client, {
+          userId,
+          layer: String(item.layer),
+          key: String(item.key),
+          value: item.value ?? {},
+          lastEventId: insertedEvent.rows[0]?.id,
+        });
+        memoryResults.push(inserted);
+      }
+
+      const stageDecision = evaluateMyBotStage(updatedStats.rows[0], bot.stage as MyBotStage);
+      if (stageDecision.stage !== bot.stage) {
+        await client.query(
+          "UPDATE mybots SET stage = $2, stage_reason = $3, updated_at = NOW() WHERE user_id = $1",
+          [userId, stageDecision.stage, stageDecision.reason]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json({
+        event: insertedEvent.rows[0],
+        stats: updatedStats.rows[0],
+        memory: memoryResults,
+        stage: stageDecision.stage,
+        stageReason: stageDecision.reason,
+      });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao registrar evento do My Bot." });
+  }
+});
+
+app.post("/mybot/:userId/events/:eventId/revert", async (req, res) => {
+  const { userId, eventId } = req.params;
+  if (!userId || !eventId) {
+    return res.status(400).json({ message: "userId e eventId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      const eventResult = await client.query(
+        "SELECT * FROM mybot_events WHERE id = $1 AND user_id = $2",
+        [eventId, userId]
+      );
+      const event = eventResult.rows[0];
+      if (!event) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Evento não encontrado." });
+      }
+      if (!event.reversible || event.reverted_at) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Evento não reversível." });
+      }
+
+      const delta = getMyBotEventDelta(event.event_type, event.payload || {});
+      const updatedStats = await client.query(
+        "UPDATE mybot_stats SET content_accessed_count = GREATEST(0, content_accessed_count - $2), projects_purchased_count = GREATEST(0, projects_purchased_count - $3), projects_created_count = GREATEST(0, projects_created_count - $4), courses_started_count = GREATEST(0, courses_started_count - $5), courses_completed_count = GREATEST(0, courses_completed_count - $6), marketplace_interactions_count = GREATEST(0, marketplace_interactions_count - $7), tool_usage_count = GREATEST(0, tool_usage_count - $8), feedback_score = GREATEST(0, feedback_score - $9), last_event_at = NOW() WHERE user_id = $1 RETURNING *",
+        [
+          userId,
+          Number(delta.content_accessed_count || 0),
+          Number(delta.projects_purchased_count || 0),
+          Number(delta.projects_created_count || 0),
+          Number(delta.courses_started_count || 0),
+          Number(delta.courses_completed_count || 0),
+          Number(delta.marketplace_interactions_count || 0),
+          Number(delta.tool_usage_count || 0),
+          Number(delta.feedback_score || 0),
+        ]
+      );
+
+      await client.query("UPDATE mybot_events SET reverted_at = NOW() WHERE id = $1", [eventId]);
+      await client.query(
+        "UPDATE mybot_memory SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND last_event_id = $2 AND is_active = true",
+        [userId, eventId]
+      );
+
+      const bot = await getOrCreateMyBot(client, userId);
+      const recalculatedStage = deriveMyBotStageFromStats(updatedStats.rows[0]);
+      if (recalculatedStage !== bot.stage) {
+        await client.query(
+          "UPDATE mybots SET stage = $2, stage_reason = $3, updated_at = NOW() WHERE user_id = $1",
+          [userId, recalculatedStage, "Recalculado após reversão de evento."]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({
+        eventId,
+        stats: updatedStats.rows[0],
+        stage: recalculatedStage,
+      });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao reverter evento do My Bot." });
+  }
+});
+
+app.get("/mybot/:userId/memory", async (req, res) => {
+  const { userId } = req.params;
+  const layer = typeof req.query.layer === "string" ? req.query.layer : "";
+  const limit = Number(req.query.limit ?? 200);
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      if (layer && !MYBOT_MEMORY_LAYERS.has(layer)) {
+        return res.status(400).json({ message: "Camada de memória inválida." });
+      }
+      const params: Array<string | number> = [userId];
+      let query =
+        "SELECT id, user_id, layer, memory_key, value, version, is_active, last_event_id, created_at, updated_at FROM mybot_memory WHERE user_id = $1 AND is_active = true";
+      if (layer) {
+        query += " AND layer = $2";
+        params.push(layer);
+      }
+      query += " ORDER BY updated_at DESC LIMIT $" + (params.length + 1);
+      params.push(Number.isFinite(limit) ? Math.min(500, Math.max(1, limit)) : 200);
+      const memory = await client.query(query, params);
+      res.json(memory.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao carregar memória do My Bot." });
+  }
+});
+
+app.post("/mybot/:userId/memory", async (req, res) => {
+  const { userId } = req.params;
+  const { layer, key, value } = req.body ?? {};
+  if (!userId || !layer || !key) {
+    return res.status(400).json({ message: "userId, layer e key são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
+      await getOrCreateMyBotStats(client, userId);
+
+      const memory = await upsertMyBotMemory(client, {
+        userId,
+        layer: String(layer),
+        key: String(key),
+        value: value ?? {},
+      });
+
+      await client.query(
+        "INSERT INTO mybot_events (user_id, event_type, source, payload, reversible) VALUES ($1, $2, $3, $4, $5)",
+        [userId, "memory_updated", "system", { layer, key }, false]
+      );
+
+      await client.query("COMMIT");
+      res.status(201).json(memory);
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao atualizar memória do My Bot.";
+    res.status(500).json({ message });
+  }
+});
+
+app.post("/mybot/:userId/reset", async (req, res) => {
+  const { userId } = req.params;
+  const { layer } = req.body ?? {};
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      await getOrCreateMyBot(client, userId);
+      const layerValue = layer ? String(layer) : "all";
+      if (layerValue !== "all" && !MYBOT_MEMORY_LAYERS.has(layerValue)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Camada de memória inválida." });
+      }
+      if (layerValue === "all") {
+        await client.query(
+          "UPDATE mybot_memory SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND is_active = true",
+          [userId]
+        );
+      } else {
+        await client.query(
+          "UPDATE mybot_memory SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND layer = $2 AND is_active = true",
+          [userId, layerValue]
+        );
+      }
+
+      await client.query(
+        "INSERT INTO mybot_events (user_id, event_type, source, payload, reversible) VALUES ($1, $2, $3, $4, $5)",
+        [userId, "memory_reset", "user", { layer: layerValue }, false]
+      );
+
+      await client.query("COMMIT");
+      res.json({ userId, layer: layerValue, status: "reset" });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao resetar memória do My Bot." });
+  }
+});
+
+app.post("/mybot/:userId/respond", async (req, res) => {
+  const { userId } = req.params;
+  const { message, context } = req.body ?? {};
+  if (!userId || !message) {
+    return res.status(400).json({ message: "userId e message são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      const bot = await getOrCreateMyBot(client, userId);
+      const stats = await getOrCreateMyBotStats(client, userId);
+
+      const userEvent = await client.query(
+        "INSERT INTO mybot_events (user_id, event_type, source, payload, reversible) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        [userId, "user_message", "user", { message, context: context ?? null }, false]
+      );
+
+      const memoryRows = await client.query(
+        "SELECT layer, memory_key, value FROM mybot_memory WHERE user_id = $1 AND is_active = true AND layer IN ('mid', 'long') ORDER BY updated_at DESC LIMIT 10",
+        [userId]
+      );
+
+      const responseText = buildMyBotResponse({
+        message: String(message),
+        stage: bot.stage as MyBotStage,
+        stats,
+        memory: memoryRows.rows,
+      });
+
+      await upsertMyBotMemory(client, {
+        userId,
+        layer: "short",
+        key: "last_user_message",
+        value: { message: String(message), receivedAt: new Date().toISOString() },
+        lastEventId: userEvent.rows[0]?.id,
+      });
+
+      await client.query(
+        "INSERT INTO mybot_events (user_id, event_type, source, payload, reversible) VALUES ($1, $2, $3, $4, $5)",
+        [userId, "mybot_response", "system", { response: responseText }, false]
+      );
+
+      await client.query("COMMIT");
+      res.json({
+        response: responseText,
+        stage: bot.stage,
+        stats,
+      });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao responder com o My Bot." });
   }
 });
 

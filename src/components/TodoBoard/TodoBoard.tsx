@@ -1,69 +1,56 @@
 import { useState } from "react";
+import type { KanbanColumn, KanbanItem, KanbanStatus } from "../../services/kanbanTypes";
 import "./TodoBoard.css";
 
-type Status = "no_status" | "not_started" | "in_progress" | "completed";
+type TodoBoardProps = {
+  columns: KanbanColumn[];
+  items: KanbanItem[];
+  onAdd: (text: string) => void | Promise<void>;
+  onMove: (itemId: string, status: KanbanStatus) => void | Promise<void>;
+  onRemove: (itemId: string) => void | Promise<void>;
+  isLoading?: boolean;
+};
 
-interface Todo {
-  id: number;
-  text: string;
-  status: Status;
-}
-
-export default function TodoBoard() {
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: 1, text: "POLÍCIA PENAL", status: "not_started" },
-    { id: 2, text: "TJDFT", status: "in_progress" },
-    { id: 3, text: "MINISTÉRIO DA ECONOMIA", status: "completed" },
-  ]);
-
-  const [draggedId, setDraggedId] = useState<number | null>(null);
+export default function TodoBoard({ columns, items, onAdd, onMove, onRemove, isLoading }: TodoBoardProps) {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [newTodo, setNewTodo] = useState("");
 
-  function handleDrop(status: Status) {
+  function handleDrop(status: KanbanStatus) {
     if (draggedId === null) return;
-
-    setTodos(prev =>
-      prev.map(todo =>
-        todo.id === draggedId ? { ...todo, status } : todo
-      )
-    );
+    onMove(draggedId, status);
     setDraggedId(null);
   }
 
-  function addTodo() {
+  async function addTodo() {
     if (!newTodo.trim()) return;
-
-    setTodos(prev => [
-      ...prev,
-      { id: Date.now(), text: newTodo, status: "no_status" },
-    ]);
+    await onAdd(newTodo.trim());
     setNewTodo("");
   }
 
-  function removeTodo(id: number) {
-    setTodos(prev => prev.filter(todo => todo.id !== id));
+  function removeTodo(id: string) {
+    onRemove(id);
   }
 
-  function renderColumn(title: string, status: Status) {
+  function renderColumn(column: KanbanColumn) {
     return (
       <div
         className="status"
         onDragOver={e => e.preventDefault()}
-        onDrop={() => handleDrop(status)}
+        onDrop={() => handleDrop(column.status)}
       >
-        <h2>{title}</h2>
+        <h2>{column.title}</h2>
 
-        {todos
-          .filter(todo => todo.status === status)
-          .map(todo => (
+        {items
+          .filter(item => item.status === column.status)
+          .map(item => (
             <div
-              key={todo.id}
+              key={item.id}
               className="todo"
               draggable
-              onDragStart={() => setDraggedId(todo.id)}
+              onDragStart={() => setDraggedId(item.id)}
             >
-              <span>{todo.text}</span>
-              <span className="close" onClick={() => removeTodo(todo.id)}>
+              <span>{item.text}</span>
+              <span className="close" onClick={() => removeTodo(item.id)}>
                 ×
               </span>
             </div>
@@ -80,16 +67,14 @@ export default function TodoBoard() {
           value={newTodo}
           onChange={e => setNewTodo(e.target.value)}
           placeholder="Novo Todo"
+          disabled={isLoading}
         />
-        <button onClick={addTodo}>Adicionar</button>
+        <button onClick={addTodo} disabled={isLoading}>Adicionar</button>
       </div>
 
       {/* BOARD */}
       <div className="todo-container">
-        {renderColumn("No Status", "no_status")}
-        {renderColumn("Not Started", "not_started")}
-        {renderColumn("In Progress", "in_progress")}
-        {renderColumn("Completed", "completed")}
+        {columns.map(renderColumn)}
       </div>
     </div>
   );

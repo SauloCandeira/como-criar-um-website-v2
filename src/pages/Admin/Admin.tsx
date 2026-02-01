@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import './Admin.css';
 import { Line, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
@@ -12,6 +12,8 @@ import { createProject, deleteProject, fetchProjects, updateProject } from '../.
 import { createCost, deleteCost, fetchCosts, updateCost } from '../../services/costsApi';
 import { fetchSales, SaleDTO } from '../../services/salesApi';
 import { fetchAccesses, AccessDTO } from '../../services/accessesApi';
+import { listReportsByProject } from '../../services/aiReportApi';
+import type { AiReport } from '../../services/aiReportTypes';
 
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -68,7 +70,18 @@ interface UserItem {
 
 const Admin: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const currentEmail = (localStorage.getItem('email') || '').toLowerCase();
+  const handleProjectTasksAdmin = () => {
+    const target = projects.find(
+      (project) => project.name?.trim().toLowerCase() === 'holding kapital technology'
+    );
+    if (target?.id) {
+      navigate(`/manager?projectId=${encodeURIComponent(target.id)}`);
+      return;
+    }
+    navigate('/manager');
+  };
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -126,6 +139,9 @@ const Admin: React.FC = () => {
   const [accesses, setAccesses] = useState<AccessItem[]>([]);
   const [accessesLoading, setAccessesLoading] = useState(false);
   const [accessesError, setAccessesError] = useState<string | null>(null);
+  const [aiReports, setAiReports] = useState<AiReport[]>([]);
+  const [aiReportsLoading, setAiReportsLoading] = useState(false);
+  const [aiReportsError, setAiReportsError] = useState<string | null>(null);
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
@@ -157,6 +173,7 @@ const Admin: React.FC = () => {
     paid: false,
     isPublic: true,
   });
+  const aiReportsProjectId = new URLSearchParams(location.search).get('projectId') || 'HKTECH';
   const [costs, setCosts] = useState<CostItem[]>([]);
   const [costsLoading, setCostsLoading] = useState(false);
   const [costsError, setCostsError] = useState<string | null>(null);
@@ -230,6 +247,20 @@ const Admin: React.FC = () => {
     }
   };
 
+  const loadAiReports = async () => {
+    setAiReportsLoading(true);
+    setAiReportsError(null);
+    try {
+      const data = await listReportsByProject(aiReportsProjectId);
+      setAiReports(data);
+    } catch (error) {
+      console.error('Erro ao buscar AI reports:', error);
+      setAiReportsError('Não foi possível carregar os relatórios de IA.');
+    } finally {
+      setAiReportsLoading(false);
+    }
+  };
+
   const loadSales = async () => {
     setSalesLoading(true);
     setSalesError(null);
@@ -265,7 +296,8 @@ const Admin: React.FC = () => {
     loadCosts();
     loadSales();
     loadAccesses();
-  }, []);
+    loadAiReports();
+  }, [aiReportsProjectId]);
 
   const handleCreateUser = async () => {
     if (!newUser.name.trim() || !newUser.email.trim()) {
@@ -787,7 +819,13 @@ const Admin: React.FC = () => {
             <li className={activeTab === 'costs' ? 'active' : ''} onClick={() => setActiveTab('costs')}>
               Custos
             </li>
+            <li className={activeTab === 'ai-reports' ? 'active' : ''} onClick={() => setActiveTab('ai-reports')}>
+              AI Reports
+            </li>
           </ul>
+          <button className="admin-btn admin-sidebar__cta" onClick={handleProjectTasksAdmin}>
+            Admin
+          </button>
         </aside>
 
         <main className="admin-content">
@@ -1465,6 +1503,39 @@ const Admin: React.FC = () => {
                   </div>
                 </div>
               </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ai-reports' && (
+          <section>
+            <h2>AI Reports</h2>
+            {aiReportsLoading && <p>Carregando relatórios...</p>}
+            {aiReportsError && <p>{aiReportsError}</p>}
+            {!aiReportsLoading && aiReports.length === 0 && (
+              <p>Nenhum relatório encontrado.</p>
+            )}
+            {aiReports.length > 0 && (
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Agente</th>
+                    <th>Resumo</th>
+                    <th>Kanban</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiReports.map((report) => (
+                    <tr key={report.id}>
+                      <td>{report.createdAt ? new Date(report.createdAt).toLocaleString('pt-BR') : '-'}</td>
+                      <td>{report.agent}</td>
+                      <td>{report.summary}</td>
+                      <td>{report.kanbanItemId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </section>
         )}

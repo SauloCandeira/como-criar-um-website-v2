@@ -119,7 +119,7 @@ export async function fetchUserCard(userId: string): Promise<CardDTO> {
   const res = await fetch(`${API_BASE}/cards/${encodeURIComponent(userId)}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || "Falha ao carregar carta");
+    throw new Error(data.message || "Falha ao carregar My Bot");
   }
   return normalizeCard(await res.json());
 }
@@ -132,7 +132,7 @@ export async function createUserCard(userId: string, cpf: string): Promise<CardD
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || "Falha ao criar carta");
+    throw new Error(data.message || "Falha ao ativar My Bot");
   }
   return normalizeCard(await res.json());
 }
@@ -143,7 +143,7 @@ export async function refreshAlienCard(userId: string): Promise<CardDTO> {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || "Falha ao atualizar visual");
+    throw new Error(data.message || "Falha ao atualizar visual do My Bot");
   }
   return normalizeCard(await res.json());
 }
@@ -207,6 +207,34 @@ export async function buyCardListing(listingId: string, buyerId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ buyerId }),
   });
-  if (!res.ok) throw new Error("Falha ao comprar carta");
+  if (!res.ok) throw new Error("Falha ao comprar My Bot");
   return res.json();
+}
+
+export async function fetchMyBotCard(userId: string): Promise<CardDTO> {
+  return fetchUserCard(userId);
+}
+
+export async function createMyBotCard(userId: string, cpf: string): Promise<CardDTO> {
+  return createUserCard(userId, cpf);
+}
+
+export async function refreshMyBotCard(userId: string): Promise<CardDTO> {
+  return refreshAlienCard(userId);
+}
+
+export async function addMyBotXp(userId: string, amount: number): Promise<CardDTO> {
+  return addCardXp(userId, amount);
+}
+
+export async function fetchMyBotListings(status: string = "active"): Promise<CardListingDTO[]> {
+  return fetchCardListings(status);
+}
+
+export async function createMyBotListing(payload: { userId: string; cardId: string; price: number }): Promise<CardListingDTO> {
+  return createCardListing(payload);
+}
+
+export async function buyMyBotListing(listingId: string, buyerId: string) {
+  return buyCardListing(listingId, buyerId);
 }

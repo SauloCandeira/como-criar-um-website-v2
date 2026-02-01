@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './Manager.css';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
 import TodoBoard from '../../components/TodoBoard/TodoBoard';
@@ -7,10 +7,23 @@ import RoadMap from '../../components/RoadMap/RoadMap';
 import FichaTecnica from '../../components/FichaTecnica/FichaTecnica';
 import ContentCourse from '../../components/ContentCourse/ContentCourse';
 import CodeRunner from '../../components/CodeRunner/CodeRunner';
+import { useLocation } from 'react-router-dom';
+import { fetchProjects } from '../../services/projectsApi';
+import { createKanbanItem, deleteKanbanItem, fetchKanbanSnapshot, updateKanbanItemStatus } from '../../services/kanbanApi';
+import type { KanbanColumn, KanbanItem, KanbanStatus } from '../../services/kanbanTypes';
+import { createReport } from '../../services/aiReportApi';
 
 const Manager: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [projectName, setProjectName] = useState('Holding Kapital Technology');
+  const [projectNameError, setProjectNameError] = useState<string | null>(null);
+  const [kanbanColumns, setKanbanColumns] = useState<KanbanColumn[]>([]);
+  const [kanbanItems, setKanbanItems] = useState<KanbanItem[]>([]);
+  const [kanbanLoading, setKanbanLoading] = useState(false);
+  const [kanbanError, setKanbanError] = useState<string | null>(null);
+  const location = useLocation();
+  const projectId = new URLSearchParams(location.search).get('projectId');
 
 
   const tabLabels: Record<string, string> = {
@@ -23,7 +36,117 @@ const Manager: React.FC = () => {
     'course-editor': 'Editor'
   };
 
-  const projectName = 'Landingpage Institucional';
+  useEffect(() => {
+    let isMounted = true;
+    const loadProjectName = async () => {
+      setProjectNameError(null);
+      try {
+        const projects = await fetchProjects();
+        const match = projectId
+          ? projects.find((project) => project.id === projectId)
+          : projects.find(
+              (project) => project.name?.trim().toLowerCase() === 'holding kapital technology'
+            );
+        if (isMounted && match?.name) {
+          setProjectName(match.name);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setProjectNameError('Não foi possível carregar o projeto.');
+        }
+      }
+    };
+    loadProjectName();
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let isMounted = true;
+    const loadKanban = async () => {
+      setKanbanLoading(true);
+      setKanbanError(null);
+      try {
+        const snapshot = await fetchKanbanSnapshot(projectId);
+        if (!isMounted) return;
+        setKanbanColumns(snapshot.columns);
+        setKanbanItems(snapshot.items);
+      } catch (error) {
+        if (isMounted) {
+          setKanbanError('Não foi possível carregar o Kanban.');
+        }
+      } finally {
+        if (isMounted) {
+          setKanbanLoading(false);
+        }
+      }
+    };
+    loadKanban();
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  const reloadKanban = async () => {
+    if (!projectId) return;
+    setKanbanLoading(true);
+    setKanbanError(null);
+    try {
+      const snapshot = await fetchKanbanSnapshot(projectId);
+      setKanbanColumns(snapshot.columns);
+      setKanbanItems(snapshot.items);
+    } catch (error) {
+      setKanbanError('Não foi possível carregar o Kanban.');
+    } finally {
+      setKanbanLoading(false);
+    }
+  };
+
+  const handleAddKanbanItem = async (text: string) => {
+    if (!projectId) return;
+    try {
+      await createKanbanItem(projectId, text, 'no_status');
+      await reloadKanban();
+    } catch (error) {
+      setKanbanError('Não foi possível criar a tarefa.');
+    }
+  };
+
+  const handleMoveKanbanItem = async (itemId: string, status: KanbanStatus) => {
+    if (!projectId) return;
+    const currentItem = kanbanItems.find((item) => item.id === itemId);
+    setKanbanItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, status } : item)));
+    try {
+      await updateKanbanItemStatus(projectId, itemId, status);
+      if (status === 'completed' && currentItem && currentItem.status !== 'completed') {
+        void createReport({
+          projectId,
+          kanbanItemId: itemId,
+          agent: 'Copilot',
+          summary: `Tarefa concluída: ${currentItem.text}`,
+          decisions: ['Marcar tarefa como concluída no Kanban.'],
+          risks: [],
+          nextActions: [],
+        });
+      }
+    } catch (error) {
+      setKanbanError('Não foi possível mover a tarefa.');
+      await reloadKanban();
+    }
+  };
+
+  const handleRemoveKanbanItem = async (itemId: string) => {
+    if (!projectId) return;
+    setKanbanItems((prev) => prev.filter((item) => item.id !== itemId));
+    try {
+      await deleteKanbanItem(projectId, itemId);
+    } catch (error) {
+      setKanbanError('Não foi possível remover a tarefa.');
+      await reloadKanban();
+    }
+  };
 
   const crumbs = [
     { label: 'Projetos', to: '/dashboard?tab=projects' },
@@ -108,7 +231,17 @@ const Manager: React.FC = () => {
           {activeTab === 'home' && (
             <>
               <section>
-                <TodoBoard/>
+                <h2>{projectName}</h2>
+                {projectNameError && <p>{projectNameError}</p>}
+                {kanbanError && <p>{kanbanError}</p>}
+                <TodoBoard
+                  columns={kanbanColumns}
+                  items={kanbanItems}
+                  onAdd={handleAddKanbanItem}
+                  onMove={handleMoveKanbanItem}
+                  onRemove={handleRemoveKanbanItem}
+                  isLoading={kanbanLoading}
+                />
               </section>
             </>
           )}

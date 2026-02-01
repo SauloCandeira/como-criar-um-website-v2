@@ -7,18 +7,19 @@ import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
 import { fetchUserByEmail, UserDTO } from '../../services/usersApi';
 import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
 import {
-  fetchUserCard,
-  addCardXp,
-  fetchCardListings,
-  createCardListing,
-  buyCardListing,
+  fetchMyBotCard,
+  addMyBotXp,
+  fetchMyBotListings,
+  createMyBotListing,
+  buyMyBotListing,
   fetchInternalAccount,
-  createUserCard,
-  refreshAlienCard,
+  createMyBotCard,
+  refreshMyBotCard,
   CardDTO,
   CardListingDTO,
   InternalAccountDTO,
 } from '../../services/cardsApi';
+import { sendMyBotMessage } from '../../services/mybotApi';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -31,12 +32,12 @@ const Dashboard: React.FC = () => {
   const [purchasesError, setPurchasesError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserDTO | null>(null);
   const [userProfileError, setUserProfileError] = useState<string | null>(null);
-  const [alienCard, setAlienCard] = useState<CardDTO | null>(null);
-  const [alienLoading, setAlienLoading] = useState(false);
-  const [alienError, setAlienError] = useState<string | null>(null);
-  const [alienListings, setAlienListings] = useState<CardListingDTO[]>([]);
-  const [alienListingsLoading, setAlienListingsLoading] = useState(false);
-  const [alienListingsError, setAlienListingsError] = useState<string | null>(null);
+  const [myBotCard, setMyBotCard] = useState<CardDTO | null>(null);
+  const [myBotLoading, setMyBotLoading] = useState(false);
+  const [myBotError, setMyBotError] = useState<string | null>(null);
+  const [myBotListings, setMyBotListings] = useState<CardListingDTO[]>([]);
+  const [myBotListingsLoading, setMyBotListingsLoading] = useState(false);
+  const [myBotListingsError, setMyBotListingsError] = useState<string | null>(null);
   const [listingPrice, setListingPrice] = useState('');
   const [listingLoading, setListingLoading] = useState(false);
   const [buyingListingId, setBuyingListingId] = useState<string | null>(null);
@@ -44,6 +45,10 @@ const Dashboard: React.FC = () => {
   const [internalAccountError, setInternalAccountError] = useState<string | null>(null);
   const [cpfInput, setCpfInput] = useState('');
   const [cpfError, setCpfError] = useState<string | null>(null);
+  const [mybotMessages, setMybotMessages] = useState<Array<{ role: 'user' | 'mybot'; text: string }>>([]);
+  const [mybotInput, setMybotInput] = useState('');
+  const [mybotSending, setMybotSending] = useState(false);
+  const [mybotChatError, setMybotChatError] = useState<string | null>(null);
   const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
   const [editProjectData, setEditProjectData] = useState({
     id: '',
@@ -106,54 +111,54 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const loadAlienCard = async () => {
+  const loadMyBotCard = async () => {
     if (!userId) return;
-    setAlienLoading(true);
-    setAlienError(null);
+    setMyBotLoading(true);
+    setMyBotError(null);
     try {
-      await fetchUserCard(userId);
-      const refreshed = await refreshAlienCard(userId);
-      setAlienCard(refreshed);
+      await fetchMyBotCard(userId);
+      const refreshed = await refreshMyBotCard(userId);
+      setMyBotCard(refreshed);
     } catch (error) {
-      console.error('Erro ao carregar carta:', error);
-      setAlienError(error instanceof Error ? error.message : 'Não foi possível carregar sua carta alienígena.');
+      console.error('Erro ao carregar My Bot:', error);
+      setMyBotError(error instanceof Error ? error.message : 'Não foi possível carregar seu My Bot.');
     } finally {
-      setAlienLoading(false);
+      setMyBotLoading(false);
     }
   };
 
-  const handleCreateAlien = async () => {
+  const handleCreateMyBot = async () => {
     if (!userId) return;
     setCpfError(null);
-    setAlienError(null);
+    setMyBotError(null);
     if (!cpfInput.trim()) {
-      setCpfError('Informe seu CPF para gerar a carta.');
+      setCpfError('Informe seu CPF para ativar o My Bot.');
       return;
     }
-    setAlienLoading(true);
+    setMyBotLoading(true);
     try {
-      const card = await createUserCard(userId, cpfInput.trim());
-      setAlienCard(card);
+      const card = await createMyBotCard(userId, cpfInput.trim());
+      setMyBotCard(card);
       setCpfInput('');
     } catch (error) {
-      console.error('Erro ao criar carta:', error);
-      setAlienError(error instanceof Error ? error.message : 'Não foi possível criar sua carta.');
+      console.error('Erro ao ativar My Bot:', error);
+      setMyBotError(error instanceof Error ? error.message : 'Não foi possível ativar seu My Bot.');
     } finally {
-      setAlienLoading(false);
+      setMyBotLoading(false);
     }
   };
 
-  const loadAlienListings = async () => {
-    setAlienListingsLoading(true);
-    setAlienListingsError(null);
+  const loadMyBotListings = async () => {
+    setMyBotListingsLoading(true);
+    setMyBotListingsError(null);
     try {
-      const listings = await fetchCardListings('active');
-      setAlienListings(listings);
+      const listings = await fetchMyBotListings('active');
+      setMyBotListings(listings);
     } catch (error) {
       console.error('Erro ao carregar marketplace:', error);
-      setAlienListingsError('Não foi possível carregar o marketplace de aliens.');
+      setMyBotListingsError('Não foi possível carregar o marketplace do My Bot.');
     } finally {
-      setAlienListingsLoading(false);
+      setMyBotListingsLoading(false);
     }
   };
 
@@ -169,74 +174,93 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleCreateListing = async () => {
-    if (!alienCard) return;
+  const handleCreateMyBotListing = async () => {
+    if (!myBotCard) return;
     const value = Number(listingPrice.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
-      setAlienListingsError('Informe um preço válido para listar sua carta.');
+      setMyBotListingsError('Informe um preço válido para listar seu My Bot.');
       return;
     }
     setListingLoading(true);
-    setAlienListingsError(null);
+    setMyBotListingsError(null);
     try {
-      await createCardListing({ userId, cardId: alienCard.id, price: value });
+      await createMyBotListing({ userId, cardId: myBotCard.id, price: value });
       setListingPrice('');
-      loadAlienListings();
+      loadMyBotListings();
     } catch (error) {
       console.error('Erro ao criar anúncio:', error);
-      setAlienListingsError('Não foi possível listar a carta no marketplace.');
+      setMyBotListingsError('Não foi possível listar o My Bot no marketplace.');
     } finally {
       setListingLoading(false);
     }
   };
 
-  const handleBuyListing = async (listingId: string) => {
+  const handleBuyMyBotListing = async (listingId: string) => {
     setBuyingListingId(listingId);
-    setAlienListingsError(null);
+    setMyBotListingsError(null);
     try {
-      await buyCardListing(listingId, userId);
-      await loadAlienCard();
+      await buyMyBotListing(listingId, userId);
+      await loadMyBotCard();
       await loadInternalAccount();
-      await loadAlienListings();
+      await loadMyBotListings();
     } catch (error) {
-      console.error('Erro ao comprar carta:', error);
-      setAlienListingsError('Não foi possível concluir a compra.');
+      console.error('Erro ao comprar My Bot:', error);
+      setMyBotListingsError('Não foi possível concluir a compra.');
     } finally {
       setBuyingListingId(null);
     }
   };
 
-  const handleAddXp = async () => {
+  const handleMyBotSend = async () => {
     if (!userId) return;
-    setAlienLoading(true);
-    setAlienError(null);
+    const message = mybotInput.trim();
+    if (!message || mybotSending) return;
+    setMybotInput('');
+    setMybotChatError(null);
+    setMybotSending(true);
+    setMybotMessages((prev) => [...prev, { role: 'user', text: message }]);
     try {
-      const updated = await addCardXp(userId, 25);
-      setAlienCard(updated);
+      const reply = await sendMyBotMessage(userId, { message });
+      setMybotMessages((prev) => [...prev, { role: 'mybot', text: reply.response }]);
+    } catch (error) {
+      console.error('Erro ao conversar com My Bot:', error);
+      setMybotChatError('Não foi possível falar com o My Bot.');
+    } finally {
+      setMybotSending(false);
+    }
+  };
+
+  const handleAddMyBotXp = async () => {
+    if (!userId) return;
+    setMyBotLoading(true);
+    setMyBotError(null);
+    try {
+      const updated = await addMyBotXp(userId, 25);
+      setMyBotCard(updated);
     } catch (error) {
       console.error('Erro ao adicionar XP:', error);
-      setAlienError('Não foi possível atualizar o XP.');
+      setMyBotError('Não foi possível atualizar o XP.');
     } finally {
-      setAlienLoading(false);
+      setMyBotLoading(false);
     }
   };
 
-  const handleRefreshVisual = async () => {
+  const handleRefreshMyBotVisual = async () => {
     if (!userId) return;
-    setAlienLoading(true);
-    setAlienError(null);
+    setMyBotLoading(true);
+    setMyBotError(null);
     try {
-      const refreshed = await refreshAlienCard(userId);
-      setAlienCard(refreshed);
+      const refreshed = await refreshMyBotCard(userId);
+      setMyBotCard(refreshed);
     } catch (error) {
       console.error('Erro ao atualizar visual:', error);
-      setAlienError(error instanceof Error ? error.message : 'Não foi possível atualizar o visual.');
+      setMyBotError(error instanceof Error ? error.message : 'Não foi possível atualizar o visual.');
     } finally {
-      setAlienLoading(false);
+      setMyBotLoading(false);
     }
   };
 
-  const buildAlienSvg = (card: CardDTO) => {
+  const buildMyBotSvg = (card: CardDTO) => {
     const palette = card.visualMeta?.palette || { primary: '#38bdf8', secondary: '#0f172a', accent: '#22d3ee' };
     const eyes = Math.max(1, Number(card.visualMeta?.eyes ?? 2));
     const horns = Math.max(0, Number(card.visualMeta?.horns ?? 0));
@@ -290,9 +314,9 @@ const Dashboard: React.FC = () => {
 </svg>`;
   };
 
-  const alienImageSrc = (card: CardDTO) => {
+  const myBotImageSrc = (card: CardDTO) => {
     if (card.imageUrl) return card.imageUrl;
-    const svg = buildAlienSvg(card);
+    const svg = buildMyBotSvg(card);
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   };
 
@@ -343,7 +367,7 @@ const Dashboard: React.FC = () => {
     'projects': 'Projetos',
     'cart': 'Carrinho',
     'purchases': 'Compras',
-    'alien': 'My Alien',
+    'mybot': 'My Bot',
   };
 
   const crumbs = [
@@ -353,7 +377,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get('tab');
-    if (tab && ['home', 'projects', 'cart', 'purchases', 'alien', 'marketplace'].includes(tab)) {
+    if (tab && ['home', 'projects', 'cart', 'purchases', 'mybot', 'marketplace'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [location.search]);
@@ -365,9 +389,9 @@ const Dashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'alien') {
-      loadAlienCard();
-      loadAlienListings();
+    if (activeTab === 'mybot') {
+      loadMyBotCard();
+      loadMyBotListings();
       loadInternalAccount();
     }
   }, [activeTab]);
@@ -406,8 +430,8 @@ const Dashboard: React.FC = () => {
             <li className={activeTab === 'purchases' ? 'active' : ''} onClick={() => setActiveTab('purchases')}>
               COMPRAS
             </li>
-            <li className={activeTab === 'alien' ? 'active' : ''} onClick={() => setActiveTab('alien')}>
-              MY ALIEN
+            <li className={activeTab === 'mybot' ? 'active' : ''} onClick={() => setActiveTab('mybot')}>
+              MY BOT
             </li>
           </ul>
         </aside>
@@ -653,121 +677,158 @@ const Dashboard: React.FC = () => {
             </section>
           )}
 
-          {activeTab === 'alien' && (
-            <section className="alien-panel">
-              <div className="alien-header">
-                <h2>👾 My Alien</h2>
-                <div className="alien-balance">
+          {activeTab === 'mybot' && (
+            <section className="mybot-panel">
+              <div className="mybot-header">
+                <h2>🤖 My Bot</h2>
+                <div className="mybot-balance">
                   <span>Saldo interno</span>
                   <strong>{internalAccount ? `R$ ${internalAccount.balance.toFixed(2).replace('.', ',')}` : '—'}</strong>
                 </div>
               </div>
-              <p>Suas cartas alienígenas evoluem com seu uso no SaaS e podem ser negociadas no marketplace interno.</p>
+              <p>Seu My Bot evolui com seu uso no SaaS e pode ser negociado no marketplace interno.</p>
 
-              {internalAccountError && <p className="alien-error">{internalAccountError}</p>}
-              {alienLoading && <p>Carregando carta...</p>}
-              {alienError && <p className="alien-error">{alienError}</p>}
+              {internalAccountError && <p className="mybot-error">{internalAccountError}</p>}
+              {myBotLoading && <p>Carregando My Bot...</p>}
+              {myBotError && <p className="mybot-error">{myBotError}</p>}
 
-              {!alienLoading && !alienCard && (
-                <div className="alien-card">
-                  <h3>Gerar sua carta alienígena</h3>
-                  <p>Seu CPF é usado apenas para gerar o hash da carta. Ele não é armazenado.</p>
-                  <div className="alien-create">
+              <div className="mybot-top">
+                <div className="mybot-info">
+                  {!myBotLoading && !myBotCard && (
+                    <div className="mybot-card">
+                      <h3>Ativar seu My Bot</h3>
+                      <p>Seu CPF é usado apenas para gerar o hash de ativação. Ele não é armazenado.</p>
+                      <div className="mybot-create">
+                        <input
+                          type="text"
+                          placeholder="Digite seu CPF"
+                          value={cpfInput}
+                          onChange={(e) => setCpfInput(e.target.value)}
+                        />
+                        <button className="action-button" onClick={handleCreateMyBot}>Ativar My Bot</button>
+                      </div>
+                      {cpfError && <span className="mybot-error">{cpfError}</span>}
+                    </div>
+                  )}
+
+                  {myBotCard && (
+                    <div className="mybot-card">
+                      <div className="mybot-card__header">
+                        <div>
+                          <span className={`mybot-rarity mybot-rarity--${myBotCard.rarity}`}>{myBotCard.rarity}</span>
+                          <h3>{myBotCard.name}</h3>
+                          <p>{myBotCard.species} • {myBotCard.className}</p>
+                          <p>Nível {myBotCard.level} • XP {myBotCard.xp}</p>
+                        </div>
+                        <div className="mybot-avatar">
+                          <img src={myBotImageSrc(myBotCard)} alt={myBotCard.name} />
+                        </div>
+                      </div>
+                      {myBotCard.visualMeta?.palette && (
+                        <p className="mybot-meta">
+                          Paleta: {myBotCard.visualMeta.palette.primary}, {myBotCard.visualMeta.palette.secondary}, {myBotCard.visualMeta.palette.accent}
+                        </p>
+                      )}
+                      {myBotCard.marketValue !== undefined && (
+                        <p className="mybot-meta">Valor de mercado: R$ {Number(myBotCard.marketValue).toFixed(2).replace('.', ',')}</p>
+                      )}
+                      <div className="mybot-attributes">
+                        <div>
+                          <span>Força</span>
+                          <strong>{myBotCard.attributes.strength}</strong>
+                        </div>
+                        <div>
+                          <span>Velocidade</span>
+                          <strong>{myBotCard.attributes.speed}</strong>
+                        </div>
+                        <div>
+                          <span>Inteligência</span>
+                          <strong>{myBotCard.attributes.intelligence}</strong>
+                        </div>
+                        <div>
+                          <span>Resistência</span>
+                          <strong>{myBotCard.attributes.endurance}</strong>
+                        </div>
+                      </div>
+                      <div className="mybot-actions">
+                        <button className="action-button" onClick={loadMyBotCard}>Atualizar My Bot</button>
+                        <button className="action-button action-button--ghost" onClick={handleRefreshMyBotVisual}>
+                          Atualizar visual
+                        </button>
+                        <button className="action-button action-button--ghost" onClick={handleAddMyBotXp}>Ganhar XP</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mybot-chat">
+                  <h3>Conversar com My Bot</h3>
+                  <div className="mybot-chat__history">
+                    {mybotMessages.length === 0 && (
+                      <div className="mybot-chat__empty">Envie uma mensagem para iniciar a conversa.</div>
+                    )}
+                    {mybotMessages.map((item, index) => (
+                      <div key={`${item.role}-${index}`} className={`mybot-chat__bubble mybot-chat__bubble--${item.role}`}>
+                        {item.text}
+                      </div>
+                    ))}
+                  </div>
+                  {mybotChatError && <p className="mybot-error">{mybotChatError}</p>}
+                  <div className="mybot-chat__input">
                     <input
                       type="text"
-                      placeholder="Digite seu CPF"
-                      value={cpfInput}
-                      onChange={(e) => setCpfInput(e.target.value)}
+                      placeholder="Escreva sua dúvida ou objetivo"
+                      value={mybotInput}
+                      onChange={(e) => setMybotInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleMyBotSend();
+                        }
+                      }}
                     />
-                    <button className="action-button" onClick={handleCreateAlien}>Criar alien</button>
-                  </div>
-                  {cpfError && <span className="alien-error">{cpfError}</span>}
-                </div>
-              )}
-
-              {alienCard && (
-                <div className="alien-card">
-                  <div>
-                    <span className={`alien-rarity alien-rarity--${alienCard.rarity}`}>{alienCard.rarity}</span>
-                    <h3>{alienCard.name}</h3>
-                    <p>{alienCard.species} • {alienCard.className}</p>
-                    <p>Nível {alienCard.level} • XP {alienCard.xp}</p>
-                    {alienCard.visualMeta?.palette && (
-                      <p className="alien-meta">
-                        Paleta: {alienCard.visualMeta.palette.primary}, {alienCard.visualMeta.palette.secondary}, {alienCard.visualMeta.palette.accent}
-                      </p>
-                    )}
-                    {alienCard.marketValue !== undefined && (
-                      <p className="alien-meta">Valor de mercado: R$ {Number(alienCard.marketValue).toFixed(2).replace('.', ',')}</p>
-                    )}
-                  </div>
-                  <div className="alien-image">
-                    <img src={alienImageSrc(alienCard)} alt={alienCard.name} />
-                  </div>
-                  <div className="alien-attributes">
-                    <div>
-                      <span>Força</span>
-                      <strong>{alienCard.attributes.strength}</strong>
-                    </div>
-                    <div>
-                      <span>Velocidade</span>
-                      <strong>{alienCard.attributes.speed}</strong>
-                    </div>
-                    <div>
-                      <span>Inteligência</span>
-                      <strong>{alienCard.attributes.intelligence}</strong>
-                    </div>
-                    <div>
-                      <span>Resistência</span>
-                      <strong>{alienCard.attributes.endurance}</strong>
-                    </div>
-                  </div>
-                  <div className="alien-actions">
-                    <button className="action-button" onClick={loadAlienCard}>Atualizar perfil</button>
-                    <button className="action-button action-button--ghost" onClick={handleRefreshVisual}>
-                      Atualizar visual
+                    <button className="action-button" onClick={handleMyBotSend} disabled={mybotSending || !mybotInput.trim()}>
+                      {mybotSending ? 'Enviando...' : 'Enviar'}
                     </button>
-                    <button className="action-button action-button--ghost" onClick={handleAddXp}>Ganhar XP</button>
                   </div>
                 </div>
-              )}
+              </div>
 
-              <div className="alien-marketplace">
-                <div className="alien-marketplace__header">
-                  <h3>Mercado secundário</h3>
-                  <div className="alien-listing-form">
+              <div className="mybot-marketplace">
+                <div className="mybot-marketplace__header">
+                  <h3>Marketplace do My Bot</h3>
+                  <div className="mybot-listing-form">
                     <input
                       type="text"
-                      placeholder="Preço para listar sua carta"
+                      placeholder="Preço para listar seu My Bot"
                       value={listingPrice}
                       onChange={(e) => setListingPrice(e.target.value)}
                     />
-                    <button className="action-button" disabled={listingLoading || !alienCard} onClick={handleCreateListing}>
-                      {listingLoading ? 'Listando...' : 'Listar carta'}
+                    <button className="action-button" disabled={listingLoading || !myBotCard} onClick={handleCreateMyBotListing}>
+                      {listingLoading ? 'Listando...' : 'Listar My Bot'}
                     </button>
                   </div>
                 </div>
 
-                {alienListingsLoading && <p>Carregando anúncios...</p>}
-                {alienListingsError && <p className="alien-error">{alienListingsError}</p>}
+                {myBotListingsLoading && <p>Carregando anúncios...</p>}
+                {myBotListingsError && <p className="mybot-error">{myBotListingsError}</p>}
 
-                <div className="alien-marketplace__grid">
-                  {!alienListingsLoading && alienListings.length === 0 && (
-                    <div className="alien-marketplace__empty">Nenhuma carta disponível no momento.</div>
+                <div className="mybot-marketplace__grid">
+                  {!myBotListingsLoading && myBotListings.length === 0 && (
+                    <div className="mybot-marketplace__empty">Nenhum My Bot disponível no momento.</div>
                   )}
-                  {alienListings.map((listing) => (
-                    <div key={listing.id} className="alien-marketplace__card">
-                      <div className="alien-marketplace__info">
-                        <span className={`alien-rarity alien-rarity--${listing.rarity || 'comum'}`}>{listing.rarity || 'comum'}</span>
-                        <h4>{listing.name || 'Alien sem nome'}</h4>
+                  {myBotListings.map((listing) => (
+                    <div key={listing.id} className="mybot-marketplace__card">
+                      <div className="mybot-marketplace__info">
+                        <span className={`mybot-rarity mybot-rarity--${listing.rarity || 'comum'}`}>{listing.rarity || 'comum'}</span>
+                        <h4>{listing.name || 'My Bot sem nome'}</h4>
                         <p>{listing.species} • {listing.className}</p>
                         {listing.imageUrl && (
-                          <div className="alien-marketplace__image">
-                            <img src={listing.imageUrl} alt={listing.name || 'Alien'} />
+                          <div className="mybot-marketplace__image">
+                            <img src={listing.imageUrl} alt={listing.name || 'My Bot'} />
                           </div>
                         )}
                         {listing.attributes && (
-                          <div className="alien-marketplace__stats">
+                          <div className="mybot-marketplace__stats">
                             <span>FOR {listing.attributes.strength}</span>
                             <span>VEL {listing.attributes.speed}</span>
                             <span>INT {listing.attributes.intelligence}</span>
@@ -775,14 +836,14 @@ const Dashboard: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <div className="alien-marketplace__footer">
+                      <div className="mybot-marketplace__footer">
                         <strong>R$ {Number(listing.price).toFixed(2).replace('.', ',')}</strong>
                         <button
                           className="action-button"
                           disabled={listing.sellerUserId === userId || buyingListingId === listing.id}
-                          onClick={() => handleBuyListing(listing.id)}
+                          onClick={() => handleBuyMyBotListing(listing.id)}
                         >
-                          {listing.sellerUserId === userId ? 'Sua carta' : buyingListingId === listing.id ? 'Comprando...' : 'Comprar'}
+                          {listing.sellerUserId === userId ? 'Seu My Bot' : buyingListingId === listing.id ? 'Comprando...' : 'Comprar'}
                         </button>
                       </div>
                     </div>
