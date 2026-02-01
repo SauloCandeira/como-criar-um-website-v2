@@ -38,8 +38,6 @@ const contractColumnsRef = (projectId: string) =>
 const contractItemsRef = (projectId: string) =>
   collection(db, "projetos", projectId, "kanban_items");
 
-const legacyColumnsRef = (projectId: string) =>
-  collection(db, "projetos", projectId, "kanbanColumns");
 const legacyItemsRef = (projectId: string) =>
   collection(db, "projetos", projectId, "kanbanItems");
 
