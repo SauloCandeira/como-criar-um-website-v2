@@ -1,0 +1,103 @@
+.dao-user-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.dao-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.dao-primary-btn,
+.dao-secondary-btn {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.dao-primary-btn {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: #0f172a;
+}
+
+.dao-secondary-btn {
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+.dao-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+
+.dao-list-item {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.dao-status {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dao-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.dao-modal {
+  width: min(520px, 92vw);
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  color: #e5e7eb;
+}
+
+.dao-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dao-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.dao-field input,
+.dao-field textarea,
+.dao-field select {
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.dao-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dao-error {
+  color: #f87171;
+  font-size: 13px;
+}

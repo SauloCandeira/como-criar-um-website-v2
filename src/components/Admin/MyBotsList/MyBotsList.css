@@ -1,0 +1,51 @@
+
+.mybots-list {
+  padding: 1rem;
+}
+
+.mybots-list table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface, #181a20);
+  color: var(--text, #f1f1f1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  table-layout: auto;
+  word-break: break-word;
+}
+.mybots-list th, .mybots-list td {
+  border: 1px solid var(--border, #333);
+  padding: 0.7rem 0.5rem;
+  text-align: left;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.mybots-list th {
+  background: var(--surface-2, #23262f);
+  color: var(--text-inverse, #fff);
+  white-space: nowrap;
+}
+.mybots-list tr:nth-child(even) td {
+  background: var(--surface-2, #23262f);
+}
+.mybots-list tr:hover td {
+  background: var(--accent-blue, #2d8cff);
+  color: var(--text-inverse, #fff);
+}
+.mybots-list img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 2px solid #38bdf8;
+  background: #222;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  transition: transform 0.2s;
+  display: block;
+}
+.mybots-list img:hover {
+  transform: scale(1.12);
+  border-color: #22d3ee;
+}

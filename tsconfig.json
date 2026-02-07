@@ -21,5 +21,6 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
+  "exclude": ["src/interfaces/**", "src/dao/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

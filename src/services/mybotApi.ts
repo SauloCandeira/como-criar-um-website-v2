@@ -57,6 +57,30 @@ export interface MyBotSummaryDTO {
   recentEvents: MyBotEventDTO[];
 }
 
+export interface MyBotBattleDTO {
+  id: string;
+  userIdA: string;
+  userIdB: string;
+  betAmount: number;
+  battleType: string;
+  gasPct: number;
+  mapName: string;
+  powerFinalA: number;
+  powerFinalB: number;
+  winnerUserId: string;
+  payoutAmount: number;
+  createdAt?: string;
+}
+
+export interface MyBotBattleQueueDTO {
+  id: string;
+  betAmount: number;
+  level: number;
+  rarity: string;
+  status: string;
+  createdAt?: string;
+}
+
 const buildError = async (res: Response, fallback: string) => {
   const details = await res.text().catch(() => "");
   const suffix = details ? `: ${details}` : "";
@@ -109,6 +133,30 @@ const normalizeMemory = (row: any): MyBotMemoryDTO => ({
   lastEventId: row.last_event_id ?? row.lastEventId,
   createdAt: row.created_at ?? row.createdAt,
   updatedAt: row.updated_at ?? row.updatedAt,
+});
+
+const normalizeBattle = (row: any): MyBotBattleDTO => ({
+  id: row.id,
+  userIdA: row.user_id_a ?? row.userIdA,
+  userIdB: row.user_id_b ?? row.userIdB,
+  betAmount: Number(row.bet_amount ?? row.betAmount ?? 0),
+  battleType: row.battle_type ?? row.battleType ?? "",
+  gasPct: Number(row.gas_pct ?? row.gasPct ?? 0),
+  mapName: row.map_name ?? row.mapName ?? "",
+  powerFinalA: Number(row.power_final_a ?? row.powerFinalA ?? 0),
+  powerFinalB: Number(row.power_final_b ?? row.powerFinalB ?? 0),
+  winnerUserId: row.winner_user_id ?? row.winnerUserId ?? "",
+  payoutAmount: Number(row.payout_amount ?? row.payoutAmount ?? 0),
+  createdAt: row.created_at ?? row.createdAt,
+});
+
+const normalizeBattleQueue = (row: any): MyBotBattleQueueDTO => ({
+  id: row.id,
+  betAmount: Number(row.bet_amount ?? row.betAmount ?? 0),
+  level: Number(row.level ?? 1),
+  rarity: row.rarity ?? "comum",
+  status: row.status ?? "waiting",
+  createdAt: row.created_at ?? row.createdAt,
 });
 
 export async function fetchMyBotSummary(userId: string): Promise<MyBotSummaryDTO> {
@@ -217,4 +265,48 @@ export async function sendMyBotMessage(userId: string, payload: {
     stage: data.stage as MyBotStage,
     stats: normalizeStats(data.stats ?? {}),
   };
+}
+
+export async function fetchMyBotBattles(userId: string, limit = 20): Promise<MyBotBattleDTO[]> {
+  const params = new URLSearchParams();
+  params.append("userId", userId);
+  params.append("limit", String(limit));
+  const res = await fetch(`${API_BASE}/mybot/battles?${params.toString()}`);
+  if (!res.ok) throw await buildError(res, "Falha ao carregar batalhas do My Bot");
+  const data = await res.json();
+  return (data ?? []).map(normalizeBattle);
+}
+
+export async function fetchMyBotBattleQueue(userId: string): Promise<MyBotBattleQueueDTO | null> {
+  const params = new URLSearchParams();
+  params.append("userId", userId);
+  const res = await fetch(`${API_BASE}/mybot/battles/queue?${params.toString()}`);
+  if (!res.ok) throw await buildError(res, "Falha ao carregar fila de batalha");
+  const data = await res.json();
+  return data ? normalizeBattleQueue(data) : null;
+}
+
+export async function queueMyBotBattle(userId: string, betAmount: number) {
+  const res = await fetch(`${API_BASE}/mybot/battles/queue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, betAmount }),
+  });
+  if (!res.ok) throw await buildError(res, "Falha ao enfileirar batalha");
+  const data = await res.json();
+  return {
+    status: data.status as string,
+    battle: data.battle ? normalizeBattle(data.battle) : null,
+    queue: data.queue ? normalizeBattleQueue(data.queue) : null,
+  };
+}
+
+export async function evolveMyBot(userId: string, attribute: "forca" | "velocidade" | "inteligencia") {
+  const res = await fetch(`${API_BASE}/mybot/${userId}/evolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ attribute }),
+  });
+  if (!res.ok) throw await buildError(res, "Falha ao evoluir My Bot");
+  return res.json();
 }

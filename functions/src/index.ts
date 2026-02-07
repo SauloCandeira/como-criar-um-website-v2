@@ -12,12 +12,94 @@ setGlobalOptions({ region: "us-central1" });
 
 const DEPLOY_VERSION = "2026-01-28-4";
 
+const LANDINGPAGE_TEMPLATE_NAME = "Landingpage Profissional";
+const LANDINGPAGE_TEMPLATE_HTML = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Página Institucional</title>
+  <style id="dynamicCSS"></style>
+</head>
+<body>
+  <header>
+    <h1>Bem-vindo à Nossa Empresa</h1>
+    <p>Somos líderes no mercado de soluções inovadoras.</p>
+  </header>
+  <section>
+    <h2>Quem Somos</h2>
+    <p>Somos uma empresa focada em oferecer soluções tecnológicas para o mercado global.</p>
+  </section>
+  <section>
+    <h2>Nossos Serviços</h2>
+    <ul>
+      <li>Consultoria em Tecnologia</li>
+      <li>Desenvolvimento de Software</li>
+      <li>Treinamentos e Suporte</li>
+    </ul>
+  </section>
+  <footer>
+    <p>&copy; 2025 Nossa Empresa. Todos os direitos reservados.</p>
+  </footer>
+  <script id="dynamicJS"></script>
+</body>
+</html>`;
+const LANDINGPAGE_TEMPLATE_CSS = `body {
+  background-color: #092554;
+  color: white;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+header {
+  background-color: #0f3c62;
+  padding: 20px;
+  text-align: center;
+}
+header h1 {
+  font-size: 2.5em;
+  margin: 0;
+}
+header p {
+  font-size: 1.2em;
+}
+section {
+  padding: 20px;
+  margin: 10px;
+}
+section h2 {
+  color: #1e8bff;
+}
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+ul li {
+  background-color: #1e8bff;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 5px;
+}
+footer {
+  background-color: #0f3c62;
+  padding: 10px;
+  text-align: center;
+}
+footer p {
+  margin: 0;
+}`;
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
 let pool: Pool | null = null;
 let connector: Connector | null = null;
+
+function httpError(status: number, message: string) {
+  const error = new Error(message) as Error & { status?: number };
+  error.status = status;
+  return error;
+}
 
 async function ensureCostsBillingCycleColumn(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query("ALTER TABLE costs ADD COLUMN IF NOT EXISTS billing_cycle TEXT DEFAULT 'monthly'");
@@ -26,10 +108,16 @@ async function ensureCostsBillingCycleColumn(client: { query: (sql: string, para
 async function ensureProductsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await ensureProductTypesTable(client);
   await ensureProductTypeConstraint(client);
+  await ensureProjectsTable(client);
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS show_on_home BOOLEAN DEFAULT false");
+  await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS show_on_marketplace BOOLEAN DEFAULT false");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'digital'");
+  await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS base_project_id UUID");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
+  await client.query(
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_base_project_id_fkey') THEN ALTER TABLE products ADD CONSTRAINT products_base_project_id_fkey FOREIGN KEY (base_project_id) REFERENCES projects(id) ON DELETE SET NULL; END IF; END $$;"
+  );
 }
 
 async function ensureProductTypesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -64,18 +152,10 @@ async function ensureProductTypeConstraint(client: { query: (sql: string, params
   );
 }
 
-async function ensureDefaultProduct(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
-  await ensureProductsColumns(client);
+
+async function ensureProjectsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query(
-    "INSERT INTO products (name, price, description, show_on_home, purchase_price, sale_price) SELECT $1, $2, $3, $4, $5, $6 WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = $1)",
-    [
-      "Landing Page Institucional",
-      "999,00",
-      "Landing page institucional pronta para publicação",
-      true,
-      "0,00",
-      "0,00",
-    ]
+    "CREATE TABLE IF NOT EXISTS projects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', project_type TEXT DEFAULT '', sale_price TEXT DEFAULT '', production_cost TEXT DEFAULT '', purchase_count INTEGER DEFAULT 0, repository TEXT DEFAULT '', domain TEXT DEFAULT '', hosting TEXT DEFAULT '', status TEXT DEFAULT 'Ativo', paid BOOLEAN DEFAULT false, is_public BOOLEAN DEFAULT true, owner_user_id TEXT DEFAULT '', product_id UUID, base_project_id UUID, purchase_id UUID, created_from_purchase BOOLEAN DEFAULT false, is_template BOOLEAN DEFAULT false, html_content TEXT DEFAULT '', css_content TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
   );
 }
 
@@ -86,40 +166,48 @@ async function ensureProjectsColumns(client: { query: (sql: string, params?: any
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS production_cost TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_user_id TEXT DEFAULT ''");
-}
-
-async function ensureProjectsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS product_id UUID");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS base_project_id UUID");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS purchase_id UUID");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_from_purchase BOOLEAN DEFAULT false");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT false");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS html_content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS css_content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()");
   await client.query(
-    "CREATE TABLE IF NOT EXISTS projects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', project_type TEXT DEFAULT '', sale_price TEXT DEFAULT '', production_cost TEXT DEFAULT '', purchase_count INTEGER DEFAULT 0, repository TEXT DEFAULT '', domain TEXT DEFAULT '', hosting TEXT DEFAULT '', status TEXT DEFAULT 'Ativo', paid BOOLEAN DEFAULT false, is_public BOOLEAN DEFAULT true, owner_user_id TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'projects_product_id_fkey') THEN ALTER TABLE projects ADD CONSTRAINT projects_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL; END IF; END $$;"
   );
+  await client.query("CREATE INDEX IF NOT EXISTS projects_product_id_idx ON projects (product_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS projects_owner_user_id_idx ON projects (owner_user_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS projects_base_project_id_idx ON projects (base_project_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS projects_is_template_idx ON projects (is_template)");
+  await client.query("CREATE INDEX IF NOT EXISTS projects_purchase_id_idx ON projects (purchase_id)");
 }
 
 async function ensurePurchasesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query(
-    "CREATE TABLE IF NOT EXISTS purchases (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, product_id UUID REFERENCES products(id) ON DELETE CASCADE, price NUMERIC(12,2) DEFAULT 0, status TEXT DEFAULT 'completed', created_at TIMESTAMPTZ DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS purchases (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, product_id UUID REFERENCES products(id) ON DELETE CASCADE, project_id UUID REFERENCES projects(id) ON DELETE SET NULL, price NUMERIC(12,2) DEFAULT 0, purchase_type TEXT DEFAULT 'paid', status TEXT DEFAULT 'completed', created_at TIMESTAMPTZ DEFAULT NOW())"
   );
+  await client.query("ALTER TABLE purchases ADD COLUMN IF NOT EXISTS project_id UUID");
+  await client.query("ALTER TABLE purchases ADD COLUMN IF NOT EXISTS purchase_type TEXT DEFAULT 'paid'");
+  await client.query(
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'purchases_project_id_fkey') THEN ALTER TABLE purchases ADD CONSTRAINT purchases_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL; END IF; END $$;"
+  );
+  await client.query("CREATE INDEX IF NOT EXISTS purchases_user_id_idx ON purchases (user_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS purchases_product_id_idx ON purchases (product_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS purchases_project_id_idx ON purchases (project_id)");
 }
 
-async function ensureUserGamificationTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
-  await client.query(
-    "CREATE TABLE IF NOT EXISTS user_gamification (user_id TEXT PRIMARY KEY, plan TEXT DEFAULT 'free', usage_score INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+async function cleanupInvalidUserPurchases(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
+  const invalid = await client.query(
+    "SELECT pu.id FROM purchases pu LEFT JOIN projects p ON p.id = pu.project_id AND p.created_from_purchase = true AND p.is_template = false AND p.owner_user_id = pu.user_id AND p.product_id = pu.product_id AND p.purchase_id = pu.id WHERE pu.user_id = $1 AND pu.status = 'completed' AND p.id IS NULL",
+    [userId]
   );
-}
-
-async function ensureUserCardsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  if (invalid.rows.length === 0) return;
+  await client.query("DELETE FROM purchases WHERE user_id = $1", [userId]);
   await client.query(
-    "CREATE TABLE IF NOT EXISTS user_cards (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL UNIQUE, seed BIGINT NOT NULL, hash_seed TEXT NOT NULL, name TEXT NOT NULL, species TEXT NOT NULL, class TEXT NOT NULL, rarity TEXT NOT NULL, attributes JSONB NOT NULL, visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb, level INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
-  );
-  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS hash_seed TEXT NOT NULL DEFAULT ''");
-  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb");
-}
-
-async function ensureInternalAccountsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
-  await client.query(
-    "CREATE TABLE IF NOT EXISTS internal_accounts (user_id TEXT PRIMARY KEY, balance NUMERIC(14,2) DEFAULT 0, updated_at TIMESTAMPTZ DEFAULT NOW())"
-  );
-  await client.query(
-    "CREATE TABLE IF NOT EXISTS internal_transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), from_user_id TEXT, to_user_id TEXT, amount NUMERIC(14,2) NOT NULL, reason TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+    "DELETE FROM projects WHERE owner_user_id = $1 AND created_from_purchase = true AND is_template = false",
+    [userId]
   );
 }
 
@@ -140,8 +228,10 @@ async function ensureCommerceOrdersTable(client: { query: (sql: string, params?:
 
 async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query(
-    "CREATE TABLE IF NOT EXISTS mybots (user_id TEXT PRIMARY KEY, myalien_user_id TEXT DEFAULT '', stage TEXT DEFAULT 'assistant', stage_reason TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS mybots (user_id TEXT PRIMARY KEY, myalien_user_id TEXT DEFAULT '', stage TEXT DEFAULT 'assistant', stage_reason TEXT DEFAULT '', image_url TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
   );
+  // Garante que a coluna image_url exista mesmo em bancos já criados
+  await client.query("ALTER TABLE mybots ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';");
   await client.query(
     "CREATE TABLE IF NOT EXISTS mybot_stats (user_id TEXT PRIMARY KEY, content_accessed_count INTEGER DEFAULT 0, projects_purchased_count INTEGER DEFAULT 0, projects_created_count INTEGER DEFAULT 0, courses_started_count INTEGER DEFAULT 0, courses_completed_count INTEGER DEFAULT 0, marketplace_interactions_count INTEGER DEFAULT 0, tool_usage_count INTEGER DEFAULT 0, feedback_score INTEGER DEFAULT 0, last_event_at TIMESTAMPTZ DEFAULT NOW())"
   );
@@ -157,6 +247,54 @@ async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) 
   await client.query(
     "CREATE INDEX IF NOT EXISTS mybot_events_user_idx ON mybot_events (user_id, occurred_at DESC)"
   );
+
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_profiles (user_id TEXT PRIMARY KEY, card_id UUID, available_points INTEGER DEFAULT 0, loss_streak INTEGER DEFAULT 0, high_bet_streak INTEGER DEFAULT 0, last_high_bet_at TIMESTAMPTZ, last_battle_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_cpf_registry (cpf_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_activations (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, cpf_hash TEXT NOT NULL, deposit_tx_id UUID, credits_granted NUMERIC(12,2) DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_battle_queue (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, card_id UUID NOT NULL, bet_amount NUMERIC(12,2) NOT NULL, level INTEGER DEFAULT 1, rarity TEXT DEFAULT 'comum', rarity_rank INTEGER DEFAULT 0, status TEXT DEFAULT 'waiting', matched_battle_id UUID, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_battles (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id_a TEXT NOT NULL, user_id_b TEXT NOT NULL, card_id_a UUID NOT NULL, card_id_b UUID NOT NULL, bet_amount NUMERIC(12,2) NOT NULL, battle_type TEXT NOT NULL, gas_pct NUMERIC(5,4) NOT NULL, map_name TEXT NOT NULL, map_weights JSONB NOT NULL, seed TEXT NOT NULL, power_a NUMERIC(12,4) NOT NULL, power_b NUMERIC(12,4) NOT NULL, power_final_a NUMERIC(12,4) NOT NULL, power_final_b NUMERIC(12,4) NOT NULL, winner_user_id TEXT NOT NULL, payout_amount NUMERIC(12,2) NOT NULL, gas_amount NUMERIC(12,2) NOT NULL, status TEXT DEFAULT 'resolved', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_evolutions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, card_id UUID NOT NULL, attribute TEXT NOT NULL, before_value INTEGER NOT NULL, after_value INTEGER NOT NULL, cost NUMERIC(12,2) NOT NULL, points_spent INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_profiles_card_idx ON mybot_profiles (card_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_battle_queue_status_idx ON mybot_battle_queue (status, bet_amount, level, rarity_rank)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_battles_user_a_idx ON mybot_battles (user_id_a, created_at DESC)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_battles_user_b_idx ON mybot_battles (user_id_b, created_at DESC)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_activations_user_idx ON mybot_activations (user_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_activations_cpf_idx ON mybot_activations (cpf_hash)");
+}
+
+async function ensureDaoTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS dao_proposals (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL, description TEXT NOT NULL, created_by_user_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING_REVIEW', created_at TIMESTAMPTZ DEFAULT NOW(), approved_by_admin_id TEXT, voting_start TIMESTAMPTZ, voting_end TIMESTAMPTZ)"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS dao_votes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), proposal_id UUID REFERENCES dao_proposals(id) ON DELETE CASCADE, user_id TEXT NOT NULL, mybot_id TEXT NOT NULL, vote TEXT NOT NULL, amount_bet NUMERIC(12,2) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS dao_mybot_balances (mybot_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, balance NUMERIC(14,2) DEFAULT 1000, updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE dao_proposals ADD COLUMN IF NOT EXISTS approved_by_admin_id TEXT");
+  await client.query("ALTER TABLE dao_proposals ADD COLUMN IF NOT EXISTS voting_start TIMESTAMPTZ");
+  await client.query("ALTER TABLE dao_proposals ADD COLUMN IF NOT EXISTS voting_end TIMESTAMPTZ");
+  await client.query("ALTER TABLE dao_proposals ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_REVIEW'");
+  await client.query("ALTER TABLE dao_votes ADD COLUMN IF NOT EXISTS amount_bet NUMERIC(12,2) NOT NULL DEFAULT 0");
+  await client.query("CREATE INDEX IF NOT EXISTS dao_proposals_status_idx ON dao_proposals (status)");
+  await client.query("CREATE INDEX IF NOT EXISTS dao_proposals_created_at_idx ON dao_proposals (created_at DESC)");
+  await client.query("CREATE INDEX IF NOT EXISTS dao_votes_proposal_idx ON dao_votes (proposal_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS dao_votes_user_idx ON dao_votes (user_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS dao_mybot_balances_user_idx ON dao_mybot_balances (user_id)");
 }
 
 function inferProjectType(name: string) {
@@ -218,6 +356,65 @@ const MYBOT_STAGE_RULES = {
   },
 };
 
+const MYBOT_BATTLE_TYPES = [
+  { id: "casual", chance: 0.5, gasPct: 0.05 },
+  { id: "ranqueada", chance: 0.35, gasPct: 0.1 },
+  { id: "especial", chance: 0.15, gasPct: 0.15 },
+] as const;
+
+const MYBOT_MAPS = [
+  {
+    id: "Arena Classica",
+    weights: { strength: 1.0, speed: 1.0, intelligence: 1.0 },
+    baseWeight: 0.4,
+  },
+  {
+    id: "Deserto",
+    weights: { strength: 1.3, speed: 0.9, intelligence: 1.0 },
+    baseWeight: 0.2,
+  },
+  {
+    id: "Floresta",
+    weights: { strength: 0.9, speed: 1.3, intelligence: 1.1 },
+    baseWeight: 0.2,
+  },
+  {
+    id: "Cidade em Ruinas",
+    weights: { strength: 1.0, speed: 1.1, intelligence: 1.3 },
+    baseWeight: 0.12,
+  },
+  {
+    id: "Arena Tecnologica",
+    weights: { strength: 0.9, speed: 1.0, intelligence: 1.4 },
+    baseWeight: 0.08,
+  },
+] as const;
+
+const MYBOT_RARITY_ORDER = ["comum", "raro", "epico", "lendario"] as const;
+
+const MYBOT_RARITY_CAPS: Record<string, number> = {
+  comum: 85,
+  raro: 95,
+  epico: 105,
+  lendario: 115,
+};
+
+const MYBOT_RARITY_EVOLUTION_MULTIPLIER: Record<string, number> = {
+  comum: 1.0,
+  raro: 1.4,
+  epico: 1.9,
+  lendario: 2.6,
+};
+
+const MYBOT_XP_PER_LEVEL = 100;
+const MYBOT_POINTS_PER_LEVEL = 3;
+const MYBOT_HIGH_BET_THRESHOLD = 50;
+const MYBOT_HIGH_BET_MAX_STREAK = 3;
+const MYBOT_HIGH_BET_WINDOW_MINUTES = 15;
+
+const HK_MASTER_USER_ID = "hktech_master";
+const HK_MASTER_INITIAL_SUPPLY = 40000000;
+
 async function getOrCreateMyBot(client: { query: (sql: string, params?: any[]) => Promise<any> }, userId: string) {
   await ensureMyBotTables(client);
   const existing = await client.query("SELECT * FROM mybots WHERE user_id = $1", [userId]);
@@ -236,6 +433,21 @@ async function getOrCreateMyBotStats(client: { query: (sql: string, params?: any
   const created = await client.query(
     "INSERT INTO mybot_stats (user_id) VALUES ($1) RETURNING *",
     [userId]
+  );
+  return created.rows[0];
+}
+
+async function getOrCreateMyBotProfile(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  userId: string,
+  cardId?: string
+) {
+  await ensureMyBotTables(client);
+  const existing = await client.query("SELECT * FROM mybot_profiles WHERE user_id = $1", [userId]);
+  if (existing.rows[0]) return existing.rows[0];
+  const created = await client.query(
+    "INSERT INTO mybot_profiles (user_id, card_id) VALUES ($1, $2) RETURNING *",
+    [userId, cardId || null]
   );
   return created.rows[0];
 }
@@ -380,13 +592,20 @@ function normalizeCpf(cpf: string) {
   return String(cpf || "").replace(/\D/g, "");
 }
 
-function hashCpfUser(cpf: string, userId: string) {
+function hashString(input: string) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function hashCpf(cpf: string) {
   const normalized = normalizeCpf(cpf);
   if (normalized.length !== 11) {
     throw new Error("CPF inválido.");
   }
-  const hash = crypto.createHash("sha256").update(`${normalized}|${userId}`).digest("hex");
-  return hash;
+  return hashString(normalized);
+}
+
+function hashCpfUser(cpf: string, userId: string) {
+  return hashCpf(cpf);
 }
 
 function seedFromHash(hash: string) {
@@ -480,6 +699,78 @@ function computeMarketValue(attributes: { strength: number; speed: number; intel
   return Number((base * rarityBoost * attributeBoost).toFixed(2));
 }
 
+function getRarityRank(rarity: string) {
+  const idx = MYBOT_RARITY_ORDER.indexOf((rarity || "").toLowerCase() as (typeof MYBOT_RARITY_ORDER)[number]);
+  return idx === -1 ? 0 : idx;
+}
+
+function getRarityCap(rarity: string) {
+  return MYBOT_RARITY_CAPS[(rarity || "").toLowerCase()] ?? MYBOT_RARITY_CAPS.comum;
+}
+
+function getRarityEvolutionMultiplier(rarity: string) {
+  return MYBOT_RARITY_EVOLUTION_MULTIPLIER[(rarity || "").toLowerCase()] ?? 1.0;
+}
+
+function computeEvolutionCost(params: { level: number; rarity: string; currentValue: number }) {
+  const base = 2;
+  const levelFactor = Math.pow(1.08, Math.max(0, params.level - 1));
+  const rarityFactor = getRarityEvolutionMultiplier(params.rarity);
+  const attrFactor = Math.pow(1.03, Math.max(0, params.currentValue - 30));
+  return Number((base * levelFactor * rarityFactor * attrFactor).toFixed(2));
+}
+
+function pickWeighted<T>(rng: () => number, items: Array<{ weight: number; value: T }>): T {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0) return items[0].value;
+  const roll = rng() * total;
+  let acc = 0;
+  for (const item of items) {
+    acc += item.weight;
+    if (roll <= acc) return item.value;
+  }
+  return items[items.length - 1].value;
+}
+
+function computeBattleType(rng: () => number) {
+  return pickWeighted(rng, MYBOT_BATTLE_TYPES.map((type) => ({ weight: type.chance, value: type })));
+}
+
+function computeMapWeightsByBet(betAmount: number) {
+  const betNormalized = clamp(betAmount / 100, 0, 1);
+  const rareBoost = betNormalized * 0.18;
+  const adjusted = MYBOT_MAPS.map((map) => {
+    let weight: number = map.baseWeight;
+    if (map.id === "Arena Classica") weight = Math.max(0.05, map.baseWeight - rareBoost);
+    if (map.id === "Cidade em Ruinas") weight = map.baseWeight + rareBoost * 0.6;
+    if (map.id === "Arena Tecnologica") weight = map.baseWeight + rareBoost * 0.4;
+    return { map, weight };
+  });
+  return adjusted;
+}
+
+function computeBotPower(attributes: { strength: number; speed: number; intelligence: number }, mapWeights: { strength: number; speed: number; intelligence: number }, rng: () => number) {
+  const raw = attributes.strength * mapWeights.strength + attributes.speed * mapWeights.speed + attributes.intelligence * mapWeights.intelligence;
+  const randomness = 0.9 + rng() * 0.2;
+  return { raw, final: Number((raw * randomness).toFixed(4)) };
+}
+
+function computeBattleXp(betAmount: number, isWinner: boolean, lossStreak: number) {
+  const baseWin = Math.max(1, Math.round(betAmount * 2));
+  const baseLose = Math.max(1, Math.round(betAmount * 0.5));
+  if (isWinner) return baseWin;
+  const reduction = Math.min(0.5, Math.max(0, lossStreak) * 0.1);
+  return Math.max(1, Math.round(baseLose * (1 - reduction)));
+}
+
+function getBattleAttributes(attributes: any) {
+  return {
+    strength: Number(attributes?.strength ?? 0),
+    speed: Number(attributes?.speed ?? 0),
+    intelligence: Number(attributes?.intelligence ?? 0),
+  };
+}
+
 function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
   const palette = visualMeta?.palette ?? VISUAL_PALETTES[0];
   const glow = visualMeta?.glow ? `filter="url(#glow)"` : "";
@@ -487,85 +778,85 @@ function generateAlienSvg(name: string, rarity: string, visualMeta: any) {
   const eyes = Math.max(1, Number(visualMeta?.eyes ?? 2));
   const horns = Math.max(0, Number(visualMeta?.horns ?? 0));
   const aura = Number(visualMeta?.aura ?? 0);
-  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 480 640\" width=\"480\" height=\"640\">
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 640" width="480" height="640">
   <defs>
-    <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
-      <stop offset=\"0%\" stop-color=\"${palette.secondary}\" />
-      <stop offset=\"100%\" stop-color=\"#020617\" />
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%\" stop-color=\"${palette.secondary}\" />
+      <stop offset="100%\" stop-color=\"#020617\" />
     </linearGradient>
-    <radialGradient id=\"core\" cx=\"50%\" cy=\"35%\" r=\"60%\">
-      <stop offset=\"0%\" stop-color=\"${palette.primary}\" stop-opacity=\"0.95\" />
-      <stop offset=\"100%\" stop-color=\"${palette.secondary}\" stop-opacity=\"0.9\" />
+    <radialGradient id="core" cx="50%\" cy="35%\" r="60%">
+      <stop offset="0%\" stop-color=\"${palette.primary}\" stop-opacity="0.95\" />
+      <stop offset="100%\" stop-color=\"${palette.secondary}\" stop-opacity="0.9\" />
     </radialGradient>
-    <linearGradient id=\"glass\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">
-      <stop offset=\"0%\" stop-color=\"rgba(255,255,255,0.16)\" />
-      <stop offset=\"100%\" stop-color=\"rgba(255,255,255,0.02)\" />
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%\" stop-color="rgba(255,255,255,0.16)\" />
+      <stop offset="100%\" stop-color="rgba(255,255,255,0.02)\" />
     </linearGradient>
-    <filter id=\"glow\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\">
-      <feGaussianBlur stdDeviation=\"14\" result=\"coloredBlur\" />
+    <filter id="glow" x="-50%\" y="-50%\" width="200%\" height="200%">
+      <feGaussianBlur stdDeviation="14\" result="coloredBlur\" />
       <feMerge>
-        <feMergeNode in=\"coloredBlur\" />
-        <feMergeNode in=\"SourceGraphic\" />
+        <feMergeNode in="coloredBlur\" />
+        <feMergeNode in="SourceGraphic\" />
       </feMerge>
     </filter>
-    <pattern id=\"stars\" width=\"80\" height=\"80\" patternUnits=\"userSpaceOnUse\">
-      <circle cx=\"10\" cy=\"12\" r=\"2\" fill=\"#e2e8f0\" opacity=\"0.3\" />
-      <circle cx=\"60\" cy=\"20\" r=\"1.5\" fill=\"#f8fafc\" opacity=\"0.4\" />
-      <circle cx=\"40\" cy=\"60\" r=\"1.2\" fill=\"#cbd5f5\" opacity=\"0.35\" />
+    <pattern id="stars" width="80" height="80" patternUnits="userSpaceOnUse\">
+      <circle cx="10\" cy="12\" r="2\" fill=\"#e2e8f0\" opacity="0.3\" />
+      <circle cx="60\" cy="20\" r="1.5\" fill=\"#f8fafc\" opacity="0.4\" />
+      <circle cx="40\" cy="60\" r="1.2\" fill=\"#cbd5f5\" opacity="0.35\" />
     </pattern>
-    <pattern id=\"pattern-0\" width=\"40\" height=\"40\" patternUnits=\"userSpaceOnUse\">
-      <circle cx=\"8\" cy=\"8\" r=\"3\" fill=\"${palette.accent}\" fill-opacity=\"0.35\" />
+    <pattern id="pattern-0\" width="40\" height="40\" patternUnits="userSpaceOnUse\">
+      <circle cx="8\" cy="8\" r="3\" fill=\"${palette.accent}\" fill-opacity="0.35\" />
     </pattern>
-    <pattern id=\"pattern-1\" width=\"48\" height=\"48\" patternUnits=\"userSpaceOnUse\">
-      <rect x=\"0\" y=\"0\" width=\"48\" height=\"48\" fill=\"${palette.secondary}\" />
-      <path d=\"M0 0 L48 48 M48 0 L0 48\" stroke=\"${palette.accent}\" stroke-opacity=\"0.25\" />
+    <pattern id="pattern-1\" width="48\" height="48\" patternUnits="userSpaceOnUse\">
+      <rect x="0\" y="0\" width="48\" height="48\" fill=\"${palette.secondary}\" />
+      <path d="M0 0 L48 48 M48 0 L0 48\" stroke=\"${palette.accent}\" stroke-opacity="0.25\" />
     </pattern>
-    <pattern id=\"pattern-2\" width=\"36\" height=\"36\" patternUnits=\"userSpaceOnUse\">
-      <circle cx=\"18\" cy=\"18\" r=\"9\" fill=\"${palette.accent}\" fill-opacity=\"0.25\" />
+    <pattern id="pattern-2\" width="36\" height="36\" patternUnits="userSpaceOnUse\">
+      <circle cx="18\" cy="18\" r="9\" fill=\"${palette.accent}\" fill-opacity="0.25\" />
     </pattern>
-    <pattern id=\"pattern-3\" width=\"60\" height=\"60\" patternUnits=\"userSpaceOnUse\">
-      <rect x=\"0\" y=\"0\" width=\"60\" height=\"60\" fill=\"${palette.secondary}\" />
-      <circle cx=\"30\" cy=\"30\" r=\"12\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
+    <pattern id="pattern-3\" width="60\" height="60\" patternUnits="userSpaceOnUse\">
+      <rect x="0\" y="0\" width="60\" height="60\" fill=\"${palette.secondary}\" />
+      <circle cx="30\" cy="30\" r="12\" fill=\"${palette.accent}\" fill-opacity="0.3\" />
     </pattern>
-    <pattern id=\"pattern-4\" width=\"50\" height=\"50\" patternUnits=\"userSpaceOnUse\">
-      <path d=\"M0 25 L50 25\" stroke=\"${palette.accent}\" stroke-opacity=\"0.2\" />
-      <path d=\"M25 0 L25 50\" stroke=\"${palette.accent}\" stroke-opacity=\"0.2\" />
+    <pattern id="pattern-4\" width="50\" height="50\" patternUnits="userSpaceOnUse\">
+      <path d="M0 25 L50 25\" stroke=\"${palette.accent}\" stroke-opacity="0.2\" />
+      <path d="M25 0 L25 50\" stroke=\"${palette.accent}\" stroke-opacity="0.2\" />
     </pattern>
-    <pattern id=\"pattern-5\" width=\"42\" height=\"42\" patternUnits=\"userSpaceOnUse\">
-      <circle cx=\"10\" cy=\"32\" r=\"4\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
-      <circle cx=\"32\" cy=\"10\" r=\"4\" fill=\"${palette.accent}\" fill-opacity=\"0.3\" />
+    <pattern id="pattern-5\" width="42\" height="42\" patternUnits="userSpaceOnUse\">
+      <circle cx="10\" cy="32\" r="4\" fill=\"${palette.accent}\" fill-opacity="0.3\" />
+      <circle cx="32\" cy="10\" r="4\" fill=\"${palette.accent}\" fill-opacity="0.3\" />
     </pattern>
   </defs>
-  <rect width=\"480\" height=\"640\" rx=\"32\" fill=\"url(#bg)\" />
-  <rect width=\"480\" height=\"640\" fill=\"url(#stars)\" opacity=\"0.3\" />
-  <rect x=\"36\" y=\"54\" width=\"408\" height=\"512\" rx=\"28\" fill=\"url(#glass)\" stroke=\"rgba(148,163,184,0.2)\" />
-  <rect x=\"50\" y=\"70\" width=\"380\" height=\"460\" rx=\"24\" fill=\"url(#${patternId})\" opacity=\"0.25\" />
-  ${aura === 1 ? `<circle cx=\"240\" cy=\"260\" r=\"200\" fill=\"${palette.accent}\" opacity=\"0.08\" />` : ""}
-  ${aura === 2 ? `<circle cx=\"240\" cy=\"260\" r=\"210\" fill=\"${palette.primary}\" opacity=\"0.08\" />` : ""}
+  <rect width="480" height="640" rx="32" fill="url(#bg)\" />
+  <rect width="480" height="640" fill="url(#stars)\" opacity="0.3\" />
+  <rect x="36" y="54" width="408" height="512" rx="28" fill="url(#glass)\" stroke="rgba(148,163,184,0.2)\" />
+  <rect x="50" y="70" width="380" height="460" rx="24" fill="url(#${patternId})\" opacity="0.25\" />
+  ${aura === 1 ? `<circle cx="240" cy="260" r="200" fill="${palette.accent}" opacity="0.08" />` : ""}
+  ${aura === 2 ? `<circle cx="240" cy="260" r="210" fill="${palette.primary}" opacity="0.08" />` : ""}
   <g ${glow}>
-    <circle cx=\"240\" cy=\"250\" r=\"125\" fill=\"${palette.primary}\" />
-    <ellipse cx=\"240\" cy=\"360\" rx=\"120\" ry=\"100\" fill=\"${palette.secondary}\" opacity=\"0.2\" />
+    <circle cx="240" cy="250" r="125" fill="${palette.primary}" />
+    <ellipse cx="240" cy="360" rx="120" ry="100" fill="${palette.secondary}" opacity="0.2" />
     ${Array.from({ length: horns }).map((_, idx) => {
       const offset = horns === 1 ? 0 : (idx - (horns - 1) / 2) * 48;
       return `
-    <path d=\"M${240 + offset - 18} 120 Q${240 + offset} 70 ${240 + offset + 18} 120\" stroke=\"${palette.accent}\" stroke-width=\"10\" fill=\"none\" />`;
+    <path d="M${240 + offset - 18} 120 Q${240 + offset} 70 ${240 + offset + 18} 120\" stroke="${palette.accent}" stroke-width="10" fill="none" />`;
     }).join("")}
     ${Array.from({ length: eyes }).map((_, idx) => {
       const offset = eyes === 1 ? 0 : (idx - (eyes - 1) / 2) * 58;
       return `
-    <circle cx=\"${240 + offset}\" cy=\"235\" r=\"26\" fill=\"#f8fafc\" />
-    <circle cx=\"${240 + offset}\" cy=\"235\" r=\"12\" fill=\"#0f172a\" />
-    <circle cx=\"${240 + offset + 6}\" cy=\"230\" r=\"4\" fill=\"#ffffff\" opacity=\"0.8\" />`;
+    <circle cx="${240 + offset}\" cy="235\" r="26\" fill=\"#f8fafc\" />
+    <circle cx="${240 + offset}\" cy="235\" r="12\" fill=\"#0f172a\" />
+    <circle cx="${240 + offset + 6}\" cy="230\" r="4\" fill=\"#ffffff\" opacity="0.8\" />`;
     }).join("")}
-    <path d=\"M210 300 Q240 330 270 300\" stroke=\"${palette.accent}\" stroke-width=\"10\" fill=\"none\" stroke-linecap=\"round\" />
-    <circle cx=\"190\" cy=\"290\" r=\"8\" fill=\"${palette.accent}\" opacity=\"0.6\" />
-    <circle cx=\"290\" cy=\"290\" r=\"8\" fill=\"${palette.accent}\" opacity=\"0.6\" />
-    <ellipse cx=\"180\" cy=\"360\" rx=\"55\" ry=\"35\" fill=\"${palette.primary}\" opacity=\"0.8\" />
-    <ellipse cx=\"300\" cy=\"360\" rx=\"55\" ry=\"35\" fill=\"${palette.primary}\" opacity=\"0.8\" />
+    <path d="M210 300 Q240 330 270 300\" stroke="${palette.accent}" stroke-width="10" fill="none" stroke-linecap="round" />
+    <circle cx="190" cy="290" r="8" fill="${palette.accent}" opacity="0.6" />
+    <circle cx="290" cy="290" r="8" fill="${palette.accent}" opacity="0.6" />
+    <ellipse cx="180" cy="360" rx="55" ry="35" fill="${palette.primary}" opacity="0.8" />
+    <ellipse cx="300" cy="360" rx="55" ry="35" fill="${palette.primary}" opacity="0.8" />
   </g>
-  <text x=\"50%\" y=\"565\" text-anchor=\"middle\" fill=\"#e2e8f0\" font-size=\"24\" font-family=\"'Segoe UI', sans-serif\">${name}</text>
-  <text x=\"50%\" y=\"595\" text-anchor=\"middle\" fill=\"#94a3b8\" font-size=\"13\" font-family=\"'Segoe UI', sans-serif\">${rarity.toUpperCase()}</text>
+  <text x="50%\" y="565\" text-anchor="middle\" fill=\"#e2e8f0\" font-size="24\" font-family=\"'Segoe UI', sans-serif\">${name}</text>
+  <text x="50%\" y="595\" text-anchor="middle\" fill=\"#94a3b8\" font-size="13\" font-family=\"'Segoe UI', sans-serif\">${rarity.toUpperCase()}</text>
 </svg>`;
 }
 
@@ -654,12 +945,59 @@ async function getOrCreateInternalAccount(client: { query: (sql: string, params?
     "SELECT user_id, balance, updated_at FROM internal_accounts WHERE user_id = $1",
     [userId]
   );
-  if (existing.rows[0]) return existing.rows[0];
+  if (existing.rows[0]) {
+    const balance = Number(existing.rows[0].balance || 0);
+    if (balance <= 0) {
+      const tx = await client.query(
+        "SELECT id FROM internal_transactions WHERE to_user_id = $1 OR from_user_id = $1 LIMIT 1",
+        [userId]
+      );
+      if (!tx.rows[0]) {
+        await ensureHouseAccount(client);
+        const updated = await client.query(
+          "UPDATE internal_accounts SET balance = $2, updated_at = NOW() WHERE user_id = $1 RETURNING user_id, balance, updated_at",
+          [userId, 20]
+        );
+        await client.query(
+          "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+          [HK_MASTER_USER_ID, 20]
+        );
+        await client.query(
+          "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+          [HK_MASTER_USER_ID, userId, 20, "hkcoin_bootstrap"]
+        );
+        return updated.rows[0];
+      }
+    }
+    return existing.rows[0];
+  }
+  await ensureHouseAccount(client);
   const created = await client.query(
     "INSERT INTO internal_accounts (user_id, balance) VALUES ($1, $2) RETURNING user_id, balance, updated_at",
-    [userId, 0]
+    [userId, 20]
+  );
+  await client.query(
+    "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+    [HK_MASTER_USER_ID, 20]
+  );
+  await client.query(
+    "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+    [HK_MASTER_USER_ID, userId, 20, "hkcoin_bootstrap"]
   );
   return created.rows[0];
+}
+
+async function ensureHouseAccount(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureInternalAccountsTable(client);
+  const existing = await client.query(
+    "SELECT user_id FROM internal_accounts WHERE user_id = $1",
+    [HK_MASTER_USER_ID]
+  );
+  if (existing.rows[0]) return;
+  await client.query(
+    "INSERT INTO internal_accounts (user_id, balance) VALUES ($1, $2)",
+    [HK_MASTER_USER_ID, HK_MASTER_INITIAL_SUPPLY]
+  );
 }
 
 async function ensureAssetsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -682,6 +1020,80 @@ async function ensureUsersTable(client: { query: (sql: string, params?: any[]) =
   await client.query(
     "CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), auth_uid TEXT DEFAULT '', name TEXT DEFAULT '', email TEXT NOT NULL UNIQUE, photo_url TEXT DEFAULT '', auth_provider TEXT DEFAULT '', permission_level TEXT DEFAULT 'A', status TEXT DEFAULT 'Ativo', created_at TIMESTAMPTZ DEFAULT NOW(), last_login_at TIMESTAMPTZ DEFAULT NOW())"
   );
+}
+
+async function ensureAdminActionsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS admin_actions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), admin_id TEXT NOT NULL, action TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("CREATE INDEX IF NOT EXISTS admin_actions_admin_id_idx ON admin_actions (admin_id)");
+}
+
+async function assertAdmin(client: { query: (sql: string, params?: any[]) => Promise<any> }, adminId: string) {
+  await ensureUsersTable(client);
+  const result = await client.query(
+    "SELECT permission_level FROM users WHERE lower(email) = lower($1) OR id::text = $1 LIMIT 1",
+    [adminId]
+  );
+  const level = result.rows[0]?.permission_level ?? 'A';
+  if (level !== 'B') {
+    const error = new Error('Acesso negado: admin obrigatório.');
+    (error as { status?: number }).status = 403;
+    throw error;
+  }
+}
+
+async function logAdminAction(client: { query: (sql: string, params?: any[]) => Promise<any> }, adminId: string, action: string) {
+  await ensureAdminActionsTable(client);
+  await client.query("INSERT INTO admin_actions (admin_id, action) VALUES ($1, $2)", [adminId, action]);
+}
+
+async function loadProjectContentForUser(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  projectId: string,
+  userId: string
+) {
+  await ensureProjectsColumns(client);
+  const result = await client.query(
+    "SELECT id, owner_user_id, is_template, html_content, css_content, created_at, updated_at FROM projects WHERE id = $1",
+    [projectId]
+  );
+  const project = result.rows[0];
+  if (!project) throw httpError(404, "Projeto não encontrado.");
+
+  if (project.is_template) {
+    await assertAdmin(client, userId);
+  } else if (String(project.owner_user_id || "").toLowerCase() !== String(userId || "").toLowerCase()) {
+    throw httpError(403, "Acesso negado ao conteúdo do projeto.");
+  }
+
+  return project;
+}
+
+async function ensureUserGamificationTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_gamification (user_id TEXT PRIMARY KEY, plan TEXT DEFAULT 'free', usage_score INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+async function ensureUserCardsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS user_cards (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL UNIQUE, seed BIGINT NOT NULL, hash_seed TEXT NOT NULL, name TEXT NOT NULL, species TEXT NOT NULL, class TEXT NOT NULL, rarity TEXT NOT NULL, attributes JSONB NOT NULL, visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb, market_value NUMERIC(12,2) DEFAULT 10, image_url TEXT DEFAULT '', level INTEGER DEFAULT 1, xp INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS hash_seed TEXT NOT NULL DEFAULT ''");
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS market_value NUMERIC(12,2) DEFAULT 10");
+  await client.query("ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT ''");
+}
+
+async function ensureInternalAccountsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS internal_accounts (user_id TEXT PRIMARY KEY, balance NUMERIC(14,2) DEFAULT 20, updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS internal_transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), from_user_id TEXT, to_user_id TEXT, amount NUMERIC(14,2) NOT NULL, reason TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE internal_accounts ALTER COLUMN balance SET DEFAULT 20");
 }
 
 async function ensureDepositTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -773,18 +1185,16 @@ app.get("/products", async (_req, res) => {
     const pool = await getPool();
     const client = await pool.connect();
     try {
-      await ensureDefaultProduct(client);
       const result = await client.query(
-        "SELECT id, name, price, description, product_type, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+        "SELECT id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
       );
       res.json(result.rows);
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
-        await ensureDefaultProduct(client);
         const retry = await client.query(
-          "SELECT id, name, price, description, product_type, show_on_home, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+          "SELECT id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
         );
         res.json(retry.rows);
       } else {
@@ -800,7 +1210,7 @@ app.get("/products", async (_req, res) => {
 });
 
 app.post("/products", async (req, res) => {
-  const { name, price, description, showOnHome, purchasePrice, salePrice, productType } = req.body ?? {};
+  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -810,8 +1220,8 @@ app.post("/products", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "INSERT INTO products (name, price, description, product_type, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice]
+        "INSERT INTO products (name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
       );
       res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -819,8 +1229,8 @@ app.post("/products", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "INSERT INTO products (name, price, description, product_type, show_on_home, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice]
+          "INSERT INTO products (name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
         );
         res.status(201).json(retry.rows[0]);
       } else {
@@ -837,7 +1247,7 @@ app.post("/products", async (req, res) => {
 
 app.put("/products/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, price, description, showOnHome, purchasePrice, salePrice, productType } = req.body ?? {};
+  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -847,8 +1257,8 @@ app.put("/products/:id", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, show_on_home = $5, purchase_price = $6, sale_price = $7 WHERE id = $8 RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
+        "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, show_on_home = $6, show_on_marketplace = $7, purchase_price = $8, sale_price = $9 WHERE id = $10 RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
       );
       res.json(result.rows[0]);
     } catch (error) {
@@ -856,8 +1266,8 @@ app.put("/products/:id", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, show_on_home = $5, purchase_price = $6, sale_price = $7 WHERE id = $8 RETURNING id, name, price, description, product_type, show_on_home, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", productType ?? "digital", !!showOnHome, purchasePrice ?? "", finalSalePrice, id]
+          "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, show_on_home = $6, show_on_marketplace = $7, purchase_price = $8, sale_price = $9 WHERE id = $10 RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
         );
         res.json(retry.rows[0]);
       } else {
@@ -889,15 +1299,25 @@ app.delete("/products/:id", async (req, res) => {
 app.get("/purchases", async (req, res) => {
   try {
     const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+    const purchaseType = typeof req.query.purchaseType === "string" ? req.query.purchaseType : null;
     const pool = await getPool();
     const client = await pool.connect();
     try {
       await ensurePurchasesTable(client);
+      const filters: string[] = [];
+      const params: Array<string> = [];
+      if (userId) {
+        params.push(userId);
+        filters.push(`pu.user_id = $${params.length}`);
+      }
+      if (purchaseType) {
+        params.push(purchaseType);
+        filters.push(`pu.purchase_type = $${params.length}`);
+      }
+      const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
       const result = await client.query(
-        userId
-          ? "SELECT pu.id, pu.user_id, pu.product_id, pu.price, pu.status, pu.created_at, pr.name as product_name, pr.description as product_description, pr.sale_price, pr.purchase_price FROM purchases pu JOIN products pr ON pr.id = pu.product_id WHERE pu.user_id = $1 ORDER BY pu.created_at DESC"
-          : "SELECT pu.id, pu.user_id, pu.product_id, pu.price, pu.status, pu.created_at, pr.name as product_name, pr.description as product_description, pr.sale_price, pr.purchase_price FROM purchases pu JOIN products pr ON pr.id = pu.product_id ORDER BY pu.created_at DESC",
-        userId ? [userId] : []
+        `SELECT pu.id, pu.user_id, pu.product_id, pu.project_id, pu.price, pu.purchase_type, pu.status, pu.created_at, pr.name as product_name, pr.description as product_description, pr.sale_price, pr.purchase_price, COALESCE(bp.id, pr.base_project_id) as base_project_id, bp.name as base_project_name, cp.name as project_name, (pu.project_id IS NOT NULL AND cp.id IS NOT NULL AND cp.created_from_purchase = true AND cp.is_template = false) as redeemed FROM purchases pu JOIN products pr ON pr.id = pu.product_id LEFT JOIN projects cp ON cp.id = pu.project_id LEFT JOIN projects bp ON bp.id = COALESCE(cp.base_project_id, pr.base_project_id) ${whereClause} ORDER BY pu.created_at DESC`,
+        params
       );
       res.json(result.rows);
     } finally {
@@ -978,48 +1398,131 @@ app.post("/purchases", async (req, res) => {
       await ensurePurchasesTable(client);
       await ensureProjectsColumns(client);
 
+      await client.query("BEGIN");
+
+      await cleanupInvalidUserPurchases(client, userId);
+
       const productResult = await client.query(
-        "SELECT id, name, description, price, purchase_price, sale_price FROM products WHERE id = $1",
+        "SELECT id, name, description, price, purchase_price, sale_price, product_type, base_project_id FROM products WHERE id = $1",
         [productId]
       );
 
       if (!productResult.rows[0]) {
+        await client.query("ROLLBACK");
         return res.status(404).json({ message: "Produto não encontrado." });
       }
 
       const product = productResult.rows[0];
       const saleValue = Number(String(product.sale_price ?? product.price ?? "0").replace(",", ".")) || 0;
+      const purchaseType = saleValue <= 0 ? "free" : "paid";
 
-      const purchase = await client.query(
-        "INSERT INTO purchases (user_id, product_id, price, status) VALUES ($1, $2, $3, $4) RETURNING id, user_id, product_id, price, status, created_at",
-        [userId, product.id, saleValue, "completed"]
+      if (purchaseType === "free") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto gratuito: use o resgate no marketplace." });
+      }
+      const existingPurchases = await client.query(
+        "SELECT id, purchase_type, created_at FROM purchases WHERE user_id = $1 AND product_id = $2 AND status = 'completed' ORDER BY created_at DESC",
+        [userId, product.id]
       );
 
-      const existingProject = await client.query(
-        "SELECT id FROM projects WHERE owner_user_id = $1 AND name = $2 LIMIT 1",
-        [userId, product.name]
-      );
+      if (existingPurchases.rows.length > 1) {
+        const olderIds = existingPurchases.rows.slice(1).map((row: { id: string }) => row.id);
+        await client.query("UPDATE purchases SET status = 'canceled' WHERE id = ANY($1)", [olderIds]);
+      }
 
-      if (!existingProject.rows[0]) {
+      let purchaseId: string | null = existingPurchases.rows[0]?.id ?? null;
+
+      if (purchaseId) {
         await client.query(
-          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
-          [
-            product.name,
-            product.description ?? "",
-            inferProjectType(product.name),
-            product.sale_price ?? product.price ?? "",
-            product.purchase_price ?? "",
-            1,
-            "",
-            "",
-            "Vercel",
-            "Ativo",
-            true,
-            true,
-            userId,
-          ]
+          "UPDATE purchases SET purchase_type = $1 WHERE id = $2 AND (purchase_type IS NULL OR purchase_type = '')",
+          [purchaseType, purchaseId]
         );
       }
+
+      if (!purchaseId) {
+        const createdPurchase = await client.query(
+          "INSERT INTO purchases (user_id, product_id, price, purchase_type, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, user_id, product_id, project_id, price, purchase_type, status, created_at",
+          [userId, product.id, saleValue, purchaseType, "completed"]
+        );
+        purchaseId = createdPurchase.rows[0]?.id ?? null;
+      }
+
+      const isDigitalProject = product.product_type === "digital" || product.product_type === "projeto";
+      let projectId: string | null = null;
+
+      if (purchaseId && isDigitalProject) {
+        let baseProjectId: string | null = product.base_project_id ?? null;
+        if (!baseProjectId) {
+          const fallbackBase = await client.query(
+            "SELECT id FROM projects WHERE is_template = true AND lower(name) = lower($1) LIMIT 1",
+            [product.name]
+          );
+          baseProjectId = fallbackBase.rows[0]?.id ?? null;
+        }
+
+        if (!baseProjectId) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ message: "Projeto base não configurado para este produto." });
+        }
+
+        const existingClone = await client.query(
+          "SELECT id FROM projects WHERE purchase_id = $1 AND created_from_purchase = true AND is_template = false",
+          [purchaseId]
+        );
+
+        if (existingClone.rows[0]) {
+          projectId = existingClone.rows[0].id;
+        } else {
+          const baseProject = await client.query(
+            "SELECT name, description, project_type, sale_price, production_cost, repository, domain, hosting, status, html_content, css_content FROM projects WHERE id = $1",
+            [baseProjectId]
+          );
+
+          if (!baseProject.rows[0]) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ message: "Projeto base não encontrado." });
+          }
+
+          const base = baseProject.rows[0];
+          const createdClone = await client.query(
+            "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, purchase_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()) RETURNING id",
+            [
+              base.name,
+              base.description ?? "",
+              base.project_type ?? inferProjectType(base.name),
+              base.sale_price ?? product.sale_price ?? product.price ?? "",
+              base.production_cost ?? product.purchase_price ?? "",
+              1,
+              base.repository ?? "",
+              base.domain ?? "",
+              base.hosting ?? "Vercel",
+              base.status ?? "Ativo",
+              true,
+              false,
+              userId,
+              product.id,
+              baseProjectId,
+              purchaseId,
+              true,
+              false,
+              base.html_content ?? "",
+              base.css_content ?? "",
+            ]
+          );
+          projectId = createdClone.rows[0]?.id ?? null;
+        }
+
+        if (projectId) {
+          await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [projectId, purchaseId]);
+        }
+      }
+
+      const purchase = await client.query(
+        "SELECT id, user_id, product_id, project_id, price, purchase_type, status, created_at FROM purchases WHERE id = $1",
+        [purchaseId]
+      );
+
+      await client.query("COMMIT");
 
       res.status(201).json({
         purchase: purchase.rows[0],
@@ -1031,12 +1534,323 @@ app.post("/purchases", async (req, res) => {
           salePrice: product.sale_price,
         },
       });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      const typed = error as { status?: number; message?: string };
+      if (typed.status) {
+        return res.status(typed.status).json({ message: typed.message || "Erro ao registrar compra." });
+      }
+      throw error;
     } finally {
       client.release();
     }
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao registrar compra." });
+  }
+});
+
+app.post("/purchases/:id/redeem", async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "purchase id e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureProductsColumns(client);
+      await ensurePurchasesTable(client);
+      await ensureProjectsColumns(client);
+
+      await client.query("BEGIN");
+
+      const purchaseResult = await client.query(
+        "SELECT id, user_id, product_id, project_id, status FROM purchases WHERE id = $1 AND user_id = $2",
+        [id, userId]
+      );
+
+      const purchase = purchaseResult.rows[0];
+      if (!purchase) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Compra não encontrada." });
+      }
+      if (purchase.status !== "completed") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Compra não está concluída." });
+      }
+
+      if (purchase.project_id) {
+        const existingProject = await client.query(
+          "SELECT id FROM projects WHERE id = $1 AND created_from_purchase = true AND is_template = false AND owner_user_id = $2",
+          [purchase.project_id, userId]
+        );
+        if (existingProject.rows[0]) {
+          await client.query("COMMIT");
+          return res.json({ projectId: purchase.project_id, redeemed: true });
+        }
+      }
+
+      const productResult = await client.query(
+        "SELECT id, name, price, purchase_price, sale_price, product_type, base_project_id FROM products WHERE id = $1",
+        [purchase.product_id]
+      );
+
+      const product = productResult.rows[0];
+      if (!product) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto não encontrado para a compra." });
+      }
+
+      const isDigitalProject = product.product_type === "digital" || product.product_type === "projeto";
+      if (!isDigitalProject) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto não exige resgate de projeto." });
+      }
+
+      let baseProjectId: string | null = product.base_project_id ?? null;
+      if (!baseProjectId) {
+        const fallbackBase = await client.query(
+          "SELECT id FROM projects WHERE is_template = true AND lower(name) = lower($1) LIMIT 1",
+          [product.name]
+        );
+        baseProjectId = fallbackBase.rows[0]?.id ?? null;
+      }
+
+      if (!baseProjectId) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Projeto base não configurado para este produto." });
+      }
+
+      const existingClone = await client.query(
+        "SELECT id FROM projects WHERE purchase_id = $1 AND created_from_purchase = true AND is_template = false",
+        [purchase.id]
+      );
+
+      if (existingClone.rows[0]) {
+        await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [existingClone.rows[0].id, purchase.id]);
+        await client.query("COMMIT");
+        return res.json({ projectId: existingClone.rows[0].id, redeemed: true });
+      }
+
+      const ownerProductClone = await client.query(
+        "SELECT id FROM projects WHERE owner_user_id = $1 AND product_id = $2 AND created_from_purchase = true AND is_template = false LIMIT 1",
+        [userId, product.id]
+      );
+
+      if (ownerProductClone.rows[0]) {
+        await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [ownerProductClone.rows[0].id, purchase.id]);
+        await client.query("COMMIT");
+        return res.json({ projectId: ownerProductClone.rows[0].id, redeemed: true });
+      }
+
+      const baseProject = await client.query(
+        "SELECT name, description, project_type, sale_price, production_cost, repository, domain, hosting, status, html_content, css_content FROM projects WHERE id = $1",
+        [baseProjectId]
+      );
+
+      if (!baseProject.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Projeto base não encontrado." });
+      }
+
+      const base = baseProject.rows[0];
+      const createdClone = await client.query(
+        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, purchase_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()) RETURNING id",
+        [
+          base.name,
+          base.description ?? "",
+          base.project_type ?? inferProjectType(base.name),
+          base.sale_price ?? product.sale_price ?? product.price ?? "",
+          base.production_cost ?? product.purchase_price ?? "",
+          1,
+          base.repository ?? "",
+          base.domain ?? "",
+          base.hosting ?? "Vercel",
+          base.status ?? "Ativo",
+          true,
+          false,
+          userId,
+          product.id,
+          baseProjectId,
+          purchase.id,
+          true,
+          false,
+          base.html_content ?? "",
+          base.css_content ?? "",
+        ]
+      );
+
+      const projectId = createdClone.rows[0]?.id ?? null;
+      await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [projectId, purchase.id]);
+
+      await client.query("COMMIT");
+
+      res.json({ projectId, redeemed: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao resgatar projeto." });
+  }
+});
+
+app.post("/products/:id/redeem", async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "product id e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureProductsColumns(client);
+      await ensurePurchasesTable(client);
+      await ensureProjectsColumns(client);
+
+      await client.query("BEGIN");
+
+      const productResult = await client.query(
+        "SELECT id, name, price, purchase_price, sale_price, product_type, base_project_id FROM products WHERE id = $1",
+        [id]
+      );
+
+      const product = productResult.rows[0];
+      if (!product) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Produto não encontrado." });
+      }
+
+      const saleValue = Number(String(product.sale_price ?? product.price ?? "0").replace(",", ".")) || 0;
+      if (saleValue > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto não é gratuito." });
+      }
+
+      const isDigitalProject = product.product_type === "digital" || product.product_type === "projeto";
+      if (!isDigitalProject) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto não exige resgate de projeto." });
+      }
+
+      let baseProjectId: string | null = product.base_project_id ?? null;
+      if (!baseProjectId) {
+        const fallbackBase = await client.query(
+          "SELECT id FROM projects WHERE is_template = true AND lower(name) = lower($1) LIMIT 1",
+          [product.name]
+        );
+        baseProjectId = fallbackBase.rows[0]?.id ?? null;
+      }
+
+      if (!baseProjectId) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Projeto base não configurado para este produto." });
+      }
+
+      const existingPurchaseResult = await client.query(
+        "SELECT id, project_id FROM purchases WHERE user_id = $1 AND product_id = $2 AND status = 'completed' ORDER BY created_at DESC",
+        [userId, product.id]
+      );
+
+      let purchaseId: string | null = existingPurchaseResult.rows[0]?.id ?? null;
+      let projectId: string | null = existingPurchaseResult.rows[0]?.project_id ?? null;
+
+      if (!purchaseId) {
+        const createdPurchase = await client.query(
+          "INSERT INTO purchases (user_id, product_id, price, purchase_type, status) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+          [userId, product.id, 0, "free", "completed"]
+        );
+        purchaseId = createdPurchase.rows[0]?.id ?? null;
+      }
+
+      if (projectId) {
+        const existingProject = await client.query(
+          "SELECT id FROM projects WHERE id = $1 AND created_from_purchase = true AND is_template = false AND owner_user_id = $2",
+          [projectId, userId]
+        );
+        if (existingProject.rows[0]) {
+          await client.query("COMMIT");
+          return res.json({ projectId, redeemed: true });
+        }
+      }
+
+      const existingClone = await client.query(
+        "SELECT id FROM projects WHERE purchase_id = $1 AND created_from_purchase = true AND is_template = false",
+        [purchaseId]
+      );
+
+      if (existingClone.rows[0]) {
+        projectId = existingClone.rows[0].id;
+      } else {
+        const ownerProductClone = await client.query(
+          "SELECT id FROM projects WHERE owner_user_id = $1 AND product_id = $2 AND created_from_purchase = true AND is_template = false LIMIT 1",
+          [userId, product.id]
+        );
+        if (ownerProductClone.rows[0]) {
+          projectId = ownerProductClone.rows[0].id;
+        }
+      }
+
+      if (!projectId) {
+        const baseProject = await client.query(
+          "SELECT name, description, project_type, sale_price, production_cost, repository, domain, hosting, status, html_content, css_content FROM projects WHERE id = $1",
+          [baseProjectId]
+        );
+
+        if (!baseProject.rows[0]) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ message: "Projeto base não encontrado." });
+        }
+
+        const base = baseProject.rows[0];
+        const createdClone = await client.query(
+          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, purchase_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()) RETURNING id",
+          [
+            base.name,
+            base.description ?? "",
+            base.project_type ?? inferProjectType(base.name),
+            base.sale_price ?? product.sale_price ?? product.price ?? "",
+            base.production_cost ?? product.purchase_price ?? "",
+            1,
+            base.repository ?? "",
+            base.domain ?? "",
+            base.hosting ?? "Vercel",
+            base.status ?? "Ativo",
+            true,
+            false,
+            userId,
+            product.id,
+            baseProjectId,
+            purchaseId,
+            true,
+            false,
+            base.html_content ?? "",
+            base.css_content ?? "",
+          ]
+        );
+        projectId = createdClone.rows[0]?.id ?? null;
+      }
+
+      await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [projectId, purchaseId]);
+
+      await client.query("COMMIT");
+      res.json({ projectId, redeemed: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    console.error(error);
+    res.status(500).json({ message: "Erro ao resgatar projeto gratuito.", details });
   }
 });
 
@@ -1090,16 +1904,55 @@ app.post("/cards/:userId", async (req, res) => {
     const pool = await getPool();
     const client = await pool.connect();
     try {
+      await client.query("BEGIN");
       await ensureUserCardsTable(client);
       await ensureMyBotTables(client);
+      await ensureDepositTables(client);
+      await ensureInternalAccountsTable(client);
       await getOrCreateMyBot(client, userId);
       const existing = await client.query(
         "SELECT id, user_id, seed, hash_seed, name, species, class, rarity, attributes, visual_meta, level, xp, created_at, updated_at FROM user_cards WHERE user_id = $1",
         [userId]
       );
       if (existing.rows[0] && existing.rows[0].hash_seed) {
+        await client.query("COMMIT");
         return res.json(existing.rows[0]);
       }
+
+      if (!cpf) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "CPF é obrigatório para criar o MyBot." });
+      }
+
+      const botsCount = await client.query("SELECT COUNT(*)::int AS total FROM mybot_cpf_registry");
+      if (Number(botsCount.rows[0]?.total || 0) >= 2000000) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ message: "Limite máximo de MyBots atingido." });
+      }
+
+      const cpfHash = hashCpf(String(cpf));
+      const cpfOwner = await client.query("SELECT user_id FROM mybot_cpf_registry WHERE cpf_hash = $1", [cpfHash]);
+      if (cpfOwner.rows[0] && String(cpfOwner.rows[0].user_id) !== String(userId)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Este CPF já possui um MyBot ativo." });
+      }
+
+      const activation = await client.query(
+        "SELECT id, credits_granted FROM mybot_activations WHERE user_id = $1 OR cpf_hash = $2 LIMIT 1",
+        [userId, cpfHash]
+      );
+
+      if (!activation.rows[0]) {
+        await client.query(
+          "INSERT INTO mybot_activations (user_id, cpf_hash, deposit_tx_id, credits_granted) VALUES ($1, $2, $3, $4)",
+          [userId, cpfHash, null, 0]
+        );
+      }
+
+      await client.query(
+        "INSERT INTO mybot_cpf_registry (cpf_hash, user_id) VALUES ($1, $2) ON CONFLICT (cpf_hash) DO NOTHING",
+        [cpfHash, userId]
+      );
 
       const hashSeed = hashCpfUser(String(cpf || ""), userId);
       const seed = seedFromHash(hashSeed);
@@ -1135,6 +1988,7 @@ app.post("/cards/:userId", async (req, res) => {
             Number(gamification.xp || 0),
           ]
         );
+        await client.query("COMMIT");
         return res.json(updated.rows[0]);
       }
 
@@ -1156,7 +2010,11 @@ app.post("/cards/:userId", async (req, res) => {
           Number(gamification.xp || 0),
         ]
       );
+      await client.query("COMMIT");
       return res.status(201).json(created.rows[0]);
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
     } finally {
       client.release();
     }
@@ -1293,6 +2151,435 @@ app.post("/gamification", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao salvar gamificação." });
+  }
+});
+
+app.get("/mybot/battles", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  const limit = Math.min(50, Number(req.query.limit ?? 20) || 20);
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      const result = await client.query(
+        "SELECT * FROM mybot_battles WHERE user_id_a = $1 OR user_id_b = $1 ORDER BY created_at DESC LIMIT $2",
+        [userId, limit]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar batalhas." });
+  }
+});
+
+app.get("/mybot/battles/queue", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      const queued = await client.query(
+        "SELECT id, bet_amount, level, rarity, status, created_at FROM mybot_battle_queue WHERE user_id = $1 AND status = 'waiting' ORDER BY created_at DESC LIMIT 1",
+        [userId]
+      );
+      res.json(queued.rows[0] || null);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao consultar fila de batalha." });
+  }
+});
+
+app.post("/mybot/battles/queue", async (req, res) => {
+  const { userId, betAmount } = req.body ?? {};
+  const bet = Number(betAmount);
+  if (!userId || !Number.isFinite(bet) || bet <= 0) {
+    return res.status(400).json({ message: "userId e betAmount são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      await ensureUserCardsTable(client);
+      await ensureInternalAccountsTable(client);
+
+      const cardResult = await client.query(
+        "SELECT id, rarity, level, xp, attributes FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (!cardResult.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "MyBot não encontrado." });
+      }
+      const card = cardResult.rows[0];
+
+      const account = await getOrCreateInternalAccount(client, userId);
+      if (Number(account.balance) < bet) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Saldo insuficiente para apostar." });
+      }
+
+      const profile = await getOrCreateMyBotProfile(client, userId, card.id);
+      const now = new Date();
+      if (bet >= MYBOT_HIGH_BET_THRESHOLD) {
+        const lastHigh = profile.last_high_bet_at ? new Date(profile.last_high_bet_at) : null;
+        const withinWindow = lastHigh ? (now.getTime() - lastHigh.getTime()) <= MYBOT_HIGH_BET_WINDOW_MINUTES * 60000 : false;
+        if (withinWindow && Number(profile.high_bet_streak || 0) >= MYBOT_HIGH_BET_MAX_STREAK) {
+          await client.query("ROLLBACK");
+          return res.status(429).json({ message: "Limite de apostas altas consecutivas atingido." });
+        }
+      }
+
+      const existingQueue = await client.query(
+        "SELECT id, bet_amount, level, rarity, status, created_at FROM mybot_battle_queue WHERE user_id = $1 AND status = 'waiting' LIMIT 1",
+        [userId]
+      );
+      if (existingQueue.rows[0]) {
+        await client.query("COMMIT");
+        return res.json({ status: "queued", queue: existingQueue.rows[0] });
+      }
+
+      const rarityRank = getRarityRank(String(card.rarity));
+      const level = Number(card.level || 1);
+
+      let opponentRow: any = null;
+      const levelRanges = [2, 4, 6, 8];
+      const rarityRanges = [0, 1, 2];
+      for (const levelRange of levelRanges) {
+        for (const rarityRange of rarityRanges) {
+          const candidate = await client.query(
+            "SELECT * FROM mybot_battle_queue WHERE status = 'waiting' AND user_id <> $1 AND bet_amount = $2 AND ABS(level - $3) <= $4 AND ABS(rarity_rank - $5) <= $6 ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+            [userId, bet, level, levelRange, rarityRank, rarityRange]
+          );
+          if (candidate.rows[0]) {
+            opponentRow = candidate.rows[0];
+            break;
+          }
+        }
+        if (opponentRow) break;
+      }
+
+      if (!opponentRow) {
+        const queued = await client.query(
+          "INSERT INTO mybot_battle_queue (user_id, card_id, bet_amount, level, rarity, rarity_rank, status) VALUES ($1, $2, $3, $4, $5, $6, 'waiting') RETURNING id, bet_amount, level, rarity, status, created_at",
+          [userId, card.id, bet, level, String(card.rarity || "comum"), rarityRank]
+        );
+        await client.query("COMMIT");
+        return res.status(201).json({ status: "queued", queue: queued.rows[0] });
+      }
+
+      const opponentAccount = await getOrCreateInternalAccount(client, opponentRow.user_id);
+      if (Number(opponentAccount.balance) < bet) {
+        await client.query(
+          "UPDATE mybot_battle_queue SET status = 'canceled' WHERE id = $1",
+          [opponentRow.id]
+        );
+        const queued = await client.query(
+          "INSERT INTO mybot_battle_queue (user_id, card_id, bet_amount, level, rarity, rarity_rank, status) VALUES ($1, $2, $3, $4, $5, $6, 'waiting') RETURNING id, bet_amount, level, rarity, status, created_at",
+          [userId, card.id, bet, level, String(card.rarity || "comum"), rarityRank]
+        );
+        await client.query("COMMIT");
+        return res.status(201).json({ status: "queued", queue: queued.rows[0] });
+      }
+
+      const opponentCardResult = await client.query(
+        "SELECT id, rarity, level, xp, attributes FROM user_cards WHERE user_id = $1",
+        [opponentRow.user_id]
+      );
+      if (!opponentCardResult.rows[0]) {
+        await client.query(
+          "UPDATE mybot_battle_queue SET status = 'canceled' WHERE id = $1",
+          [opponentRow.id]
+        );
+        const queued = await client.query(
+          "INSERT INTO mybot_battle_queue (user_id, card_id, bet_amount, level, rarity, rarity_rank, status) VALUES ($1, $2, $3, $4, $5, $6, 'waiting') RETURNING id, bet_amount, level, rarity, status, created_at",
+          [userId, card.id, bet, level, String(card.rarity || "comum"), rarityRank]
+        );
+        await client.query("COMMIT");
+        return res.status(201).json({ status: "queued", queue: queued.rows[0] });
+      }
+      const opponentCard = opponentCardResult.rows[0];
+
+      const battleId = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const seed = hashString(`${battleId}|${userId}|${opponentRow.user_id}|${bet}|${createdAt}`);
+      const rng = mulberry32(seedFromHash(seed));
+
+      const battleType = computeBattleType(rng);
+      const mapCandidates = computeMapWeightsByBet(bet);
+      const selectedMap = pickWeighted(
+        rng,
+        mapCandidates.map((item) => ({ weight: item.weight, value: item.map }))
+      );
+
+      const userAttrs = getBattleAttributes(card.attributes);
+      const opponentAttrs = getBattleAttributes(opponentCard.attributes);
+      const powerUser = computeBotPower(userAttrs, selectedMap.weights, rng);
+      const powerOpponent = computeBotPower(opponentAttrs, selectedMap.weights, rng);
+
+      let winnerUserId = powerUser.final >= powerOpponent.final ? userId : opponentRow.user_id;
+      if (powerUser.final === powerOpponent.final) {
+        winnerUserId = rng() >= 0.5 ? userId : opponentRow.user_id;
+      }
+
+      const poolAmount = bet * 2;
+      const gasAmount = Number((poolAmount * battleType.gasPct).toFixed(2));
+      const payoutAmount = Number((poolAmount - gasAmount).toFixed(2));
+
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [userId, bet]
+      );
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [opponentRow.user_id, bet]
+      );
+      await ensureHouseAccount(client);
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+        [HK_MASTER_USER_ID, poolAmount]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [userId, HK_MASTER_USER_ID, bet, "mybot_battle_pool"]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [opponentRow.user_id, HK_MASTER_USER_ID, bet, "mybot_battle_pool"]
+      );
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [HK_MASTER_USER_ID, payoutAmount]
+      );
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+        [winnerUserId, payoutAmount]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [HK_MASTER_USER_ID, winnerUserId, payoutAmount, "mybot_battle_payout"]
+      );
+
+      const battleInsert = await client.query(
+        "INSERT INTO mybot_battles (id, user_id_a, user_id_b, card_id_a, card_id_b, bet_amount, battle_type, gas_pct, map_name, map_weights, seed, power_a, power_b, power_final_a, power_final_b, winner_user_id, payout_amount, gas_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *",
+        [
+          battleId,
+          userId,
+          opponentRow.user_id,
+          card.id,
+          opponentCard.id,
+          bet,
+          battleType.id,
+          battleType.gasPct,
+          selectedMap.id,
+          selectedMap.weights,
+          seed,
+          powerUser.raw,
+          powerOpponent.raw,
+          powerUser.final,
+          powerOpponent.final,
+          winnerUserId,
+          payoutAmount,
+          gasAmount,
+        ]
+      );
+
+      await client.query(
+        "UPDATE mybot_battle_queue SET status = 'matched', matched_battle_id = $2 WHERE id = $1",
+        [opponentRow.id, battleId]
+      );
+
+      const userProfile = await getOrCreateMyBotProfile(client, userId, card.id);
+      const opponentProfile = await getOrCreateMyBotProfile(client, opponentRow.user_id, opponentCard.id);
+
+      const userWon = winnerUserId === userId;
+      const opponentWon = winnerUserId === opponentRow.user_id;
+
+      const userXpGain = computeBattleXp(bet, userWon, Number(userProfile.loss_streak || 0));
+      const opponentXpGain = computeBattleXp(bet, opponentWon, Number(opponentProfile.loss_streak || 0));
+
+      const userXpAfter = Number(card.xp || 0) + userXpGain;
+      const opponentXpAfter = Number(opponentCard.xp || 0) + opponentXpGain;
+      const userLevelAfter = Math.floor(userXpAfter / MYBOT_XP_PER_LEVEL) + 1;
+      const opponentLevelAfter = Math.floor(opponentXpAfter / MYBOT_XP_PER_LEVEL) + 1;
+      const userPointsGained = Math.max(0, userLevelAfter - Number(card.level || 1)) * MYBOT_POINTS_PER_LEVEL;
+      const opponentPointsGained = Math.max(0, opponentLevelAfter - Number(opponentCard.level || 1)) * MYBOT_POINTS_PER_LEVEL;
+
+      await client.query(
+        "UPDATE user_cards SET xp = $2, level = $3, updated_at = NOW() WHERE user_id = $1",
+        [userId, userXpAfter, userLevelAfter]
+      );
+      await client.query(
+        "UPDATE user_cards SET xp = $2, level = $3, updated_at = NOW() WHERE user_id = $1",
+        [opponentRow.user_id, opponentXpAfter, opponentLevelAfter]
+      );
+
+      const nextUserLossStreak = userWon ? 0 : Number(userProfile.loss_streak || 0) + 1;
+      const nextOpponentLossStreak = opponentWon ? 0 : Number(opponentProfile.loss_streak || 0) + 1;
+
+      const userHighBetStreak = bet >= MYBOT_HIGH_BET_THRESHOLD
+        ? ((userProfile.last_high_bet_at ? ((now.getTime() - new Date(userProfile.last_high_bet_at).getTime()) <= MYBOT_HIGH_BET_WINDOW_MINUTES * 60000) : false)
+          ? Number(userProfile.high_bet_streak || 0) + 1
+          : 1)
+        : 0;
+      const opponentHighBetStreak = bet >= MYBOT_HIGH_BET_THRESHOLD
+        ? ((opponentProfile.last_high_bet_at ? ((now.getTime() - new Date(opponentProfile.last_high_bet_at).getTime()) <= MYBOT_HIGH_BET_WINDOW_MINUTES * 60000) : false)
+          ? Number(opponentProfile.high_bet_streak || 0) + 1
+          : 1)
+        : 0;
+
+      await client.query(
+        "UPDATE mybot_profiles SET available_points = available_points + $2, loss_streak = $3, high_bet_streak = $4, last_high_bet_at = COALESCE($5, last_high_bet_at), last_battle_at = $6, updated_at = NOW(), card_id = $7 WHERE user_id = $1",
+        [
+          userId,
+          userPointsGained,
+          nextUserLossStreak,
+          userHighBetStreak,
+          bet >= MYBOT_HIGH_BET_THRESHOLD ? now : null,
+          now,
+          card.id,
+        ]
+      );
+      await client.query(
+        "UPDATE mybot_profiles SET available_points = available_points + $2, loss_streak = $3, high_bet_streak = $4, last_high_bet_at = COALESCE($5, last_high_bet_at), last_battle_at = $6, updated_at = NOW(), card_id = $7 WHERE user_id = $1",
+        [
+          opponentRow.user_id,
+          opponentPointsGained,
+          nextOpponentLossStreak,
+          opponentHighBetStreak,
+          bet >= MYBOT_HIGH_BET_THRESHOLD ? now : null,
+          now,
+          opponentCard.id,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.status(201).json({ status: "matched", battle: battleInsert.rows[0] });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao enfileirar batalha." });
+  }
+});
+
+app.post("/mybot/:userId/evolve", async (req, res) => {
+  const { userId } = req.params;
+  const { attribute } = req.body ?? {};
+  const attributeMap: Record<string, "strength" | "speed" | "intelligence"> = {
+    forca: "strength",
+    velocidade: "speed",
+    inteligencia: "intelligence",
+  };
+  const key = attributeMap[String(attribute || "").toLowerCase()];
+  if (!userId || !key) {
+    return res.status(400).json({ message: "userId e attribute são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      await ensureUserCardsTable(client);
+      await ensureInternalAccountsTable(client);
+
+      const cardRes = await client.query(
+        "SELECT id, rarity, level, xp, attributes FROM user_cards WHERE user_id = $1",
+        [userId]
+      );
+      if (!cardRes.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "MyBot não encontrado." });
+      }
+      const card = cardRes.rows[0];
+      const profile = await getOrCreateMyBotProfile(client, userId, card.id);
+      if (Number(profile.available_points || 0) < 1) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Sem pontos de evolução disponíveis." });
+      }
+
+      const currentValue = Number(card.attributes?.[key] ?? 0);
+      const cap = getRarityCap(String(card.rarity || "comum"));
+      if (currentValue >= cap) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Atributo já está no máximo para a raridade." });
+      }
+
+      const cost = computeEvolutionCost({ level: Number(card.level || 1), rarity: String(card.rarity || "comum"), currentValue });
+      const account = await getOrCreateInternalAccount(client, userId);
+      if (Number(account.balance) < cost) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Saldo insuficiente para evoluir." });
+      }
+
+      const updatedAttributes = { ...(card.attributes || {}), [key]: currentValue + 1 };
+      const marketValue = computeMarketValue(
+        {
+          strength: Number(updatedAttributes.strength ?? 0),
+          speed: Number(updatedAttributes.speed ?? 0),
+          intelligence: Number(updatedAttributes.intelligence ?? 0),
+          endurance: Number(updatedAttributes.endurance ?? 0),
+        },
+        String(card.rarity || "comum")
+      );
+
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [userId, cost]
+      );
+      await ensureHouseAccount(client);
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+        [HK_MASTER_USER_ID, cost]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [userId, HK_MASTER_USER_ID, cost, "mybot_evolution"]
+      );
+      const updatedCard = await client.query(
+        "UPDATE user_cards SET attributes = $2, market_value = $3, updated_at = NOW() WHERE user_id = $1 RETURNING id, user_id, attributes, rarity, level, xp, market_value",
+        [userId, updatedAttributes, marketValue]
+      );
+      await client.query(
+        "UPDATE mybot_profiles SET available_points = available_points - 1, updated_at = NOW(), card_id = $2 WHERE user_id = $1",
+        [userId, card.id]
+      );
+      await client.query(
+        "INSERT INTO mybot_evolutions (user_id, card_id, attribute, before_value, after_value, cost, points_spent) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [userId, card.id, key, currentValue, currentValue + 1, cost, 1]
+      );
+
+      await client.query("COMMIT");
+      res.status(201).json({ card: updatedCard.rows[0], cost });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao evoluir MyBot." });
   }
 });
 
@@ -1734,14 +3021,27 @@ app.post("/internal-accounts/credit", async (req, res) => {
     try {
       await ensureInternalAccountsTable(client);
       await client.query("BEGIN");
+      await ensureHouseAccount(client);
       await getOrCreateInternalAccount(client, userId);
+      const master = await client.query(
+        "SELECT balance FROM internal_accounts WHERE user_id = $1",
+        [HK_MASTER_USER_ID]
+      );
+      if (Number(master.rows[0]?.balance || 0) < value) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Saldo insuficiente no HK Master." });
+      }
       const updated = await client.query(
         "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1 RETURNING user_id, balance, updated_at",
         [userId, value]
       );
       await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [HK_MASTER_USER_ID, value]
+      );
+      await client.query(
         "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
-        [null, userId, value, reason ?? "credit"]
+        [HK_MASTER_USER_ID, userId, value, reason ?? "credit"]
       );
       await client.query("COMMIT");
       res.status(201).json(updated.rows[0]);
@@ -1892,11 +3192,14 @@ app.get("/projects", async (req, res) => {
     const client = await pool.connect();
     try {
       const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+      const scope = typeof req.query.scope === "string" ? req.query.scope : "visible";
+      await ensureProjectsColumns(client);
+      await ensurePurchasesTable(client);
       const result = await client.query(
-        userId
-          ? "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects WHERE owner_user_id = $1 ORDER BY created_at DESC"
-          : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects ORDER BY created_at DESC",
-        userId ? [userId] : []
+        userId && scope !== "all"
+          ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
+          : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id FROM projects ORDER BY created_at DESC",
+        userId && scope !== "all" ? [userId] : []
       );
       res.json(result.rows);
     } catch (error) {
@@ -1904,11 +3207,13 @@ app.get("/projects", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
         const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+        const scope = typeof req.query.scope === "string" ? req.query.scope : "visible";
+        await ensurePurchasesTable(client);
         const retry = await client.query(
-          userId
-            ? "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects WHERE owner_user_id = $1 ORDER BY created_at DESC"
-            : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id FROM projects ORDER BY created_at DESC",
-          userId ? [userId] : []
+          userId && scope !== "all"
+            ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
+            : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id FROM projects ORDER BY created_at DESC",
+          userId && scope !== "all" ? [userId] : []
         );
         res.json(retry.rows);
       } else {
@@ -1923,8 +3228,57 @@ app.get("/projects", async (req, res) => {
   }
 });
 
+app.get("/menu-visibility", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureProjectsColumns(client);
+      await ensurePurchasesTable(client);
+      await ensureProductsColumns(client);
+
+      const purchases = await client.query(
+        "SELECT pr.id, pr.product_type FROM purchases pu JOIN products pr ON pr.id = pu.product_id WHERE pu.user_id = $1 AND pu.status = 'completed'",
+        [userId]
+      );
+
+      const purchasedProducts = purchases.rows.map((row: { id: string; product_type: string }) => ({
+        id: row.id,
+        type: row.product_type || "digital",
+      }));
+
+      const hasDigitalAccess = purchasedProducts.some((product) => product.type === "digital" || product.type === "projeto");
+      const hasAnyProjectAccess = hasDigitalAccess;
+
+      res.json({
+        userId,
+        purchasedProducts,
+        hasDigitalAccess,
+        menus: {
+          projects: hasAnyProjectAccess,
+          marketplace: true,
+          cart: true,
+          purchases: true,
+          redeems: true,
+          mybot: true,
+          dao: true,
+        },
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao calcular visibilidade de menu." });
+  }
+});
+
 app.post("/projects", async (req, res) => {
-  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId } = req.body ?? {};
+  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId, productId, baseProjectId, createdFromPurchase, isTemplate, htmlContent, cssContent } = req.body ?? {};
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
@@ -1939,8 +3293,15 @@ app.post("/projects", async (req, res) => {
       if (!confirmed) {
         return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
       }
+      const templateHtml = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !htmlContent
+        ? LANDINGPAGE_TEMPLATE_HTML
+        : String(htmlContent ?? "");
+      const templateCss = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !cssContent
+        ? LANDINGPAGE_TEMPLATE_CSS
+        : String(cssContent ?? "");
+
       const result = await client.query(
-        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
+        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
         [
           name,
           description ?? "",
@@ -1955,6 +3316,12 @@ app.post("/projects", async (req, res) => {
           !!paid,
           isPublic === undefined ? true : !!isPublic,
           ownerUserId,
+          productId ?? null,
+          baseProjectId ?? null,
+          !!createdFromPurchase,
+          !!isTemplate,
+          templateHtml,
+          templateCss,
         ]
       );
       res.status(201).json(result.rows[0]);
@@ -1966,8 +3333,15 @@ app.post("/projects", async (req, res) => {
         if (!confirmed) {
           return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
         }
+        const templateHtml = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !htmlContent
+          ? LANDINGPAGE_TEMPLATE_HTML
+          : String(htmlContent ?? "");
+        const templateCss = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !cssContent
+          ? LANDINGPAGE_TEMPLATE_CSS
+          : String(cssContent ?? "");
+
         const retry = await client.query(
-          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
+          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
           [
             name,
             description ?? "",
@@ -1982,6 +3356,12 @@ app.post("/projects", async (req, res) => {
             !!paid,
             isPublic === undefined ? true : !!isPublic,
             ownerUserId,
+            productId ?? null,
+            baseProjectId ?? null,
+            !!createdFromPurchase,
+            !!isTemplate,
+            templateHtml,
+            templateCss,
           ]
         );
         res.status(201).json(retry.rows[0]);
@@ -1997,9 +3377,144 @@ app.post("/projects", async (req, res) => {
   }
 });
 
+app.post("/admin-tools/reset-purchases", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensurePurchasesTable(client);
+      const result = await client.query("DELETE FROM purchases RETURNING id");
+      await logAdminAction(client, adminId, `reset_purchases_all:${result.rowCount ?? 0}`);
+      res.json({ deleted: result.rowCount ?? 0 });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao resetar compras." });
+  }
+});
+
+app.post("/admin-tools/reset-sales", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensurePurchasesTable(client);
+      const result = await client.query("DELETE FROM purchases WHERE purchase_type = 'paid' RETURNING id");
+      await logAdminAction(client, adminId, `reset_sales_paid:${result.rowCount ?? 0}`);
+      res.json({ deleted: result.rowCount ?? 0 });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao resetar vendas pagas." });
+  }
+});
+
+app.post("/admin-tools/reset-redeems", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensurePurchasesTable(client);
+      const result = await client.query("DELETE FROM purchases WHERE purchase_type = 'free' RETURNING id");
+      await logAdminAction(client, adminId, `reset_redeems_free:${result.rowCount ?? 0}`);
+      res.json({ deleted: result.rowCount ?? 0 });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao resetar resgates." });
+  }
+});
+
+app.post("/admin-tools/reset-cloned-projects", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectsColumns(client);
+      const result = await client.query(
+        "DELETE FROM projects WHERE created_from_purchase = true AND is_template = false RETURNING id"
+      );
+      await logAdminAction(client, adminId, `reset_cloned_projects:${result.rowCount ?? 0}`);
+      res.json({ deleted: result.rowCount ?? 0 });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao resetar projetos clonados." });
+  }
+});
+
+app.post("/admin-tools/reset-full", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensurePurchasesTable(client);
+      await ensureProjectsColumns(client);
+      await client.query("BEGIN");
+      const purchasesResult = await client.query("DELETE FROM purchases RETURNING id");
+      const projectsResult = await client.query(
+        "DELETE FROM projects WHERE created_from_purchase = true AND is_template = false RETURNING id"
+      );
+      await client.query("COMMIT");
+      await logAdminAction(
+        client,
+        adminId,
+        `reset_full:purchases=${purchasesResult.rowCount ?? 0};projects=${projectsResult.rowCount ?? 0}`
+      );
+      res.json({ purchasesDeleted: purchasesResult.rowCount ?? 0, projectsDeleted: projectsResult.rowCount ?? 0 });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao executar reset completo." });
+  }
+});
+
 app.put("/projects/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId } = req.body ?? {};
+  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId, productId, baseProjectId, createdFromPurchase, isTemplate, htmlContent, cssContent } = req.body ?? {};
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
@@ -2008,7 +3523,7 @@ app.put("/projects/:id", async (req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13 WHERE id = $14 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
+        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
         [
           name,
           description ?? "",
@@ -2023,6 +3538,12 @@ app.put("/projects/:id", async (req, res) => {
           !!paid,
           isPublic === undefined ? true : !!isPublic,
           ownerUserId ?? "",
+          productId ?? null,
+          baseProjectId ?? null,
+          !!createdFromPurchase,
+          !!isTemplate,
+          String(htmlContent ?? ""),
+          String(cssContent ?? ""),
           id,
         ]
       );
@@ -2032,7 +3553,7 @@ app.put("/projects/:id", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
         const retry = await client.query(
-          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13 WHERE id = $14 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id",
+          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
           [
             name,
             description ?? "",
@@ -2047,6 +3568,12 @@ app.put("/projects/:id", async (req, res) => {
             !!paid,
             isPublic === undefined ? true : !!isPublic,
             ownerUserId ?? "",
+            productId ?? null,
+            baseProjectId ?? null,
+            !!createdFromPurchase,
+            !!isTemplate,
+            String(htmlContent ?? ""),
+            String(cssContent ?? ""),
             id,
           ]
         );
@@ -2060,6 +3587,60 @@ app.put("/projects/:id", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao editar projeto." });
+  }
+});
+
+app.get("/projects/:id/content", async (req, res) => {
+  const { id } = req.params;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      const project = await loadProjectContentForUser(client, id, userId);
+      res.json({
+        projectId: project.id,
+        htmlContent: project.html_content ?? "",
+        cssContent: project.css_content ?? "",
+        createdAt: project.created_at,
+        updatedAt: project.updated_at,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar conteúdo do projeto." });
+  }
+});
+
+app.put("/projects/:id/content", async (req, res) => {
+  const { id } = req.params;
+  const { userId, htmlContent, cssContent } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, id, userId);
+      const result = await client.query(
+        "UPDATE projects SET html_content = $1, css_content = $2, updated_at = NOW() WHERE id = $3 RETURNING id, updated_at",
+        [String(htmlContent ?? ""), String(cssContent ?? ""), id]
+      );
+      res.json({ projectId: result.rows[0]?.id ?? id, updatedAt: result.rows[0]?.updated_at ?? new Date().toISOString() });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao salvar conteúdo do projeto." });
   }
 });
 
@@ -2891,6 +4472,241 @@ app.delete("/users/:id", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao excluir usuário." });
+  }
+});
+
+app.get("/dao/proposals", async (_req, res) => {
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const result = await client.query(
+      "SELECT id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end FROM dao_proposals WHERE status IN ('APPROVED','VOTING','CLOSED') ORDER BY created_at DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao buscar propostas DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/dao/proposals", async (req, res) => {
+  const { title, description, createdByUserId } = req.body || {};
+  if (!title || !description || !createdByUserId) {
+    return res.status(400).json({ error: "Dados inválidos para criar proposta." });
+  }
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const result = await client.query(
+      "INSERT INTO dao_proposals (title, description, created_by_user_id, status) VALUES ($1, $2, $3, 'PENDING_REVIEW') RETURNING id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end",
+      [title, description, createdByUserId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao criar proposta DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/dao/vote", async (req, res) => {
+  const { proposalId, userId, myBotId, vote, amountBet } = req.body || {};
+  if (!proposalId || !userId || !myBotId || !vote || !amountBet || Number(amountBet) <= 0) {
+    return res.status(400).json({ error: "Dados inválidos para votar." });
+  }
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    await client.query("BEGIN");
+    const proposal = await client.query("SELECT status FROM dao_proposals WHERE id = $1", [proposalId]);
+    if (!proposal.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Proposta não encontrada." });
+    }
+    if (proposal.rows[0].status !== 'VOTING') {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Proposta não está em votação." });
+    }
+
+    let balanceRow = await client.query("SELECT balance FROM dao_mybot_balances WHERE mybot_id = $1", [myBotId]);
+    if (!balanceRow.rows[0]) {
+      await client.query(
+        "INSERT INTO dao_mybot_balances (mybot_id, user_id, balance) VALUES ($1, $2, $3)",
+        [myBotId, userId, 1000]
+      );
+      balanceRow = await client.query("SELECT balance FROM dao_mybot_balances WHERE mybot_id = $1", [myBotId]);
+    }
+    const balance = Number(balanceRow.rows[0].balance);
+    if (balance < Number(amountBet)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Saldo insuficiente no MyBot." });
+    }
+
+    await client.query(
+      "UPDATE dao_mybot_balances SET balance = balance - $1, updated_at = NOW() WHERE mybot_id = $2",
+      [amountBet, myBotId]
+    );
+
+    const voteResult = await client.query(
+      "INSERT INTO dao_votes (proposal_id, user_id, mybot_id, vote, amount_bet) VALUES ($1, $2, $3, $4, $5) RETURNING id, proposal_id, user_id, mybot_id, vote, amount_bet, created_at",
+      [proposalId, userId, myBotId, vote, amountBet]
+    );
+
+    await client.query("COMMIT");
+    res.json(voteResult.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao registrar voto DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/dao/mybot", async (req, res) => {
+  const userId = String(req.query.userId || '').toLowerCase();
+  if (!userId) return res.status(400).json({ error: "userId inválido." });
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureMyBotTables(client);
+    await ensureDaoTables(client);
+    const card = await client.query(
+      "SELECT id FROM user_cards WHERE user_id = $1 LIMIT 1",
+      [userId]
+    );
+    if (!card.rows[0]) return res.status(404).json({ error: "MyBot não encontrado." });
+    const myBotId = card.rows[0].id as string;
+    let balanceRow = await client.query("SELECT balance FROM dao_mybot_balances WHERE mybot_id = $1", [myBotId]);
+    if (!balanceRow.rows[0]) {
+      await client.query(
+        "INSERT INTO dao_mybot_balances (mybot_id, user_id, balance) VALUES ($1, $2, $3)",
+        [myBotId, userId, 1000]
+      );
+      balanceRow = await client.query("SELECT balance FROM dao_mybot_balances WHERE mybot_id = $1", [myBotId]);
+    }
+    res.json({ myBotId, balance: Number(balanceRow.rows[0].balance) });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao buscar MyBot DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/dao/admin/proposals", async (_req, res) => {
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const result = await client.query(
+      "SELECT id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end FROM dao_proposals ORDER BY created_at DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao buscar propostas DAO (admin)", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/dao/admin/review", async (req, res) => {
+  const { id, approved, adminId } = req.body || {};
+  if (!id || typeof approved !== 'boolean' || !adminId) {
+    return res.status(400).json({ error: "Dados inválidos para revisão." });
+  }
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const status = approved ? 'APPROVED' : 'REJECTED';
+    const result = await client.query(
+      "UPDATE dao_proposals SET status = $1, approved_by_admin_id = $2 WHERE id = $3 RETURNING id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end",
+      [status, adminId, id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Proposta não encontrada." });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao revisar proposta DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/dao/admin/publish", async (req, res) => {
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: "ID inválido." });
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const result = await client.query(
+      "UPDATE dao_proposals SET status = 'VOTING', voting_start = NOW() WHERE id = $1 AND status = 'APPROVED' RETURNING id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end",
+      [id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Proposta não encontrada ou não aprovada." });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao publicar proposta DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/dao/admin/close", async (req, res) => {
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ error: "ID inválido." });
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureDaoTables(client);
+    const result = await client.query(
+      "UPDATE dao_proposals SET status = 'CLOSED', voting_end = NOW() WHERE id = $1 AND status = 'VOTING' RETURNING id, title, description, created_by_user_id, status, created_at, approved_by_admin_id, voting_start, voting_end",
+      [id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Proposta não encontrada ou não está em votação." });
+    res.json(result.rows[0]);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao encerrar proposta DAO", details: errorMsg });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/mybots", async (req, res) => {
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureMyBotTables(client);
+    // Atualiza image_url dos bots existentes se estiver vazia
+    await client.query(`
+      UPDATE mybots SET image_url = (
+        SELECT image_url FROM user_cards WHERE user_cards.user_id = mybots.user_id LIMIT 1
+      ) WHERE (image_url IS NULL OR image_url = '')
+    `);
+        const result = await client.query(
+       `SELECT m.user_id, m.myalien_user_id, m.stage, m.stage_reason, m.image_url, m.created_at, m.updated_at,
+            c.attributes, c.rarity, c.market_value
+          FROM mybots m
+          LEFT JOIN user_cards c ON c.user_id = m.user_id
+          ORDER BY m.created_at DESC`
+        );
+    res.json(result.rows);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Erro ao buscar MyBots", details: errorMsg });
+  } finally {
+    client.release();
   }
 });
 

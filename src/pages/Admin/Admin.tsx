@@ -7,6 +7,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../lib/init-firebase';
 import { deleteUser, fetchUserByEmail, fetchUsers, updateUser, upsertUser, UserDTO } from '../../services/usersApi';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
+import MyBotsList from '../../components/Admin/MyBotsList';
+import { MyBotsLeaderboard } from '../../components/MyBotsLeaderboard';
+import { DaoAdminPanel } from '../../components/DaoAdminPanel';
 import { createProduct, deleteProduct, fetchProducts, updateProduct } from '../../services/productsApi';
 import { createProject, deleteProject, fetchProjects, updateProject } from '../../services/projectsApi';
 import { createCost, deleteCost, fetchCosts, updateCost } from '../../services/costsApi';
@@ -14,6 +17,8 @@ import { fetchSales, SaleDTO } from '../../services/salesApi';
 import { fetchAccesses, AccessDTO } from '../../services/accessesApi';
 import { listReportsByProject } from '../../services/aiReportApi';
 import type { AiReport } from '../../services/aiReportTypes';
+import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
+import { resetAllPurchases, resetClonedProjects, resetFreeRedeems, resetFull, resetPaidSales } from '../../services/adminToolsApi';
 
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -27,6 +32,7 @@ interface ProductItem {
   description: string;
   productType?: string;
   showOnHome?: boolean;
+  showOnMarketplace?: boolean;
   purchasePrice?: string;
   salePrice?: string;
 }
@@ -45,6 +51,7 @@ interface ProjectItem {
   status: string;
   paid: boolean;
   isPublic: boolean;
+  ownerUserId?: string;
 }
 
 interface CostItem {
@@ -72,16 +79,6 @@ const Admin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentEmail = (localStorage.getItem('email') || '').toLowerCase();
-  const handleProjectTasksAdmin = () => {
-    const target = projects.find(
-      (project) => project.name?.trim().toLowerCase() === 'holding kapital technology'
-    );
-    if (target?.id) {
-      navigate(`/manager?projectId=${encodeURIComponent(target.id)}`);
-      return;
-    }
-    navigate('/manager');
-  };
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -126,9 +123,9 @@ const Admin: React.FC = () => {
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
-  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
+  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -136,12 +133,22 @@ const Admin: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesError, setSalesError] = useState<string | null>(null);
+  const [paidSales, setPaidSales] = useState<PurchaseDTO[]>([]);
+  const [paidSalesLoading, setPaidSalesLoading] = useState(false);
+  const [paidSalesError, setPaidSalesError] = useState<string | null>(null);
+  const [redeems, setRedeems] = useState<PurchaseDTO[]>([]);
+  const [redeemsLoading, setRedeemsLoading] = useState(false);
+  const [redeemsError, setRedeemsError] = useState<string | null>(null);
   const [accesses, setAccesses] = useState<AccessItem[]>([]);
   const [accessesLoading, setAccessesLoading] = useState(false);
   const [accessesError, setAccessesError] = useState<string | null>(null);
   const [aiReports, setAiReports] = useState<AiReport[]>([]);
   const [aiReportsLoading, setAiReportsLoading] = useState(false);
   const [aiReportsError, setAiReportsError] = useState<string | null>(null);
+  const [adminToolsConfirm, setAdminToolsConfirm] = useState('');
+  const [adminToolsLoading, setAdminToolsLoading] = useState<string | null>(null);
+  const [adminToolsError, setAdminToolsError] = useState<string | null>(null);
+  const [adminToolsSuccess, setAdminToolsSuccess] = useState<string | null>(null);
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
@@ -174,6 +181,7 @@ const Admin: React.FC = () => {
     isPublic: true,
   });
   const aiReportsProjectId = new URLSearchParams(location.search).get('projectId') || 'HKTECH';
+  const isAdmin = (localStorage.getItem('permissionLevel') || 'A') === 'B';
   const [costs, setCosts] = useState<CostItem[]>([]);
   const [costsLoading, setCostsLoading] = useState(false);
   const [costsError, setCostsError] = useState<string | null>(null);
@@ -275,6 +283,34 @@ const Admin: React.FC = () => {
     }
   };
 
+  const loadPaidSales = async () => {
+    setPaidSalesLoading(true);
+    setPaidSalesError(null);
+    try {
+      const data = await fetchPurchases(undefined, 'paid');
+      setPaidSales(data);
+    } catch (error) {
+      console.error('Erro ao buscar vendas pagas:', error);
+      setPaidSalesError(error instanceof Error ? error.message : 'Não foi possível carregar as vendas pagas.');
+    } finally {
+      setPaidSalesLoading(false);
+    }
+  };
+
+  const loadRedeems = async () => {
+    setRedeemsLoading(true);
+    setRedeemsError(null);
+    try {
+      const data = await fetchPurchases(undefined, 'free');
+      setRedeems(data);
+    } catch (error) {
+      console.error('Erro ao buscar resgates:', error);
+      setRedeemsError(error instanceof Error ? error.message : 'Não foi possível carregar os resgates.');
+    } finally {
+      setRedeemsLoading(false);
+    }
+  };
+
   const loadCosts = async () => {
     setCostsLoading(true);
     setCostsError(null);
@@ -289,12 +325,43 @@ const Admin: React.FC = () => {
     }
   };
 
+  const runAdminTool = async (action: string, handler: (adminId: string) => Promise<unknown>) => {
+    if (!currentEmail) {
+      setAdminToolsError('Admin não identificado.');
+      return;
+    }
+    if (adminToolsConfirm.trim().toUpperCase() !== 'RESET') {
+      setAdminToolsError('Digite RESET para confirmar.');
+      return;
+    }
+    const confirmed = window.confirm('Esta ação é irreversível. Deseja continuar?');
+    if (!confirmed) return;
+    setAdminToolsLoading(action);
+    setAdminToolsError(null);
+    setAdminToolsSuccess(null);
+    try {
+      await handler(currentEmail);
+      setAdminToolsSuccess('Ação executada com sucesso.');
+      setAdminToolsConfirm('');
+      loadPaidSales();
+      loadRedeems();
+      loadProjects();
+    } catch (error) {
+      console.error('Erro ao executar ação admin:', error);
+      setAdminToolsError(error instanceof Error ? error.message : 'Falha ao executar ação.');
+    } finally {
+      setAdminToolsLoading(null);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
     loadProducts();
     loadProjects();
     loadCosts();
     loadSales();
+    loadPaidSales();
+    loadRedeems();
     loadAccesses();
     loadAiReports();
   }, [aiReportsProjectId]);
@@ -383,10 +450,11 @@ const Admin: React.FC = () => {
         description: newProduct.description.trim(),
         productType: newProduct.productType,
         showOnHome: newProduct.showOnHome,
+        showOnMarketplace: newProduct.showOnMarketplace,
         purchasePrice: newProduct.purchasePrice.trim(),
         salePrice: newProduct.salePrice.trim() || newProduct.price.trim()
       });
-      setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
+      setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
       setIsProductModalOpen(false);
       loadProducts();
     } catch (error) {
@@ -404,6 +472,7 @@ const Admin: React.FC = () => {
       description: product.description,
       productType: product.productType ?? 'digital',
       showOnHome: product.showOnHome ?? false,
+      showOnMarketplace: product.showOnMarketplace ?? false,
       purchasePrice: product.purchasePrice ?? '',
       salePrice: product.salePrice ?? product.price
     });
@@ -422,6 +491,7 @@ const Admin: React.FC = () => {
         description: editProductData.description.trim(),
         productType: editProductData.productType,
         showOnHome: editProductData.showOnHome,
+        showOnMarketplace: editProductData.showOnMarketplace,
         purchasePrice: editProductData.purchasePrice.trim(),
         salePrice: editProductData.salePrice.trim() || editProductData.price.trim()
       });
@@ -442,6 +512,7 @@ const Admin: React.FC = () => {
         description: product.description,
         productType: product.productType ?? 'digital',
         showOnHome: nextValue,
+        showOnMarketplace: product.showOnMarketplace ?? false,
         purchasePrice: product.purchasePrice ?? '',
         salePrice: product.salePrice ?? product.price,
       });
@@ -449,6 +520,26 @@ const Admin: React.FC = () => {
     } catch (error) {
       console.error('Erro ao atualizar exibição na Home:', error);
       setProductsError('Não foi possível atualizar a exibição na Home.');
+    }
+  };
+
+  const handleToggleProductMarketplace = async (product: ProductItem, nextValue: boolean) => {
+    setProductsError(null);
+    try {
+      await updateProduct(product.id, {
+        name: product.name,
+        price: product.price,
+        description: product.description,
+        productType: product.productType ?? 'digital',
+        showOnHome: product.showOnHome ?? false,
+        showOnMarketplace: nextValue,
+        purchasePrice: product.purchasePrice ?? '',
+        salePrice: product.salePrice ?? product.price,
+      });
+      loadProducts();
+    } catch (error) {
+      console.error('Erro ao atualizar exibição no Marketplace:', error);
+      setProductsError('Não foi possível atualizar a exibição no Marketplace.');
     }
   };
 
@@ -810,6 +901,9 @@ const Admin: React.FC = () => {
             <li className={activeTab === 'sales' ? 'active' : ''} onClick={() => setActiveTab('sales')}>
               Vendas
             </li>
+            <li className={activeTab === 'redeems' ? 'active' : ''} onClick={() => setActiveTab('redeems')}>
+              Resgates
+            </li>
             <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
               Projetos
             </li>
@@ -822,13 +916,36 @@ const Admin: React.FC = () => {
             <li className={activeTab === 'ai-reports' ? 'active' : ''} onClick={() => setActiveTab('ai-reports')}>
               AI Reports
             </li>
+            <li className={activeTab === 'mybots' ? 'active' : ''} onClick={() => setActiveTab('mybots')}>
+              MyBots
+            </li>
+            <li className={activeTab === 'dao' ? 'active' : ''} onClick={() => setActiveTab('dao')}>
+              DAO
+            </li>
+            {isAdmin && (
+              <li className={activeTab === 'admin-tools' ? 'active' : ''} onClick={() => setActiveTab('admin-tools')}>
+                Admin Tools
+              </li>
+            )}
           </ul>
-          <button className="admin-btn admin-sidebar__cta" onClick={handleProjectTasksAdmin}>
-            Admin
-          </button>
+          {/* Botão removido: o projeto master HKTECH estará apenas na lista de projetos */}
         </aside>
 
         <main className="admin-content">
+        {activeTab === 'mybots' && (
+          <section>
+            <h2>MyBots - Placar dos Bots</h2>
+            {/* Placar dos Bots */}
+            <MyBotsLeaderboard />
+            <MyBotsList />
+          </section>
+        )}
+        {activeTab === 'dao' && (
+          <section>
+            <h2>DAO - Governança</h2>
+            <DaoAdminPanel adminId={currentEmail} />
+          </section>
+        )}
         {activeTab === 'reports' && (
           <section>
             <h2>Relatórios</h2>
@@ -1135,32 +1252,152 @@ const Admin: React.FC = () => {
 
         {activeTab === 'sales' && (
           <section>
-            <h2>Vendas Realizadas</h2>
-            {salesLoading && <p>Carregando vendas...</p>}
-            {salesError && <p>{salesError}</p>}
+            <h2>Vendas (Pagas)</h2>
+            {paidSalesLoading && <p>Carregando vendas...</p>}
+            {paidSalesError && <p>{paidSalesError}</p>}
             <table className="admin-table admin-table--sales">
               <thead>
                 <tr>
                   <th>Usuário</th>
-                  <th>Valor</th>
+                  <th>Produto</th>
+                  <th>Preço</th>
+                  <th>Status</th>
+                  <th>Projeto</th>
                   <th>Data</th>
                 </tr>
               </thead>
               <tbody>
-                {!salesLoading && sales.length === 0 && (
+                {!paidSalesLoading && paidSales.length === 0 && (
                   <tr>
-                    <td colSpan={3}>Nenhuma venda encontrada.</td>
+                    <td colSpan={6}>Nenhuma venda encontrada.</td>
                   </tr>
                 )}
-                {sales.map((sale) => (
+                {paidSales.map((sale) => (
                   <tr key={sale.id}>
-                    <td>{sale.user}</td>
-                    <td>{sale.value}</td>
-                    <td>{sale.date}</td>
+                    <td>{sale.userId}</td>
+                    <td>{sale.productName || 'Produto'}</td>
+                    <td>R$ {Number(sale.price || 0).toFixed(2).replace('.', ',')}</td>
+                    <td>{sale.status}</td>
+                    <td>
+                      {sale.projectId ? (
+                        <button
+                          className="admin-btn admin-btn--ghost"
+                          onClick={() => navigate(`/manager?projectId=${encodeURIComponent(sale.projectId || '')}`)}
+                        >
+                          Ver projeto
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>{sale.createdAt ? new Date(sale.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </section>
+        )}
+
+        {activeTab === 'redeems' && (
+          <section>
+            <h2>Resgates (Gratuitos)</h2>
+            {redeemsLoading && <p>Carregando resgates...</p>}
+            {redeemsError && <p>{redeemsError}</p>}
+            <table className="admin-table admin-table--sales">
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Produto</th>
+                  <th>Tipo</th>
+                  <th>Projeto</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!redeemsLoading && redeems.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>Nenhum resgate encontrado.</td>
+                  </tr>
+                )}
+                {redeems.map((redeem) => (
+                  <tr key={redeem.id}>
+                    <td>{redeem.userId}</td>
+                    <td>{redeem.productName || 'Produto'}</td>
+                    <td>FREE</td>
+                    <td>
+                      {redeem.projectId ? (
+                        <button
+                          className="admin-btn admin-btn--ghost"
+                          onClick={() => navigate(`/manager?projectId=${encodeURIComponent(redeem.projectId || '')}`)}
+                        >
+                          Ver projeto
+                        </button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>{redeem.createdAt ? new Date(redeem.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {activeTab === 'admin-tools' && isAdmin && (
+          <section>
+            <h2>Admin Tools</h2>
+            <p><strong>Atenção:</strong> use apenas em ambiente de teste. Essas ações são irreversíveis.</p>
+            <div className="admin-modal__form">
+              <label>
+                <span>Digite RESET para confirmar</span>
+                <input
+                  type="text"
+                  value={adminToolsConfirm}
+                  onChange={(e) => setAdminToolsConfirm(e.target.value)}
+                />
+              </label>
+            </div>
+            {adminToolsError && <p className="admin-modal__error">{adminToolsError}</p>}
+            {adminToolsSuccess && <p className="admin-modal__success">{adminToolsSuccess}</p>}
+            <div className="admin-user-actions" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-purchases', resetAllPurchases)}
+              >
+                Resetar todas as compras
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-sales', resetPaidSales)}
+              >
+                Resetar vendas pagas
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-redeems', resetFreeRedeems)}
+              >
+                Resetar resgates gratuitos
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-projects', resetClonedProjects)}
+              >
+                Resetar projetos clonados
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-full', resetFull)}
+              >
+                Full Reset (teste)
+              </button>
+            </div>
+            {adminToolsLoading && <p>Executando ação...</p>}
           </section>
         )}
 
@@ -1210,18 +1447,19 @@ const Admin: React.FC = () => {
                   <th>Status</th>
                   <th>Pago</th>
                   <th>Público</th>
+                  <th>Criador</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {!projectsLoading && projects.length === 0 && (
                   <tr>
-                    <td colSpan={11}>Nenhum projeto encontrado.</td>
+                    <td colSpan={13}>Nenhum projeto encontrado.</td>
                   </tr>
                 )}
                 {projects.map((project) => (
                   <tr key={project.id}>
-                    <td>{project.name}</td>
+                    <td><strong>{project.name}</strong></td>
                     <td>{project.projectType || '-'}</td>
                     <td>{project.salePrice || '-'}</td>
                     <td>{project.productionCost || '-'}</td>
@@ -1232,6 +1470,7 @@ const Admin: React.FC = () => {
                     <td>{project.status}</td>
                     <td>{project.paid ? 'Pago' : 'Não pago'}</td>
                     <td>{project.isPublic ? 'Sim' : 'Não'}</td>
+                    <td>{project.ownerUserId || '—'}</td>
                     <td className="admin-actions">
                       <button className="admin-btn" onClick={() => handleEditProject(project)} aria-label="Editar">
                         <span className="admin-action-icon">✏️</span>
@@ -1240,6 +1479,15 @@ const Admin: React.FC = () => {
                       <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)} aria-label="Excluir">
                         <span className="admin-action-icon">🗑️</span>
                         <span className="admin-action-text">Excluir</span>
+                      </button>
+                      <button
+                        className="admin-btn admin-btn--primary"
+                        style={{ marginLeft: 8, background: '#38bdf8', color: '#fff', borderRadius: 8, fontWeight: 600 }}
+                        onClick={() => navigate(`/manager?projectId=${encodeURIComponent(project.id)}`)}
+                        aria-label={`Administrar ${project.name}`}
+                      >
+                        <span className="admin-action-icon">🛠️</span>
+                        <span className="admin-action-text">Administrar</span>
                       </button>
                     </td>
                   </tr>
@@ -1550,7 +1798,7 @@ const Admin: React.FC = () => {
                 className="admin-btn"
                 onClick={() => {
                   setProductsError(null);
-                  setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, purchasePrice: '', salePrice: '' });
+                  setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
                   setIsProductModalOpen(true);
                 }}
               >
@@ -1567,13 +1815,14 @@ const Admin: React.FC = () => {
                   <th>Preço compra</th>
                   <th>Descrição</th>
                   <th>Home</th>
+                  <th>Marketplace</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {!productsLoading && products.length === 0 && (
                   <tr>
-                    <td colSpan={6}>Nenhum produto encontrado.</td>
+                    <td colSpan={8}>Nenhum produto encontrado.</td>
                   </tr>
                 )}
                 {products.map((product) => (
@@ -1591,6 +1840,16 @@ const Admin: React.FC = () => {
                           onChange={(e) => handleToggleProductHome(product, e.target.checked)}
                         />
                         <span>{product.showOnHome ? 'Sim' : 'Não'}</span>
+                      </label>
+                    </td>
+                    <td>
+                      <label className="admin-home-toggle">
+                        <input
+                          type="checkbox"
+                          checked={!!product.showOnMarketplace}
+                          onChange={(e) => handleToggleProductMarketplace(product, e.target.checked)}
+                        />
+                        <span>{product.showOnMarketplace ? 'Sim' : 'Não'}</span>
                       </label>
                     </td>
                     <td className="admin-actions">
@@ -1672,6 +1931,14 @@ const Admin: React.FC = () => {
                       />
                       <span>Exibir na Home</span>
                     </label>
+                    <label className="admin-modal__checkbox">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.showOnMarketplace}
+                        onChange={(e) => setNewProduct({ ...newProduct, showOnMarketplace: e.target.checked })}
+                      />
+                      <span>Exibir no Marketplace</span>
+                    </label>
                   </div>
                   <div className="admin-modal__footer">
                     <button className="admin-btn admin-btn--ghost" onClick={() => setIsProductModalOpen(false)}>Cancelar</button>
@@ -1740,6 +2007,14 @@ const Admin: React.FC = () => {
                         onChange={(e) => setEditProductData({ ...editProductData, showOnHome: e.target.checked })}
                       />
                       <span>Exibir na Home</span>
+                    </label>
+                    <label className="admin-modal__checkbox">
+                      <input
+                        type="checkbox"
+                        checked={editProductData.showOnMarketplace}
+                        onChange={(e) => setEditProductData({ ...editProductData, showOnMarketplace: e.target.checked })}
+                      />
+                      <span>Exibir no Marketplace</span>
                     </label>
                   </div>
                   <div className="admin-modal__footer">

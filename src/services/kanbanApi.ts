@@ -33,6 +33,17 @@ const CONTRACT_COLUMNS: Array<{ id: string; title: string; status: ContractStatu
   { id: "DONE", title: "DONE", status: "DONE", order: 5 },
 ];
 
+const TEMPLATE_TASKS: Array<{ text: string; status: ContractStatus }> = [
+  { text: "Definir objetivo da página institucional", status: "TODO" },
+  { text: "Revisar identidade visual (cores e tipografia)", status: "TODO" },
+  { text: "Montar estrutura base do HTML", status: "TODO" },
+  { text: "Criar sessão 'Quem Somos'", status: "TODO" },
+  { text: "Criar sessão 'Nossos Serviços'", status: "TODO" },
+  { text: "Adicionar rodapé com informações legais", status: "TODO" },
+  { text: "Aplicar estilos responsivos", status: "TODO" },
+  { text: "Revisar conteúdo e validar preview", status: "TODO" },
+];
+
 const contractColumnsRef = (projectId: string) =>
   collection(db, "projetos", projectId, "kanban");
 const contractItemsRef = (projectId: string) =>
@@ -91,6 +102,93 @@ async function ensureContractColumns(projectId: string) {
     });
   });
   await batch.commit();
+}
+
+async function hasAnyItems(projectId: string) {
+  const [contractItemsSnap, legacyItemsSnap] = await Promise.all([
+    getDocs(query(contractItemsRef(projectId), limit(1))),
+    getDocs(query(legacyItemsRef(projectId), limit(1))),
+  ]);
+  return !contractItemsSnap.empty || !legacyItemsSnap.empty;
+}
+
+async function cloneItemsFromBase(baseProjectId: string, targetProjectId: string) {
+  const [contractItemsSnap, legacyItemsSnap] = await Promise.all([
+    getDocs(query(contractItemsRef(baseProjectId), orderBy("order", "asc"))),
+    getDocs(query(legacyItemsRef(baseProjectId), orderBy("order", "asc"))),
+  ]);
+
+  const items: Array<{ text: string; status: ContractStatus; order: number }> = [];
+
+  contractItemsSnap.docs.forEach((docSnap) => {
+    items.push({
+      text: docSnap.get("text") ?? docSnap.get("title") ?? "",
+      status: docSnap.get("status") as ContractStatus,
+      order: docSnap.get("order") ?? 0,
+    });
+  });
+
+  if (items.length === 0) {
+    legacyItemsSnap.docs.forEach((docSnap) => {
+      const legacyStatus = docSnap.get("status") as KanbanStatus;
+      items.push({
+        text: docSnap.get("text") ?? "",
+        status: uiToContractStatus(legacyStatus),
+        order: docSnap.get("order") ?? 0,
+      });
+    });
+  }
+
+  if (items.length === 0) return false;
+
+  const batch = writeBatch(db);
+  items.forEach((item, index) => {
+    const ref = doc(contractItemsRef(targetProjectId));
+    batch.set(ref, {
+      text: item.text,
+      status: item.status ?? "TODO",
+      order: Number.isFinite(Number(item.order)) ? Number(item.order) : index,
+      projectId: targetProjectId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+  await batch.commit();
+  return true;
+}
+
+async function seedTemplateTasks(targetProjectId: string) {
+  const batch = writeBatch(db);
+  TEMPLATE_TASKS.forEach((task, index) => {
+    const ref = doc(contractItemsRef(targetProjectId));
+    batch.set(ref, {
+      text: task.text,
+      status: task.status,
+      order: index,
+      projectId: targetProjectId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+  await batch.commit();
+}
+
+export async function ensureProjectTasksSeed(
+  projectId: string,
+  options: { baseProjectId?: string | null; isTemplate?: boolean }
+) {
+  await ensureContractColumns(projectId);
+  const alreadyHas = await hasAnyItems(projectId);
+  if (alreadyHas) return;
+
+  if (options.baseProjectId) {
+    const cloned = await cloneItemsFromBase(options.baseProjectId, projectId);
+    if (cloned) return;
+  }
+
+  if (options.isTemplate) {
+    await seedTemplateTasks(projectId);
+  }
 }
 
 export async function fetchKanbanSnapshot(projectId: string): Promise<KanbanProjectSnapshot> {

@@ -1,0 +1,74 @@
+.mybot-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mybot-modal {
+  background: var(--surface, #23262f);
+  color: var(--text, #f1f1f1);
+  border-radius: 12px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.25);
+  padding: 2rem 2.5rem 1.5rem 2.5rem;
+  min-width: 340px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+.mybot-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-inverse, #fff);
+  font-size: 2rem;
+  cursor: pointer;
+}
+.mybot-modal-content {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+.mybot-modal-img {
+  min-width: 64px;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mybot-modal-img img {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  border-radius: 18px;
+  border: 3px solid #38bdf8;
+  background: #18181b;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+  margin-bottom: 12px;
+}
+.mybot-modal-noimg {
+  color: #aaa;
+  font-size: 0.95rem;
+}
+.mybot-modal-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.mybot-modal-table th {
+  text-align: right;
+  padding: 0.4rem 0.7rem 0.4rem 0;
+  color: var(--text-inverse, #fff);
+  font-weight: 600;
+  background: none;
+}
+.mybot-modal-table td {
+  text-align: left;
+  padding: 0.4rem 0 0.4rem 0.7rem;
+  color: var(--text, #f1f1f1);
+  background: none;
+}

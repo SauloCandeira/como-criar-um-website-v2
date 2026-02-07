@@ -3,7 +3,7 @@ import './Dashboard.css';
 import { useLocation, useNavigate } from 'react-router-dom';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
 import { fetchProjects, ProjectDTO, updateProject } from '../../services/projectsApi';
-import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
+import { fetchPurchases, PurchaseDTO, redeemPurchase } from '../../services/purchasesApi';
 import { fetchUserByEmail, UserDTO } from '../../services/usersApi';
 import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
 import {
@@ -19,7 +19,17 @@ import {
   CardListingDTO,
   InternalAccountDTO,
 } from '../../services/cardsApi';
-import { sendMyBotMessage } from '../../services/mybotApi';
+import {
+  sendMyBotMessage,
+  fetchMyBotBattles,
+  fetchMyBotBattleQueue,
+  queueMyBotBattle,
+  evolveMyBot,
+  MyBotBattleDTO,
+  MyBotBattleQueueDTO,
+} from '../../services/mybotApi';
+import { DaoUserPanel } from '../../components/DaoUserPanel';
+import { fetchMenuVisibility, MenuVisibilityResponse } from '../../services/visibilityApi';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -49,7 +59,17 @@ const Dashboard: React.FC = () => {
   const [mybotInput, setMybotInput] = useState('');
   const [mybotSending, setMybotSending] = useState(false);
   const [mybotChatError, setMybotChatError] = useState<string | null>(null);
+  const [battleBet, setBattleBet] = useState('10');
+  const [battleQueue, setBattleQueue] = useState<MyBotBattleQueueDTO | null>(null);
+  const [battleResult, setBattleResult] = useState<MyBotBattleDTO | null>(null);
+  const [battles, setBattles] = useState<MyBotBattleDTO[]>([]);
+  const [battleLoading, setBattleLoading] = useState(false);
+  const [battleError, setBattleError] = useState<string | null>(null);
+  const [battlesLoading, setBattlesLoading] = useState(false);
+  const [evolveLoading, setEvolveLoading] = useState<string | null>(null);
+  const [evolveError, setEvolveError] = useState<string | null>(null);
   const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
+  const [menuVisibility, setMenuVisibility] = useState<MenuVisibilityResponse | null>(null);
   const [editProjectData, setEditProjectData] = useState({
     id: '',
     name: '',
@@ -60,6 +80,7 @@ const Dashboard: React.FC = () => {
     status: 'Ativo',
     paid: false,
     isPublic: true,
+    productId: '',
   });
 
   const navigate = useNavigate();
@@ -87,13 +108,23 @@ const Dashboard: React.FC = () => {
     setProjectsLoading(true);
     setProjectsError(null);
     try {
-      const data = await fetchProjects(userId || undefined);
+      const data = await fetchProjects(userId || undefined, 'visible');
       setProjects(data);
     } catch (error) {
       console.error('Erro ao buscar projetos:', error);
       setProjectsError('Não foi possível carregar os projetos.');
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const loadMenuVisibility = async () => {
+    if (!userId) return;
+    try {
+      const visibility = await fetchMenuVisibility(userId);
+      setMenuVisibility(visibility);
+    } catch (error) {
+      console.error('Erro ao buscar visibilidade de menus:', error);
     }
   };
 
@@ -108,6 +139,17 @@ const Dashboard: React.FC = () => {
       setPurchasesError('Não foi possível carregar as compras.');
     } finally {
       setPurchasesLoading(false);
+    }
+  };
+
+  const handleRedeemPurchase = async (purchaseId: string) => {
+    try {
+      await redeemPurchase({ purchaseId, userId });
+      await loadPurchases();
+      await loadProjects();
+    } catch (error) {
+      console.error('Erro ao resgatar projeto:', error);
+      setPurchasesError('Não foi possível resgatar o projeto.');
     }
   };
 
@@ -260,6 +302,77 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const loadMyBotBattles = async () => {
+    if (!userId) return;
+    setBattlesLoading(true);
+    setBattleError(null);
+    try {
+      const items = await fetchMyBotBattles(userId, 10);
+      setBattles(items);
+    } catch (error) {
+      console.error('Erro ao carregar batalhas:', error);
+      setBattleError('Não foi possível carregar as batalhas.');
+    } finally {
+      setBattlesLoading(false);
+    }
+  };
+
+  const loadMyBotBattleQueue = async () => {
+    if (!userId) return;
+    try {
+      const queue = await fetchMyBotBattleQueue(userId);
+      setBattleQueue(queue);
+    } catch (error) {
+      console.error('Erro ao carregar fila de batalha:', error);
+    }
+  };
+
+  const handleQueueBattle = async () => {
+    if (!userId) return;
+    const value = Number(battleBet.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
+      setBattleError('Informe um valor válido para apostar.');
+      return;
+    }
+    setBattleLoading(true);
+    setBattleError(null);
+    try {
+      const result = await queueMyBotBattle(userId, value);
+      setBattleResult(result.battle || null);
+      setBattleQueue(result.queue || null);
+      await loadInternalAccount();
+      await loadMyBotCard();
+      await loadMyBotBattles();
+    } catch (error) {
+      console.error('Erro ao enfileirar batalha:', error);
+      setBattleError(error instanceof Error ? error.message : 'Não foi possível enfileirar a batalha.');
+    } finally {
+      setBattleLoading(false);
+    }
+  };
+
+  const handleEvolveAttribute = async (attribute: 'forca' | 'velocidade' | 'inteligencia') => {
+    if (!userId) return;
+    setEvolveLoading(attribute);
+    setEvolveError(null);
+    try {
+      const result = await evolveMyBot(userId, attribute);
+      if (result?.card) {
+        setMyBotCard((prev) => ({
+          ...(prev ?? result.card),
+          ...result.card,
+          attributes: result.card.attributes ?? prev?.attributes,
+        }));
+      }
+      await loadInternalAccount();
+    } catch (error) {
+      console.error('Erro ao evoluir atributo:', error);
+      setEvolveError(error instanceof Error ? error.message : 'Não foi possível evoluir o atributo.');
+    } finally {
+      setEvolveLoading(null);
+    }
+  };
+
   const buildMyBotSvg = (card: CardDTO) => {
     const palette = card.visualMeta?.palette || { primary: '#38bdf8', secondary: '#0f172a', accent: '#22d3ee' };
     const eyes = Math.max(1, Number(card.visualMeta?.eyes ?? 2));
@@ -332,6 +445,7 @@ const Dashboard: React.FC = () => {
       status: project.status || 'Ativo',
       paid: project.paid,
       isPublic: project.isPublic ?? true,
+      productId: project.productId || '',
     });
     setIsProjectEditModalOpen(true);
   };
@@ -351,6 +465,7 @@ const Dashboard: React.FC = () => {
         status: editProjectData.status.trim(),
         paid: editProjectData.paid,
         isPublic: editProjectData.isPublic,
+        productId: editProjectData.productId || undefined,
       });
       setIsProjectEditModalOpen(false);
       loadProjects();
@@ -360,14 +475,38 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const visibleProjects = projects.filter((project) => project.isPublic ?? true);
+  const visibleProjects = projects;
+  const menuConfig = menuVisibility?.menus ?? {
+    projects: true,
+    marketplace: true,
+    cart: true,
+    purchases: true,
+    redeems: true,
+    mybot: true,
+    dao: true,
+  };
+
+  const isTabVisible = (tab: string) => {
+    if (tab === 'home') return true;
+    if (tab === 'projects') return menuConfig.projects;
+    if (tab === 'marketplace') return menuConfig.marketplace;
+    if (tab === 'cart') return menuConfig.cart;
+    if (tab === 'purchases') return menuConfig.purchases;
+    if (tab === 'redeems') return menuConfig.redeems;
+    if (tab === 'mybot') return menuConfig.mybot;
+    if (tab === 'dao') return menuConfig.dao;
+    return true;
+  };
 
   const tabLabels: Record<string, string> = {
     'home': 'Home',
     'projects': 'Projetos',
     'cart': 'Carrinho',
     'purchases': 'Compras',
+    'redeems': 'Resgates',
     'mybot': 'My Bot',
+    'marketplace': 'Marketplace',
+    'dao': 'DAO',
   };
 
   const crumbs = [
@@ -377,15 +516,22 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get('tab');
-    if (tab && ['home', 'projects', 'cart', 'purchases', 'mybot', 'marketplace'].includes(tab)) {
+    if (tab && ['home', 'projects', 'cart', 'purchases', 'redeems', 'mybot', 'marketplace', 'dao'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [location.search]);
 
   useEffect(() => {
+    if (!isTabVisible(activeTab)) {
+      setActiveTab('home');
+    }
+  }, [activeTab, menuVisibility]);
+
+  useEffect(() => {
     loadProjects();
     loadPurchases();
     loadUserProfile();
+    loadMenuVisibility();
   }, []);
 
   useEffect(() => {
@@ -393,6 +539,8 @@ const Dashboard: React.FC = () => {
       loadMyBotCard();
       loadMyBotListings();
       loadInternalAccount();
+      loadMyBotBattles();
+      loadMyBotBattleQueue();
     }
   }, [activeTab]);
 
@@ -405,6 +553,9 @@ const Dashboard: React.FC = () => {
     return () => window.removeEventListener('marketplace:purchase', handlePurchase);
   }, []);
 
+  const paidPurchases = purchases.filter((item) => (item.purchaseType || 'paid').toLowerCase() !== 'free');
+  const freeRedeems = purchases.filter((item) => (item.purchaseType || '').toLowerCase() === 'free');
+
   return (
     <LayoutPrivate
       crumbs={crumbs}
@@ -413,26 +564,46 @@ const Dashboard: React.FC = () => {
     >
       <div className={`admin-container has-breadcrumb ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <aside className="admin-sidebar">
-          <h2>Admin</h2>
+          <h2>Dashboard</h2>
           <ul>
             <li className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
               HOME
             </li>
-            <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
-              PROJETOS
-            </li>
-            <li className={activeTab === 'marketplace' ? 'active' : ''} onClick={() => setActiveTab('marketplace')}>
-              MARKETPLACE
-            </li>
-            <li className={activeTab === 'cart' ? 'active' : ''} onClick={() => setActiveTab('cart')}>
-              CARRINHO
-            </li>
-            <li className={activeTab === 'purchases' ? 'active' : ''} onClick={() => setActiveTab('purchases')}>
-              COMPRAS
-            </li>
-            <li className={activeTab === 'mybot' ? 'active' : ''} onClick={() => setActiveTab('mybot')}>
-              MY BOT
-            </li>
+            {menuConfig.projects && (
+              <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
+                PROJETOS
+              </li>
+            )}
+            {menuConfig.marketplace && (
+              <li className={activeTab === 'marketplace' ? 'active' : ''} onClick={() => setActiveTab('marketplace')}>
+                MARKETPLACE
+              </li>
+            )}
+            {menuConfig.cart && (
+              <li className={activeTab === 'cart' ? 'active' : ''} onClick={() => setActiveTab('cart')}>
+                CARRINHO
+              </li>
+            )}
+            {menuConfig.purchases && (
+              <li className={activeTab === 'purchases' ? 'active' : ''} onClick={() => setActiveTab('purchases')}>
+                COMPRAS
+              </li>
+            )}
+            {menuConfig.redeems && (
+              <li className={activeTab === 'redeems' ? 'active' : ''} onClick={() => setActiveTab('redeems')}>
+                RESGATES
+              </li>
+            )}
+            {menuConfig.mybot && (
+              <li className={activeTab === 'mybot' ? 'active' : ''} onClick={() => setActiveTab('mybot')}>
+                MY BOT
+              </li>
+            )}
+            {menuConfig.dao && (
+              <li className={activeTab === 'dao' ? 'active' : ''} onClick={() => setActiveTab('dao')}>
+                DAO
+              </li>
+            )}
           </ul>
         </aside>
 
@@ -655,25 +826,86 @@ const Dashboard: React.FC = () => {
               <h2>🧾 Compras</h2>
               {purchasesLoading && <p>Carregando compras...</p>}
               {purchasesError && <p>{purchasesError}</p>}
-              <ul className="courses-list">
-                {!purchasesLoading && purchases.length === 0 && (
-                  <li className="course-item">
-                    <div className="course-info">
-                      <h3>Nenhuma compra registrada</h3>
-                    </div>
-                  </li>
-                )}
-                {purchases.map((item) => (
-                  <li key={item.id} className="course-item">
-                    <div className="course-info">
-                      <h3>{item.productName || 'Produto'}</h3>
-                      <span className="course-status">{item.status}</span>
-                    </div>
-                    <p>Data: {item.createdAt ? new Date(item.createdAt).toLocaleDateString('pt-BR') : '-'}</p>
-                    <button className="view-all-button" onClick={managerProject}>Acessar Projeto</button>
-                  </li>
-                ))}
-              </ul>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Projeto base</th>
+                    <th>Tipo</th>
+                    <th>Status</th>
+                    <th>Valor</th>
+                    <th>Data</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!purchasesLoading && paidPurchases.length === 0 && (
+                    <tr>
+                      <td colSpan={7}>Nenhuma compra registrada</td>
+                    </tr>
+                  )}
+                  {paidPurchases.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.productName || 'Produto'}</td>
+                      <td>{item.baseProjectName || '—'}</td>
+                      <td>{(item.purchaseType || '').toLowerCase() === 'free' ? 'FREE' : 'PAID'}</td>
+                      <td>{item.status}</td>
+                      <td>R$ {Number(item.price || 0).toFixed(2).replace('.', ',')}</td>
+                      <td>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
+                      <td>
+                        {item.projectId ? (
+                          <button className="view-all-button" onClick={() => navigate(`/manager?projectId=${encodeURIComponent(item.projectId || '')}`)}>Acessar Projeto</button>
+                        ) : item.redeemed ? (
+                          <button className="view-all-button" onClick={managerProject}>Acessar Projeto</button>
+                        ) : (
+                          <button className="view-all-button" onClick={() => handleRedeemPurchase(item.id)}>Resgatar Projeto</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {activeTab === 'redeems' && (
+            <section>
+              <h2>🎁 Resgates</h2>
+              {purchasesLoading && <p>Carregando resgates...</p>}
+              {purchasesError && <p>{purchasesError}</p>}
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Projeto base</th>
+                    <th>Tipo</th>
+                    <th>Data</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!purchasesLoading && freeRedeems.length === 0 && (
+                    <tr>
+                      <td colSpan={5}>Nenhum resgate registrado</td>
+                    </tr>
+                  )}
+                  {freeRedeems.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.productName || 'Produto'}</td>
+                      <td>{item.baseProjectName || '—'}</td>
+                      <td>FREE</td>
+                      <td>{item.createdAt ? new Date(item.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
+                      <td>
+                        {item.projectId ? (
+                          <button className="view-all-button" onClick={() => navigate(`/manager?projectId=${encodeURIComponent(item.projectId || '')}`)}>Acessar Projeto</button>
+                        ) : (
+                          <button className="view-all-button" disabled>Resgatado</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </section>
           )}
 
@@ -750,6 +982,34 @@ const Dashboard: React.FC = () => {
                           <strong>{myBotCard.attributes.endurance}</strong>
                         </div>
                       </div>
+                      <div className="mybot-evolution">
+                        <h4>Evolução de atributos</h4>
+                        <p className="mybot-meta">Use seus pontos e créditos para evoluir. O custo aumenta com o nível e a raridade.</p>
+                        <div className="mybot-evolution__grid">
+                          <button
+                            className="action-button action-button--ghost"
+                            onClick={() => handleEvolveAttribute('forca')}
+                            disabled={evolveLoading !== null}
+                          >
+                            {evolveLoading === 'forca' ? 'Evoluindo...' : 'Evoluir Força'}
+                          </button>
+                          <button
+                            className="action-button action-button--ghost"
+                            onClick={() => handleEvolveAttribute('velocidade')}
+                            disabled={evolveLoading !== null}
+                          >
+                            {evolveLoading === 'velocidade' ? 'Evoluindo...' : 'Evoluir Velocidade'}
+                          </button>
+                          <button
+                            className="action-button action-button--ghost"
+                            onClick={() => handleEvolveAttribute('inteligencia')}
+                            disabled={evolveLoading !== null}
+                          >
+                            {evolveLoading === 'inteligencia' ? 'Evoluindo...' : 'Evoluir Inteligência'}
+                          </button>
+                        </div>
+                        {evolveError && <p className="mybot-error">{evolveError}</p>}
+                      </div>
                       <div className="mybot-actions">
                         <button className="action-button" onClick={loadMyBotCard}>Atualizar My Bot</button>
                         <button className="action-button action-button--ghost" onClick={handleRefreshMyBotVisual}>
@@ -789,6 +1049,67 @@ const Dashboard: React.FC = () => {
                     <button className="action-button" onClick={handleMyBotSend} disabled={mybotSending || !mybotInput.trim()}>
                       {mybotSending ? 'Enviando...' : 'Enviar'}
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mybot-battle">
+                <div className="mybot-battle__header">
+                  <div>
+                    <h3>⚔️ Batalhas</h3>
+                    <p className="mybot-meta">Escolha apenas o valor de créditos para apostar. Todo o resto é sorteado.</p>
+                  </div>
+                  <div className="mybot-battle__form">
+                    <input
+                      type="text"
+                      placeholder="Aposta em créditos"
+                      value={battleBet}
+                      onChange={(e) => setBattleBet(e.target.value)}
+                    />
+                    <button className="action-button" onClick={handleQueueBattle} disabled={battleLoading || !myBotCard}>
+                      {battleLoading ? 'Buscando...' : 'Buscar batalha'}
+                    </button>
+                  </div>
+                </div>
+
+                {battleError && <p className="mybot-error">{battleError}</p>}
+                {battleQueue && !battleResult && (
+                  <div className="mybot-battle__status">
+                    <strong>Em fila</strong>
+                    <span>Aposta: {battleQueue.betAmount.toFixed(2).replace('.', ',')} créditos</span>
+                  </div>
+                )}
+                {battleResult && (
+                  <div className="mybot-battle__status mybot-battle__status--resolved">
+                    <strong>Última batalha</strong>
+                    <span>
+                      {battleResult.winnerUserId === userId ? 'Vitória' : 'Derrota'} • {battleResult.battleType} • {battleResult.mapName}
+                    </span>
+                    <span>
+                      Prêmio: {battleResult.payoutAmount.toFixed(2).replace('.', ',')} créditos • Gás {(battleResult.gasPct * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+
+                <div className="mybot-battle__history">
+                  <h4>Histórico recente</h4>
+                  {battlesLoading && <p>Carregando batalhas...</p>}
+                  {!battlesLoading && battles.length === 0 && (
+                    <p className="mybot-meta">Nenhuma batalha registrada ainda.</p>
+                  )}
+                  <div className="mybot-battle__list">
+                    {battles.map((battle) => (
+                      <div key={battle.id} className="mybot-battle__item">
+                        <div>
+                          <strong>{battle.winnerUserId === userId ? 'Vitória' : 'Derrota'}</strong>
+                          <span>{battle.battleType} • {battle.mapName}</span>
+                        </div>
+                        <div>
+                          <span>Aposta: {battle.betAmount.toFixed(2).replace('.', ',')}</span>
+                          <span>Prêmio: {battle.payoutAmount.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -835,27 +1156,34 @@ const Dashboard: React.FC = () => {
                             <span>RES {listing.attributes.endurance}</span>
                           </div>
                         )}
-                      </div>
-                      <div className="mybot-marketplace__footer">
-                        <strong>R$ {Number(listing.price).toFixed(2).replace('.', ',')}</strong>
-                        <button
-                          className="action-button"
-                          disabled={listing.sellerUserId === userId || buyingListingId === listing.id}
-                          onClick={() => handleBuyMyBotListing(listing.id)}
-                        >
-                          {listing.sellerUserId === userId ? 'Seu My Bot' : buyingListingId === listing.id ? 'Comprando...' : 'Comprar'}
-                        </button>
+                        <div className="mybot-marketplace__footer">
+                          <strong>R$ {Number(listing.price || 0).toFixed(2).replace('.', ',')}</strong>
+                          <button
+                            className="action-button"
+                            onClick={() => handleBuyMyBotListing(listing.id)}
+                            disabled={listingLoading || buyingListingId === listing.id}
+                          >
+                            {buyingListingId === listing.id ? 'Comprando...' : 'Comprar'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
+                <p className="mybot-meta">As compras aparecem na aba Projetos, junto com os projetos adquiridos.</p>
               </div>
+            </section>
+          )}
+
+          {activeTab === 'dao' && (
+            <section className="dao-panel">
+              <DaoUserPanel userId={userId} />
             </section>
           )}
         </main>
       </div>
     </LayoutPrivate>
   );
-};
+}
 
 export default Dashboard;

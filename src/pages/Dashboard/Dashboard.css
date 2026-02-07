@@ -1,7 +1,64 @@
+/* Dashboard Theme Tokens (dark by default) */
+:root {
+  --dash-bg: #0b1220;
+  --dash-surface: #0f172a;
+  --dash-surface-2: #111827;
+  --dash-surface-3: #0b1f3a;
+  --dash-border: rgba(148, 163, 184, 0.22);
+  --dash-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+
+  --dash-text: #eaeaea;
+  --dash-text-muted: #b6c0cc;
+  --dash-text-disabled: #7b8794;
+
+  --dash-link: #7dd3fc;
+  --dash-link-hover: #38bdf8;
+
+  --dash-table-header: #0f2a4f;
+  --dash-table-row: #0b1f3a;
+
+  --dash-btn-primary: #38bdf8;
+  --dash-btn-primary-text: #0b1220;
+  --dash-btn-secondary: #1f2937;
+  --dash-btn-secondary-text: #e5e7eb;
+  --dash-btn-danger: #ef4444;
+
+  --dash-input-bg: #0f172a;
+  --dash-input-border: rgba(148, 163, 184, 0.3);
+}
+
+[data-theme="light"] {
+  --dash-bg: #f8fafc;
+  --dash-surface: #ffffff;
+  --dash-surface-2: #f1f5f9;
+  --dash-surface-3: #e2e8f0;
+  --dash-border: rgba(15, 23, 42, 0.12);
+  --dash-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+
+  --dash-text: #0f172a;
+  --dash-text-muted: #475569;
+  --dash-text-disabled: #64748b;
+
+  --dash-link: #1d4ed8;
+  --dash-link-hover: #1e40af;
+
+  --dash-table-header: #e2e8f0;
+  --dash-table-row: #f8fafc;
+
+  --dash-btn-primary: #2563eb;
+  --dash-btn-primary-text: #ffffff;
+  --dash-btn-secondary: #e2e8f0;
+  --dash-btn-secondary-text: #0f172a;
+  --dash-btn-danger: #dc2626;
+
+  --dash-input-bg: #ffffff;
+  --dash-input-border: rgba(15, 23, 42, 0.18);
+}
+
 .admin-container {
   display: flex;
   height: calc(100vh - 132px);
-  background-color: var(--app-bg);
+  background-color: var(--dash-bg);
   margin-top: 0;
   padding: 0;
 }
@@ -12,15 +69,15 @@
 
 .admin-sidebar {
   width: 260px;
-  background-color: var(--surface);
-  color: var(--text);
+  background-color: var(--dash-surface);
+  color: var(--dash-text);
   padding: 16px;
   overflow-y: auto;
   overflow-x: hidden;
   position: sticky;
   top: 0;
   height: 100%;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--dash-border);
 }
 
 .admin-sidebar h2 {
@@ -36,7 +93,7 @@
 .admin-sidebar li {
   padding: 10px 12px;
   cursor: pointer;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--dash-border);
   display: flex;
   align-items: center;
   white-space: nowrap;
@@ -45,7 +102,7 @@
 }
 
 .admin-sidebar li.active {
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   font-weight: 700;
 }
 
@@ -54,6 +111,7 @@
   padding: 20px;
   overflow-y: auto;
   overflow-x: hidden;
+  color: var(--dash-text);
 }
 
 .admin-container.collapsed .admin-sidebar {
@@ -71,11 +129,22 @@
 
 .account-info,
 .course-methodology {
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   padding: 1.5rem;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--dash-border);
   margin-bottom: 16px;
+  color: var(--dash-text);
+}
+
+.admin-content .course-methodology {
+  background: var(--dash-surface-2);
+  border-left: 5px solid var(--dash-btn-primary);
+}
+
+.admin-content .course-methodology p,
+.admin-content .course-methodology li {
+  color: var(--dash-text-muted);
 }
 
 .account-details p {
@@ -85,7 +154,8 @@
 .status {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--surface-3);
+  background: var(--dash-surface-3);
+  color: var(--dash-text);
 }
 
 .account-switcher {
@@ -102,17 +172,26 @@
 .projects-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--dash-border);
 }
 
 .projects-table th,
 .projects-table td {
   padding: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--dash-border);
   text-align: left;
+}
+
+.projects-table th {
+  background: var(--dash-table-header);
+  color: var(--dash-text);
+}
+
+.projects-table tr:nth-child(even) {
+  background: var(--dash-table-row);
 }
 
 .project-actions {
@@ -129,10 +208,10 @@
 }
 
 .course-item {
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--dash-border);
 }
 
 .course-info {
@@ -142,22 +221,22 @@
 }
 
 .course-status {
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
 }
 
 .view-all-button {
-  background-color: var(--accent-green);
+  background-color: var(--dash-btn-primary);
   border: none;
   padding: 10px 16px;
   border-radius: 999px;
-  color: var(--text-inverse);
+  color: var(--dash-btn-primary-text);
   font-weight: 600;
   cursor: pointer;
 }
 
 .action-button {
-  background-color: var(--accent-blue);
-  color: var(--text-inverse);
+  background-color: var(--dash-btn-primary);
+  color: var(--dash-btn-primary-text);
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
@@ -167,16 +246,16 @@
 
 .action-button--ghost {
   background-color: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
+  border: 1px solid var(--dash-border);
+  color: var(--dash-text);
 }
 
 .action-button:hover {
-  background-color: var(--link-hover);
+  background-color: var(--dash-link-hover);
 }
 
 .action-button--ghost:hover {
-  background-color: var(--surface-2);
+  background-color: var(--dash-surface-2);
 }
 
 .dashboard-modal-backdrop {
@@ -191,10 +270,10 @@
 
 .dashboard-modal {
   width: min(720px, 92vw);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--dash-surface);
+  border: 1px solid var(--dash-border);
   border-radius: 14px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--dash-shadow);
   padding: 20px;
 }
 
@@ -206,7 +285,7 @@
 }
 
 .dashboard-modal__error {
-  color: var(--pill-danger);
+  color: var(--dash-btn-danger);
 }
 
 .dashboard-modal__form {
@@ -219,15 +298,15 @@
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
 }
 
 .dashboard-modal__form input,
 .dashboard-modal__form textarea,
 .dashboard-modal__form select {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--dash-input-bg);
+  border: 1px solid var(--dash-input-border);
+  color: var(--dash-text);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14px;
@@ -281,26 +360,26 @@
   gap: 4px;
   padding: 10px 16px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-blue) 10%, var(--surface-2));
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  background: color-mix(in srgb, var(--dash-btn-primary) 10%, var(--dash-surface-2));
+  border: 1px solid color-mix(in srgb, var(--dash-btn-primary) 35%, transparent);
 }
 
 .mybot-balance span {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
 }
 
 .mybot-balance strong {
   font-size: 1rem;
-  color: var(--text);
+  color: var(--dash-text);
 }
 
 .mybot-card {
-  background: linear-gradient(160deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.95));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--dash-surface) 90%, transparent), color-mix(in srgb, var(--dash-bg) 90%, transparent));
   border-radius: 16px;
   padding: 32px;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 24px rgba(56, 189, 248, 0.2);
+  border: 1px solid color-mix(in srgb, var(--dash-btn-primary) 25%, transparent);
+  box-shadow: var(--dash-shadow);
   display: grid;
   gap: 20px;
   min-height: 440px;
@@ -318,16 +397,16 @@
   height: 260px;
   border-radius: 22px;
   overflow: hidden;
-  border: 2px solid color-mix(in srgb, var(--accent-blue) 55%, transparent);
-  box-shadow: 0 0 32px rgba(56, 189, 248, 0.55);
-  background: var(--surface);
+  border: 2px solid color-mix(in srgb, var(--dash-btn-primary) 55%, transparent);
+  box-shadow: 0 0 32px color-mix(in srgb, var(--dash-btn-primary) 55%, transparent);
+  background: var(--dash-surface);
 }
 
 .mybot-avatar img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: radial-gradient(circle at 50% 40%, rgba(56, 189, 248, 0.18), transparent 60%);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--dash-btn-primary) 18%, transparent), transparent 60%);
   padding: 10px;
 }
 
@@ -340,27 +419,29 @@
 .mybot-image img {
   padding: 6px 10px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(15, 23, 42, 0.45));
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, var(--border));
-  background: var(--surface);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dash-btn-primary) 8%, transparent), color-mix(in srgb, var(--dash-surface) 45%, transparent));
+  border: 1px solid color-mix(in srgb, var(--dash-btn-primary) 25%, var(--dash-border));
+  background: var(--dash-surface);
 }
 
 .mybot-card h3 {
   margin: 8px 0 4px;
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+  color: var(--dash-text);
+}
 
+.mybot-attributes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
-  font-size: 0.78rem;
-  font-weight: 600;
 .mybot-attributes div {
   padding: 8px 10px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--dash-surface) 75%, transparent);
+  border: 1px solid var(--dash-border);
   display: grid;
   gap: 2px;
 }
@@ -368,7 +449,7 @@
 .mybot-attributes span {
   font-size: 0.68rem;
   letter-spacing: 0.02em;
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
 }
 
 .mybot-attributes strong {
@@ -392,13 +473,13 @@
   min-width: 220px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid var(--dash-input-border);
+  background: var(--dash-input-bg);
+  color: var(--dash-text);
 }
 
 .mybot-meta {
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
   font-size: 0.85rem;
 }
 
@@ -412,34 +493,34 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text);
+  background: var(--dash-surface-2);
+  color: var(--dash-text);
 }
 
 .mybot-rarity--comum {
-  background: color-mix(in srgb, var(--surface-2) 75%, var(--accent-blue) 25%);
+  background: color-mix(in srgb, var(--dash-surface-2) 75%, var(--dash-btn-primary) 25%);
 }
 
 .mybot-rarity--raro {
-  background: color-mix(in srgb, var(--accent-blue) 40%, var(--surface-2));
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+  background: color-mix(in srgb, var(--dash-btn-primary) 40%, var(--dash-surface-2));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--dash-btn-primary) 40%, transparent);
 }
 
 .mybot-rarity--epico {
-  background: linear-gradient(120deg, rgba(56, 189, 248, 0.75), rgba(45, 212, 191, 0.65));
-  box-shadow: 0 0 12px rgba(45, 212, 191, 0.45);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--dash-btn-primary) 75%, transparent), color-mix(in srgb, var(--dash-link) 65%, transparent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--dash-link) 45%, transparent);
 }
 
 .mybot-rarity--lendario {
-  background: linear-gradient(120deg, rgba(34, 197, 94, 0.75), rgba(56, 189, 248, 0.65));
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.45);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--dash-btn-primary) 65%, transparent), color-mix(in srgb, var(--dash-btn-primary) 35%, transparent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--dash-btn-primary) 45%, transparent);
 }
 
 .mybot-marketplace {
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   border-radius: 16px;
   padding: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--dash-border);
 }
 
 .mybot-marketplace__header {
@@ -461,9 +542,9 @@
   min-width: 220px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid var(--dash-input-border);
+  background: var(--dash-input-bg);
+  color: var(--dash-text);
 }
 
 .mybot-marketplace__grid {
@@ -473,10 +554,10 @@
 }
 
 .mybot-marketplace__card {
-  background: var(--surface);
+  background: var(--dash-surface);
   border-radius: 14px;
   padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dash-btn-primary) 20%, transparent);
   display: grid;
   gap: 12px;
 }
@@ -492,9 +573,9 @@
   width: 100%;
   max-width: 180px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.3);
-  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--dash-btn-primary) 30%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--dash-btn-primary) 30%, transparent);
+  background: var(--dash-surface-2);
 }
 
 .mybot-marketplace__stats {
@@ -502,7 +583,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
 }
 
 .mybot-marketplace__footer {
@@ -514,20 +595,20 @@
 .mybot-marketplace__empty {
   padding: 16px;
   border-radius: 12px;
-  border: 1px dashed var(--border);
-  color: var(--text-muted);
+  border: 1px dashed var(--dash-border);
+  color: var(--dash-text-muted);
 }
 
 .mybot-error {
-  color: var(--pill-danger);
+  color: var(--dash-btn-danger);
 }
 
 .mybot-chat {
   margin-top: 24px;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--surface-1);
+  border: 1px solid var(--dash-border);
+  background: var(--dash-surface);
   display: grid;
   gap: 12px;
   height: fit-content;
@@ -539,12 +620,12 @@
   display: grid;
   gap: 10px;
   padding: 8px;
-  background: var(--surface-2);
+  background: var(--dash-surface-2);
   border-radius: 10px;
 }
 
 .mybot-chat__empty {
-  color: var(--text-muted);
+  color: var(--dash-text-muted);
   font-size: 0.95rem;
 }
 
@@ -558,14 +639,14 @@
 
 .mybot-chat__bubble--user {
   justify-self: end;
-  background: var(--accent-blue);
-  color: var(--text-inverse);
+  background: var(--dash-btn-primary);
+  color: var(--dash-btn-primary-text);
 }
 
 .mybot-chat__bubble--mybot {
   justify-self: start;
-  background: var(--surface-3);
-  color: var(--text);
+  background: var(--dash-surface-3);
+  color: var(--dash-text);
 }
 
 .mybot-chat__input {
@@ -576,11 +657,123 @@
 
 .mybot-chat__input input {
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--dash-input-border);
   padding: 10px 12px;
   font-size: 0.95rem;
-  background: var(--surface-1);
-  color: var(--text);
+  background: var(--dash-input-bg);
+  color: var(--dash-text);
+}
+
+.mybot-evolution {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dash-surface-2) 80%, transparent);
+  border: 1px solid var(--dash-border);
+}
+
+.mybot-evolution__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.mybot-battle {
+  background: var(--dash-surface-2);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid var(--dash-border);
+  display: grid;
+  gap: 16px;
+}
+
+.mybot-battle__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.mybot-battle__form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mybot-battle__form input {
+  min-width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dash-input-border);
+  background: var(--dash-input-bg);
+  color: var(--dash-text);
+}
+
+.mybot-battle__status {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--dash-btn-primary) 35%, var(--dash-border));
+  background: color-mix(in srgb, var(--dash-btn-primary) 8%, transparent);
+}
+
+.mybot-battle__status--resolved {
+  border-style: solid;
+  background: color-mix(in srgb, var(--dash-btn-primary) 12%, transparent);
+}
+
+.mybot-battle__history {
+  display: grid;
+  gap: 10px;
+}
+
+.mybot-battle__list {
+  display: grid;
+  gap: 10px;
+}
+
+.mybot-battle__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--dash-border);
+  background: var(--dash-surface);
+}
+
+.mybot-battle__item div {
+  display: grid;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--dash-surface-2);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--dash-border);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--dash-border);
+  text-align: left;
+  color: var(--dash-text);
+}
+
+.admin-table th {
+  background: var(--dash-table-header);
+}
+
+.admin-table tr:nth-child(even) {
+  background: var(--dash-table-row);
 }
 
 @media (max-width: 768px) {

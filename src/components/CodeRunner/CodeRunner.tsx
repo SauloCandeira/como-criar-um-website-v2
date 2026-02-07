@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './CodeRunner.css';
 
-export default function CodeRunner() {
+export default function CodeRunner({ projectId }: { projectId?: string }) {
   const [activeTab, setActiveTab] = useState('html');
   const [selectedCdnType, setSelectedCdnType] = useState('js'); // Estado para controlar o tipo de CDN selecionado
 
@@ -26,6 +26,13 @@ export default function CodeRunner() {
   useEffect(() => {
     const loadAce = async () => {
       try {
+        const userId = (localStorage.getItem('email') || '').toLowerCase();
+        const resolvedProjectId = projectId || new URLSearchParams(window.location.search).get('projectId') || '';
+        (window as any).APP_CONTEXT = {
+          apiBase: (import.meta as any).env?.VITE_API_BASE || '/api',
+          userId,
+          projectId: resolvedProjectId,
+        };
         console.log("🔄 Iniciando carregamento do ACE...");
         await loadScript('JS/ace/ace.js');
         await loadScript('JS/ace/ext-language_tools.js');
