@@ -39,6 +39,11 @@ export interface MyBotEcosystemResponse {
   maps: MyBotMapDTO[];
   bots: MyBotEcosystemBotDTO[];
   movements: MyBotMovementDTO[];
+  counts?: {
+    userCards?: number;
+    profiles?: number;
+    mybots?: number;
+  };
 }
 
 const buildError = async (res: Response, fallback: string) => {
@@ -98,5 +103,6 @@ export async function fetchAdminMyBotEcosystem(
     maps: Array.isArray(data?.maps) ? data.maps.map(normalizeMap) : [],
     bots: Array.isArray(data?.bots) ? data.bots.map(normalizeBot) : [],
     movements: Array.isArray(data?.movements) ? data.movements.map(normalizeMovement) : [],
+    counts: data?.counts,
   };
 }
