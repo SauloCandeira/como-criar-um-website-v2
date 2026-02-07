@@ -1,0 +1,373 @@
+.ecosystem-panel {
+  --eco-text: var(--text, var(--dash-text, #e6edf8));
+  --eco-text-muted: var(--text-muted, var(--dash-text-muted, #94a3b8));
+  --eco-surface: var(--surface-2, var(--dash-surface-2, rgba(15, 23, 42, 0.8)));
+  --eco-border: var(--border, rgba(148, 163, 184, 0.2));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ecosystem-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ecosystem-header h2 {
+  margin: 0 0 6px;
+}
+
+.ecosystem-meta {
+  margin-top: 6px;
+  display: flex;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--eco-text-muted);
+}
+
+.ecosystem-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.ecosystem-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--eco-text-muted);
+  font-size: 0.9rem;
+}
+
+.ecosystem-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+}
+
+.ecosystem-island {
+  position: relative;
+  min-height: 560px;
+  border-radius: 24px;
+  background:
+    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03) 96%),
+    linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.03) 96%),
+    radial-gradient(circle at 20% 10%, rgba(40, 117, 198, 0.7) 0%, rgba(9, 26, 54, 0.95) 55%, rgba(6, 15, 29, 1) 100%);
+  background-size: 36px 36px, 36px 36px, cover;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  padding: 20px;
+}
+
+.ecosystem-island::before {
+  content: "";
+  position: absolute;
+  inset: 6% 7%;
+  border-radius: 45% 40% 48% 38% / 40% 50% 45% 55%;
+  background: radial-gradient(circle at 30% 30%, rgba(115, 178, 88, 0.95) 0%, rgba(54, 114, 58, 0.95) 50%, rgba(43, 84, 45, 0.96) 100%);
+  box-shadow: inset 0 0 40px rgba(4, 32, 20, 0.7), 0 0 60px rgba(0, 0, 0, 0.4);
+  z-index: 0;
+}
+
+.ecosystem-island::after {
+  content: "";
+  position: absolute;
+  inset: 5% 6%;
+  border-radius: 45% 40% 48% 38% / 40% 50% 45% 55%;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.05);
+  z-index: 1;
+}
+
+.ecosystem-map-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 190px;
+  min-height: 140px;
+  border-radius: 14px;
+  background: rgba(6, 10, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+
+.ecosystem-map-node::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 165, 233, 0.9);
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.6);
+}
+
+.ecosystem-map-node.active {
+  border-color: rgba(14, 165, 233, 0.9);
+  box-shadow: 0 0 18px rgba(14, 165, 233, 0.2);
+  transform: translate(-50%, -50%) scale(1.02);
+}
+
+.ecosystem-map-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--eco-text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+}
+
+.ecosystem-map-icon {
+  font-size: 1rem;
+}
+
+.ecosystem-map-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--eco-text-muted);
+}
+
+.ecosystem-map-bots {
+  position: relative;
+  flex: 1;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ecosystem-bot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+}
+
+.ecosystem-bot img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ecosystem-bot.active {
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.7);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.ecosystem-bot.origin-highlight {
+  border-color: rgba(91, 203, 173, 0.9);
+}
+
+.ecosystem-bot.current-highlight {
+  border-color: rgba(255, 173, 91, 0.9);
+}
+
+.ecosystem-bot.dimmed {
+  opacity: 0.35;
+}
+
+.ecosystem-bot-initial {
+  font-size: 0.9rem;
+}
+
+.ecosystem-origin-dot {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(91, 203, 173, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.ecosystem-bot-cluster {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.25);
+  border: 1px solid rgba(14, 165, 233, 0.6);
+  color: var(--eco-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.ecosystem-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ecosystem-card {
+  background: var(--eco-surface);
+  border: 1px solid var(--eco-border);
+  border-radius: 14px;
+  padding: 14px;
+  color: var(--eco-text);
+}
+
+.ecosystem-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.ecosystem-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ecosystem-history li {
+  background: rgba(9, 12, 24, 0.5);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.85rem;
+}
+
+.ecosystem-history-title {
+  display: flex;
+  justify-content: space-between;
+  color: var(--eco-text);
+  margin-bottom: 4px;
+}
+
+.ecosystem-history-detail {
+  color: var(--eco-text-muted);
+}
+
+.ecosystem-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 18, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.ecosystem-modal {
+  width: min(520px, 92vw);
+  background: var(--eco-surface);
+  border: 1px solid var(--eco-border);
+  border-radius: 16px;
+  padding: 18px;
+  color: var(--eco-text);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+}
+
+.ecosystem-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ecosystem-modal__close {
+  border: 1px solid var(--eco-border);
+  background: transparent;
+  color: var(--eco-text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.ecosystem-modal__body {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.ecosystem-modal__media {
+  width: 120px;
+  height: 120px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--eco-border);
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ecosystem-modal__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ecosystem-modal__placeholder {
+  font-size: 2rem;
+}
+
+.ecosystem-modal__details p {
+  margin: 6px 0;
+  color: var(--eco-text);
+}
+
+.ecosystem-modal__footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ecosystem-modal__action {
+  background: rgba(14, 165, 233, 0.9);
+  border: none;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+@media (max-width: 1024px) {
+  .ecosystem-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ecosystem-island {
+    min-height: 440px;
+  }
+}
+
+@media (max-width: 768px) {
+  .ecosystem-map-node {
+    width: 160px;
+    min-height: 120px;
+  }
+}

@@ -448,9 +448,31 @@ CREATE TABLE IF NOT EXISTS mybot_profiles (
   high_bet_streak INTEGER DEFAULT 0,
   last_high_bet_at TIMESTAMPTZ,
   last_battle_at TIMESTAMPTZ,
+  origin_map_id TEXT,
+  current_map_id TEXT,
+  origin_pos_x NUMERIC(5,2),
+  origin_pos_y NUMERIC(5,2),
+  current_pos_x NUMERIC(5,2),
+  current_pos_y NUMERIC(5,2),
+  last_movement_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Garantir origem e posição para todos os bots já existentes
+UPDATE mybot_profiles
+SET origin_map_id = COALESCE(origin_map_id, 'Arena Classica'),
+    current_map_id = COALESCE(current_map_id, COALESCE(origin_map_id, 'Arena Classica')),
+    origin_pos_x = COALESCE(origin_pos_x, 50),
+    origin_pos_y = COALESCE(origin_pos_y, 50),
+    current_pos_x = COALESCE(current_pos_x, COALESCE(origin_pos_x, 50)),
+    current_pos_y = COALESCE(current_pos_y, COALESCE(origin_pos_y, 50))
+WHERE origin_map_id IS NULL
+   OR current_map_id IS NULL
+   OR origin_pos_x IS NULL
+   OR origin_pos_y IS NULL
+   OR current_pos_x IS NULL
+   OR current_pos_y IS NULL;
 
 CREATE TABLE IF NOT EXISTS mybot_cpf_registry (
   cpf_hash TEXT PRIMARY KEY,
@@ -480,6 +502,42 @@ CREATE TABLE IF NOT EXISTS mybot_battle_queue (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS mybot_bets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  card_id UUID NOT NULL,
+  battle_id UUID,
+  bet_amount NUMERIC(12,2) NOT NULL,
+  possible_return NUMERIC(12,2) NOT NULL DEFAULT 0,
+  gas_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PENDENTE',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  finalized_at TIMESTAMPTZ,
+  redeemed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS mybot_maps (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  position_x NUMERIC(5,2) NOT NULL,
+  position_y NUMERIC(5,2) NOT NULL,
+  icon TEXT DEFAULT '',
+  visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS mybot_movements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bot_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
+  from_map_id TEXT,
+  to_map_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  battle_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS mybot_battles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id_a TEXT NOT NULL,
@@ -491,14 +549,20 @@ CREATE TABLE IF NOT EXISTS mybot_battles (
   gas_pct NUMERIC(5,4) NOT NULL,
   map_name TEXT NOT NULL,
   map_weights JSONB NOT NULL,
+  modifiers JSONB NOT NULL DEFAULT '[]'::jsonb,
   seed TEXT NOT NULL,
   power_a NUMERIC(12,4) NOT NULL,
   power_b NUMERIC(12,4) NOT NULL,
+  random_factor_a NUMERIC(6,4) NOT NULL DEFAULT 1,
+  random_factor_b NUMERIC(6,4) NOT NULL DEFAULT 1,
   power_final_a NUMERIC(12,4) NOT NULL,
   power_final_b NUMERIC(12,4) NOT NULL,
+  xp_a INTEGER NOT NULL DEFAULT 0,
+  xp_b INTEGER NOT NULL DEFAULT 0,
   winner_user_id TEXT NOT NULL,
   payout_amount NUMERIC(12,2) NOT NULL,
   gas_amount NUMERIC(12,2) NOT NULL,
+  reason TEXT DEFAULT '',
   status TEXT DEFAULT 'resolved',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -522,11 +586,17 @@ CREATE INDEX IF NOT EXISTS dao_votes_user_idx ON dao_votes (user_id);
 CREATE INDEX IF NOT EXISTS dao_mybot_balances_user_idx ON dao_mybot_balances (user_id);
 
 CREATE INDEX IF NOT EXISTS mybot_profiles_card_idx ON mybot_profiles (card_id);
+CREATE INDEX IF NOT EXISTS mybot_profiles_origin_idx ON mybot_profiles (origin_map_id);
+CREATE INDEX IF NOT EXISTS mybot_profiles_current_idx ON mybot_profiles (current_map_id);
 CREATE INDEX IF NOT EXISTS mybot_battle_queue_status_idx ON mybot_battle_queue (status, bet_amount, level, rarity_rank);
 CREATE INDEX IF NOT EXISTS mybot_battles_user_a_idx ON mybot_battles (user_id_a, created_at DESC);
 CREATE INDEX IF NOT EXISTS mybot_battles_user_b_idx ON mybot_battles (user_id_b, created_at DESC);
 CREATE INDEX IF NOT EXISTS mybot_activations_user_idx ON mybot_activations (user_id);
 CREATE INDEX IF NOT EXISTS mybot_activations_cpf_idx ON mybot_activations (cpf_hash);
+CREATE INDEX IF NOT EXISTS mybot_bets_user_idx ON mybot_bets (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS mybot_bets_battle_idx ON mybot_bets (battle_id);
+CREATE INDEX IF NOT EXISTS mybot_movements_bot_idx ON mybot_movements (bot_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS mybot_movements_created_idx ON mybot_movements (created_at DESC);
 
 
 -- Backfill product.base_project_id by name match

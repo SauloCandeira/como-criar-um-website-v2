@@ -251,6 +251,13 @@ async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) 
   await client.query(
     "CREATE TABLE IF NOT EXISTS mybot_profiles (user_id TEXT PRIMARY KEY, card_id UUID, available_points INTEGER DEFAULT 0, loss_streak INTEGER DEFAULT 0, high_bet_streak INTEGER DEFAULT 0, last_high_bet_at TIMESTAMPTZ, last_battle_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
   );
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS origin_map_id TEXT");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS current_map_id TEXT");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS origin_pos_x NUMERIC(5,2)");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS origin_pos_y NUMERIC(5,2)");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS current_pos_x NUMERIC(5,2)");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS current_pos_y NUMERIC(5,2)");
+  await client.query("ALTER TABLE mybot_profiles ADD COLUMN IF NOT EXISTS last_movement_at TIMESTAMPTZ");
   await client.query(
     "CREATE TABLE IF NOT EXISTS mybot_cpf_registry (cpf_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())"
   );
@@ -261,17 +268,38 @@ async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) 
     "CREATE TABLE IF NOT EXISTS mybot_battle_queue (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, card_id UUID NOT NULL, bet_amount NUMERIC(12,2) NOT NULL, level INTEGER DEFAULT 1, rarity TEXT DEFAULT 'comum', rarity_rank INTEGER DEFAULT 0, status TEXT DEFAULT 'waiting', matched_battle_id UUID, created_at TIMESTAMPTZ DEFAULT NOW())"
   );
   await client.query(
-    "CREATE TABLE IF NOT EXISTS mybot_battles (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id_a TEXT NOT NULL, user_id_b TEXT NOT NULL, card_id_a UUID NOT NULL, card_id_b UUID NOT NULL, bet_amount NUMERIC(12,2) NOT NULL, battle_type TEXT NOT NULL, gas_pct NUMERIC(5,4) NOT NULL, map_name TEXT NOT NULL, map_weights JSONB NOT NULL, seed TEXT NOT NULL, power_a NUMERIC(12,4) NOT NULL, power_b NUMERIC(12,4) NOT NULL, power_final_a NUMERIC(12,4) NOT NULL, power_final_b NUMERIC(12,4) NOT NULL, winner_user_id TEXT NOT NULL, payout_amount NUMERIC(12,2) NOT NULL, gas_amount NUMERIC(12,2) NOT NULL, status TEXT DEFAULT 'resolved', created_at TIMESTAMPTZ DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS mybot_bets (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, card_id UUID NOT NULL, battle_id UUID, bet_amount NUMERIC(12,2) NOT NULL, possible_return NUMERIC(12,2) NOT NULL DEFAULT 0, gas_amount NUMERIC(12,2) NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'PENDENTE', created_at TIMESTAMPTZ DEFAULT NOW(), finalized_at TIMESTAMPTZ, redeemed_at TIMESTAMPTZ)"
   );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_maps (id TEXT PRIMARY KEY, name TEXT NOT NULL, position_x NUMERIC(5,2) NOT NULL, position_y NUMERIC(5,2) NOT NULL, icon TEXT DEFAULT '', visual_meta JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_movements (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), bot_id UUID NOT NULL, user_id TEXT NOT NULL, from_map_id TEXT, to_map_id TEXT NOT NULL, reason TEXT NOT NULL, battle_id UUID, created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS mybot_battles (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id_a TEXT NOT NULL, user_id_b TEXT NOT NULL, card_id_a UUID NOT NULL, card_id_b UUID NOT NULL, bet_amount NUMERIC(12,2) NOT NULL, battle_type TEXT NOT NULL, gas_pct NUMERIC(5,4) NOT NULL, map_name TEXT NOT NULL, map_weights JSONB NOT NULL, modifiers JSONB NOT NULL DEFAULT '[]'::jsonb, seed TEXT NOT NULL, power_a NUMERIC(12,4) NOT NULL, power_b NUMERIC(12,4) NOT NULL, random_factor_a NUMERIC(6,4) NOT NULL DEFAULT 1, random_factor_b NUMERIC(6,4) NOT NULL DEFAULT 1, power_final_a NUMERIC(12,4) NOT NULL, power_final_b NUMERIC(12,4) NOT NULL, xp_a INTEGER NOT NULL DEFAULT 0, xp_b INTEGER NOT NULL DEFAULT 0, winner_user_id TEXT NOT NULL, payout_amount NUMERIC(12,2) NOT NULL, gas_amount NUMERIC(12,2) NOT NULL, reason TEXT DEFAULT '', status TEXT DEFAULT 'resolved', created_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_bets_user_idx ON mybot_bets (user_id, created_at DESC)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_bets_battle_idx ON mybot_bets (battle_id)");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS modifiers JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS random_factor_a NUMERIC(6,4) NOT NULL DEFAULT 1");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS random_factor_b NUMERIC(6,4) NOT NULL DEFAULT 1");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS xp_a INTEGER NOT NULL DEFAULT 0");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS xp_b INTEGER NOT NULL DEFAULT 0");
+  await client.query("ALTER TABLE mybot_battles ADD COLUMN IF NOT EXISTS reason TEXT DEFAULT ''");
   await client.query(
     "CREATE TABLE IF NOT EXISTS mybot_evolutions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, card_id UUID NOT NULL, attribute TEXT NOT NULL, before_value INTEGER NOT NULL, after_value INTEGER NOT NULL, cost NUMERIC(12,2) NOT NULL, points_spent INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ DEFAULT NOW())"
   );
   await client.query("CREATE INDEX IF NOT EXISTS mybot_profiles_card_idx ON mybot_profiles (card_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_profiles_origin_idx ON mybot_profiles (origin_map_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_profiles_current_idx ON mybot_profiles (current_map_id)");
   await client.query("CREATE INDEX IF NOT EXISTS mybot_battle_queue_status_idx ON mybot_battle_queue (status, bet_amount, level, rarity_rank)");
   await client.query("CREATE INDEX IF NOT EXISTS mybot_battles_user_a_idx ON mybot_battles (user_id_a, created_at DESC)");
   await client.query("CREATE INDEX IF NOT EXISTS mybot_battles_user_b_idx ON mybot_battles (user_id_b, created_at DESC)");
   await client.query("CREATE INDEX IF NOT EXISTS mybot_activations_user_idx ON mybot_activations (user_id)");
   await client.query("CREATE INDEX IF NOT EXISTS mybot_activations_cpf_idx ON mybot_activations (cpf_hash)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_movements_bot_idx ON mybot_movements (bot_id, created_at DESC)");
+  await client.query("CREATE INDEX IF NOT EXISTS mybot_movements_created_idx ON mybot_movements (created_at DESC)");
 }
 
 async function ensureDaoTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -390,6 +418,14 @@ const MYBOT_MAPS = [
   },
 ] as const;
 
+const MYBOT_MAP_LAYOUTS = [
+  { id: "Arena Classica", label: "Arena Clássica", x: 50, y: 10, icon: "⚔️" },
+  { id: "Floresta", label: "Floresta", x: 20, y: 38, icon: "🌲" },
+  { id: "Deserto", label: "Deserto", x: 80, y: 38, icon: "🏜️" },
+  { id: "Cidade em Ruinas", label: "Cidade em Ruínas", x: 80, y: 74, icon: "🏚️" },
+  { id: "Arena Tecnologica", label: "Arena Tecnológica", x: 20, y: 74, icon: "🛰️" },
+];
+
 const MYBOT_RARITY_ORDER = ["comum", "raro", "epico", "lendario"] as const;
 
 const MYBOT_RARITY_CAPS: Record<string, number> = {
@@ -445,11 +481,176 @@ async function getOrCreateMyBotProfile(
   await ensureMyBotTables(client);
   const existing = await client.query("SELECT * FROM mybot_profiles WHERE user_id = $1", [userId]);
   if (existing.rows[0]) return existing.rows[0];
+  const originMapId = cardId ? pickOriginMapId(userId, cardId) : "Arena Classica";
+  const originPos = cardId
+    ? computeDeterministicPosition(`${cardId}|origin|${originMapId}`)
+    : { x: 50, y: 50 };
   const created = await client.query(
-    "INSERT INTO mybot_profiles (user_id, card_id) VALUES ($1, $2) RETURNING *",
-    [userId, cardId || null]
+    "INSERT INTO mybot_profiles (user_id, card_id, origin_map_id, current_map_id, origin_pos_x, origin_pos_y, current_pos_x, current_pos_y) VALUES ($1, $2, $3, $3, $4, $5, $4, $5) RETURNING *",
+    [userId, cardId || null, originMapId, originPos.x, originPos.y]
   );
   return created.rows[0];
+}
+
+function getMyBotMapLayout(mapId: string) {
+  return MYBOT_MAP_LAYOUTS.find((map) => map.id === mapId) ?? {
+    id: mapId,
+    label: mapId,
+    x: 50,
+    y: 50,
+    icon: "🤖",
+  };
+}
+
+function computeDeterministicPosition(seed: string) {
+  const hash = hashString(seed);
+  const bytes = hash.match(/.{1,2}/g)?.map((h) => parseInt(h, 16)) ?? [0, 0];
+  const x = 10 + (bytes[0] / 255) * 80;
+  const y = 10 + (bytes[1] / 255) * 80;
+  return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) };
+}
+
+function pickOriginMapId(userId: string, cardId: string) {
+  const hash = hashString(`${userId}|${cardId}|origin`);
+  const bytes = hash.match(/.{1,2}/g)?.map((h) => parseInt(h, 16)) ?? [0];
+  const index = bytes[0] % MYBOT_MAPS.length;
+  return MYBOT_MAPS[index].id;
+}
+
+async function seedMyBotMaps(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  for (const map of MYBOT_MAP_LAYOUTS) {
+    const layout = getMyBotMapLayout(map.id);
+    await client.query(
+      "INSERT INTO mybot_maps (id, name, position_x, position_y, icon, visual_meta) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, position_x = EXCLUDED.position_x, position_y = EXCLUDED.position_y, icon = EXCLUDED.icon, visual_meta = EXCLUDED.visual_meta, updated_at = NOW()",
+      [layout.id, layout.label, layout.x, layout.y, layout.icon, {}]
+    );
+  }
+}
+
+async function recordMyBotMovement(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  payload: {
+    botId: string;
+    userId: string;
+    fromMapId: string | null;
+    toMapId: string;
+    reason: string;
+    battleId?: string | null;
+  }
+) {
+  await client.query(
+    "INSERT INTO mybot_movements (bot_id, user_id, from_map_id, to_map_id, reason, battle_id) VALUES ($1, $2, $3, $4, $5, $6)",
+    [payload.botId, payload.userId, payload.fromMapId, payload.toMapId, payload.reason, payload.battleId || null]
+  );
+}
+
+async function ensureMyBotMapState(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  userId: string,
+  cardId: string
+) {
+  await ensureMyBotTables(client);
+  await seedMyBotMaps(client);
+  const profile = await getOrCreateMyBotProfile(client, userId, cardId);
+  if (!profile.origin_map_id) {
+    const originMapId = pickOriginMapId(userId, cardId);
+    const originPos = computeDeterministicPosition(`${cardId}|origin|${originMapId}`);
+    await client.query(
+      "UPDATE mybot_profiles SET origin_map_id = $2, current_map_id = COALESCE(current_map_id, $2), origin_pos_x = $3, origin_pos_y = $4, current_pos_x = COALESCE(current_pos_x, $3), current_pos_y = COALESCE(current_pos_y, $4), updated_at = NOW() WHERE user_id = $1",
+      [userId, originMapId, originPos.x, originPos.y]
+    );
+    await recordMyBotMovement(client, {
+      botId: cardId,
+      userId,
+      fromMapId: null,
+      toMapId: originMapId,
+      reason: "origin_assigned",
+      battleId: null,
+    });
+  } else if (!profile.current_map_id) {
+    const originPos = {
+      x: Number(profile.origin_pos_x || 50),
+      y: Number(profile.origin_pos_y || 50),
+    };
+    await client.query(
+      "UPDATE mybot_profiles SET current_map_id = $2, current_pos_x = $3, current_pos_y = $4, updated_at = NOW() WHERE user_id = $1",
+      [userId, profile.origin_map_id, originPos.x, originPos.y]
+    );
+  }
+
+  if (profile.origin_map_id && (profile.origin_pos_x == null || profile.origin_pos_y == null)) {
+    const originPos = computeDeterministicPosition(`${cardId}|origin|${profile.origin_map_id}`);
+    await client.query(
+      "UPDATE mybot_profiles SET origin_pos_x = $2, origin_pos_y = $3, updated_at = NOW() WHERE user_id = $1",
+      [userId, originPos.x, originPos.y]
+    );
+  }
+
+  if (profile.current_map_id && (profile.current_pos_x == null || profile.current_pos_y == null)) {
+    const isOrigin = profile.current_map_id === profile.origin_map_id;
+    const currentPos = isOrigin
+      ? computeDeterministicPosition(`${cardId}|origin|${profile.origin_map_id}`)
+      : computeDeterministicPosition(`${cardId}|move|${profile.current_map_id}`);
+    await client.query(
+      "UPDATE mybot_profiles SET current_pos_x = $2, current_pos_y = $3, updated_at = NOW() WHERE user_id = $1",
+      [userId, currentPos.x, currentPos.y]
+    );
+  }
+}
+
+async function moveMyBotToMap(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  payload: {
+    botId: string;
+    userId: string;
+    toMapId: string;
+    reason: string;
+    battleId?: string | null;
+  }
+) {
+  const state = await client.query(
+    "SELECT origin_map_id, current_map_id, origin_pos_x, origin_pos_y FROM mybot_profiles WHERE user_id = $1",
+    [payload.userId]
+  );
+  const current = state.rows[0];
+  const fromMapId = current?.current_map_id ?? null;
+  const isOrigin = payload.toMapId === current?.origin_map_id;
+  const targetPos = isOrigin
+    ? { x: Number(current?.origin_pos_x || 50), y: Number(current?.origin_pos_y || 50) }
+    : computeDeterministicPosition(`${payload.botId}|move|${payload.toMapId}`);
+
+  await client.query(
+    "UPDATE mybot_profiles SET current_map_id = $2, current_pos_x = $3, current_pos_y = $4, last_movement_at = NOW(), updated_at = NOW() WHERE user_id = $1",
+    [payload.userId, payload.toMapId, targetPos.x, targetPos.y]
+  );
+
+  await recordMyBotMovement(client, {
+    botId: payload.botId,
+    userId: payload.userId,
+    fromMapId,
+    toMapId: payload.toMapId,
+    reason: payload.reason,
+    battleId: payload.battleId || null,
+  });
+}
+
+async function returnMyBotToOrigin(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  payload: { botId: string; userId: string; reason: string; battleId?: string | null }
+) {
+  const state = await client.query(
+    "SELECT origin_map_id, current_map_id, origin_pos_x, origin_pos_y FROM mybot_profiles WHERE user_id = $1",
+    [payload.userId]
+  );
+  const originMapId = state.rows[0]?.origin_map_id;
+  if (!originMapId) return;
+  await moveMyBotToMap(client, {
+    botId: payload.botId,
+    userId: payload.userId,
+    toMapId: originMapId,
+    reason: payload.reason,
+    battleId: payload.battleId || null,
+  });
 }
 
 function normalizeMyBotEventType(eventType: string) {
@@ -732,8 +933,27 @@ function pickWeighted<T>(rng: () => number, items: Array<{ weight: number; value
   return items[items.length - 1].value;
 }
 
-function computeBattleType(rng: () => number) {
-  return pickWeighted(rng, MYBOT_BATTLE_TYPES.map((type) => ({ weight: type.chance, value: type })));
+function secureRandomFloat(min = 0, max = 1) {
+  const bytes = crypto.randomBytes(6);
+  const value = bytes.readUIntBE(0, 6);
+  const normalized = value / 0xffffffffffff;
+  return min + normalized * (max - min);
+}
+
+function pickWeightedSecure<T>(items: Array<{ weight: number; value: T }>): T {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0) return items[0].value;
+  const roll = secureRandomFloat(0, total);
+  let acc = 0;
+  for (const item of items) {
+    acc += item.weight;
+    if (roll <= acc) return item.value;
+  }
+  return items[items.length - 1].value;
+}
+
+function computeBattleType() {
+  return pickWeightedSecure(MYBOT_BATTLE_TYPES.map((type) => ({ weight: type.chance, value: type })));
 }
 
 function computeMapWeightsByBet(betAmount: number) {
@@ -749,10 +969,9 @@ function computeMapWeightsByBet(betAmount: number) {
   return adjusted;
 }
 
-function computeBotPower(attributes: { strength: number; speed: number; intelligence: number }, mapWeights: { strength: number; speed: number; intelligence: number }, rng: () => number) {
+function computeBotPower(attributes: { strength: number; speed: number; intelligence: number }, mapWeights: { strength: number; speed: number; intelligence: number }, randomFactor: number) {
   const raw = attributes.strength * mapWeights.strength + attributes.speed * mapWeights.speed + attributes.intelligence * mapWeights.intelligence;
-  const randomness = 0.9 + rng() * 0.2;
-  return { raw, final: Number((raw * randomness).toFixed(4)) };
+  return { raw, final: Number((raw * randomFactor).toFixed(4)) };
 }
 
 function computeBattleXp(betAmount: number, isWinner: boolean, lossStreak: number) {
@@ -761,6 +980,43 @@ function computeBattleXp(betAmount: number, isWinner: boolean, lossStreak: numbe
   if (isWinner) return baseWin;
   const reduction = Math.min(0.5, Math.max(0, lossStreak) * 0.1);
   return Math.max(1, Math.round(baseLose * (1 - reduction)));
+}
+
+function buildBattleExplanation(params: {
+  mapName: string;
+  mapWeights: { strength: number; speed: number; intelligence: number };
+  userAttrs: { strength: number; speed: number; intelligence: number };
+  opponentAttrs: { strength: number; speed: number; intelligence: number };
+  userRandom: number;
+  opponentRandom: number;
+  userFinal: number;
+  opponentFinal: number;
+}) {
+  const mapEffects: string[] = [];
+  if (params.mapWeights.strength !== 1) {
+    mapEffects.push(`força ${(params.mapWeights.strength > 1 ? "+" : "-")}${Math.round((Math.abs(params.mapWeights.strength - 1) * 100))}%`);
+  }
+  if (params.mapWeights.speed !== 1) {
+    mapEffects.push(`velocidade ${(params.mapWeights.speed > 1 ? "+" : "-")}${Math.round((Math.abs(params.mapWeights.speed - 1) * 100))}%`);
+  }
+  if (params.mapWeights.intelligence !== 1) {
+    mapEffects.push(`inteligência ${(params.mapWeights.intelligence > 1 ? "+" : "-")}${Math.round((Math.abs(params.mapWeights.intelligence - 1) * 100))}%`);
+  }
+
+  const attributeAdvantage: string[] = [];
+  if (params.opponentAttrs.strength > params.userAttrs.strength) attributeAdvantage.push("força");
+  if (params.opponentAttrs.speed > params.userAttrs.speed) attributeAdvantage.push("velocidade");
+  if (params.opponentAttrs.intelligence > params.userAttrs.intelligence) attributeAdvantage.push("inteligência");
+
+  const diff = Number((params.userFinal - params.opponentFinal).toFixed(2));
+  const diffText = diff >= 0 ? `+${diff}` : `${diff}`;
+  const randomEffect = Math.round((params.userRandom - 1) * 100);
+
+  return `Seu bot ${diff >= 0 ? "venceu" : "perdeu"} porque: ` +
+    `o mapa ${params.mapName}${mapEffects.length ? " favoreceu " + mapEffects.join(", ") : " não alterou atributos"}, ` +
+    `${attributeAdvantage.length ? "o oponente tinha vantagem em " + attributeAdvantage.join(", ") : "os atributos estavam equilibrados"}, ` +
+    `o fator imprevisível ajustou seu poder em ${randomEffect >= 0 ? "+" : ""}${randomEffect}%, ` +
+    `diferença final: ${diffText} pontos.`;
 }
 
 function getBattleAttributes(attributes: any) {
@@ -2179,6 +2435,116 @@ app.get("/mybot/battles", async (req, res) => {
   }
 });
 
+app.get("/mybot/bets", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  const limit = Math.min(100, Number(req.query.limit ?? 50) || 50);
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      const result = await client.query(
+        `SELECT b.id, b.user_id, b.card_id, b.battle_id, b.bet_amount, b.possible_return, b.gas_amount, b.status,
+                b.created_at, b.finalized_at, b.redeemed_at,
+                bt.map_name, bt.battle_type, bt.winner_user_id
+         FROM mybot_bets b
+         LEFT JOIN mybot_battles bt ON bt.id = b.battle_id
+         WHERE b.user_id = $1
+         ORDER BY b.created_at DESC
+         LIMIT $2`,
+        [userId, limit]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar apostas." });
+  }
+});
+
+app.post("/mybot/bets/:betId/redeem", async (req, res) => {
+  const { betId } = req.params;
+  const { userId } = req.body ?? {};
+  if (!betId || !userId) {
+    return res.status(400).json({ message: "betId e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await ensureMyBotTables(client);
+      await ensureInternalAccountsTable(client);
+      await ensureHouseAccount(client);
+
+      const bet = await client.query(
+        "SELECT id, user_id, status, possible_return FROM mybot_bets WHERE id = $1 FOR UPDATE",
+        [betId]
+      );
+      const row = bet.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Aposta não encontrada." });
+      }
+      if (String(row.user_id) !== String(userId)) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ message: "Aposta não pertence ao usuário." });
+      }
+      if (row.status !== "VITORIA") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Aposta não está disponível para resgate." });
+      }
+      const payout = Number(row.possible_return || 0);
+      if (payout <= 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Valor de resgate inválido." });
+      }
+
+      const master = await client.query(
+        "SELECT balance FROM internal_accounts WHERE user_id = $1",
+        [HK_MASTER_USER_ID]
+      );
+      if (Number(master.rows[0]?.balance || 0) < payout) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Saldo insuficiente no HK Master." });
+      }
+
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+        [userId, payout]
+      );
+      await client.query(
+        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+        [HK_MASTER_USER_ID, payout]
+      );
+      await client.query(
+        "UPDATE mybot_bets SET status = 'RESGATADA', redeemed_at = NOW() WHERE id = $1",
+        [betId]
+      );
+      await client.query(
+        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+        [HK_MASTER_USER_ID, userId, payout, "mybot_bet_redeem"]
+      );
+
+      await client.query("COMMIT");
+      res.json({ betId, status: "RESGATADA", payout });
+    } catch (innerError) {
+      await client.query("ROLLBACK");
+      throw innerError;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao resgatar aposta." });
+  }
+});
+
 app.get("/mybot/battles/queue", async (req, res) => {
   const userId = typeof req.query.userId === "string" ? req.query.userId : "";
   if (!userId) {
@@ -2234,6 +2600,15 @@ app.post("/mybot/battles/queue", async (req, res) => {
         return res.status(400).json({ message: "Saldo insuficiente para apostar." });
       }
 
+      const existingBet = await client.query(
+        "SELECT id FROM mybot_bets WHERE user_id = $1 AND status IN ('PENDENTE','EM_BATALHA') ORDER BY created_at DESC LIMIT 1",
+        [userId]
+      );
+      if (existingBet.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Você já possui uma aposta ativa." });
+      }
+
       const profile = await getOrCreateMyBotProfile(client, userId, card.id);
       const now = new Date();
       if (bet >= MYBOT_HIGH_BET_THRESHOLD) {
@@ -2275,12 +2650,29 @@ app.post("/mybot/battles/queue", async (req, res) => {
       }
 
       if (!opponentRow) {
+        await ensureHouseAccount(client);
+        await client.query(
+          "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+          [userId, bet]
+        );
+        await client.query(
+          "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+          [HK_MASTER_USER_ID, bet]
+        );
+        await client.query(
+          "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+          [userId, HK_MASTER_USER_ID, bet, "mybot_bet_lock"]
+        );
+        const betRow = await client.query(
+          "INSERT INTO mybot_bets (user_id, card_id, bet_amount, status) VALUES ($1, $2, $3, $4) RETURNING id",
+          [userId, card.id, bet, "PENDENTE"]
+        );
         const queued = await client.query(
           "INSERT INTO mybot_battle_queue (user_id, card_id, bet_amount, level, rarity, rarity_rank, status) VALUES ($1, $2, $3, $4, $5, $6, 'waiting') RETURNING id, bet_amount, level, rarity, status, created_at",
           [userId, card.id, bet, level, String(card.rarity || "comum"), rarityRank]
         );
         await client.query("COMMIT");
-        return res.status(201).json({ status: "queued", queue: queued.rows[0] });
+        return res.status(201).json({ status: "queued", queue: queued.rows[0], betId: betRow.rows[0].id });
       }
 
       const opponentAccount = await getOrCreateInternalAccount(client, opponentRow.user_id);
@@ -2289,12 +2681,29 @@ app.post("/mybot/battles/queue", async (req, res) => {
           "UPDATE mybot_battle_queue SET status = 'canceled' WHERE id = $1",
           [opponentRow.id]
         );
+        await ensureHouseAccount(client);
+        await client.query(
+          "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
+          [userId, bet]
+        );
+        await client.query(
+          "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
+          [HK_MASTER_USER_ID, bet]
+        );
+        await client.query(
+          "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
+          [userId, HK_MASTER_USER_ID, bet, "mybot_bet_lock"]
+        );
+        const betRow = await client.query(
+          "INSERT INTO mybot_bets (user_id, card_id, bet_amount, status) VALUES ($1, $2, $3, $4) RETURNING id",
+          [userId, card.id, bet, "PENDENTE"]
+        );
         const queued = await client.query(
           "INSERT INTO mybot_battle_queue (user_id, card_id, bet_amount, level, rarity, rarity_rank, status) VALUES ($1, $2, $3, $4, $5, $6, 'waiting') RETURNING id, bet_amount, level, rarity, status, created_at",
           [userId, card.id, bet, level, String(card.rarity || "comum"), rarityRank]
         );
         await client.query("COMMIT");
-        return res.status(201).json({ status: "queued", queue: queued.rows[0] });
+        return res.status(201).json({ status: "queued", queue: queued.rows[0], betId: betRow.rows[0].id });
       }
 
       const opponentCardResult = await client.query(
@@ -2317,30 +2726,49 @@ app.post("/mybot/battles/queue", async (req, res) => {
 
       const battleId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const seed = hashString(`${battleId}|${userId}|${opponentRow.user_id}|${bet}|${createdAt}`);
-      const rng = mulberry32(seedFromHash(seed));
+      const seed = hashString(`${battleId}|${userId}|${opponentRow.user_id}|${bet}|${createdAt}|${crypto.randomBytes(8).toString("hex")}`);
 
-      const battleType = computeBattleType(rng);
+      const battleType = computeBattleType();
       const mapCandidates = computeMapWeightsByBet(bet);
-      const selectedMap = pickWeighted(
-        rng,
+      const selectedMap = pickWeightedSecure(
         mapCandidates.map((item) => ({ weight: item.weight, value: item.map }))
       );
 
+      await ensureMyBotMapState(client, userId, card.id);
+      await ensureMyBotMapState(client, opponentRow.user_id, opponentCard.id);
+
+      await moveMyBotToMap(client, {
+        botId: card.id,
+        userId,
+        toMapId: selectedMap.id,
+        reason: "battle_start",
+        battleId,
+      });
+      await moveMyBotToMap(client, {
+        botId: opponentCard.id,
+        userId: opponentRow.user_id,
+        toMapId: selectedMap.id,
+        reason: "battle_start",
+        battleId,
+      });
+
       const userAttrs = getBattleAttributes(card.attributes);
       const opponentAttrs = getBattleAttributes(opponentCard.attributes);
-      const powerUser = computeBotPower(userAttrs, selectedMap.weights, rng);
-      const powerOpponent = computeBotPower(opponentAttrs, selectedMap.weights, rng);
+      const userRandom = Number(secureRandomFloat(0.9, 1.1).toFixed(4));
+      const opponentRandom = Number(secureRandomFloat(0.9, 1.1).toFixed(4));
+      const powerUser = computeBotPower(userAttrs, selectedMap.weights, userRandom);
+      const powerOpponent = computeBotPower(opponentAttrs, selectedMap.weights, opponentRandom);
 
       let winnerUserId = powerUser.final >= powerOpponent.final ? userId : opponentRow.user_id;
       if (powerUser.final === powerOpponent.final) {
-        winnerUserId = rng() >= 0.5 ? userId : opponentRow.user_id;
+        winnerUserId = secureRandomFloat(0, 1) >= 0.5 ? userId : opponentRow.user_id;
       }
 
       const poolAmount = bet * 2;
       const gasAmount = Number((poolAmount * battleType.gasPct).toFixed(2));
       const payoutAmount = Number((poolAmount - gasAmount).toFixed(2));
 
+      await ensureHouseAccount(client);
       await client.query(
         "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
         [userId, bet]
@@ -2349,7 +2777,6 @@ app.post("/mybot/battles/queue", async (req, res) => {
         "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
         [opponentRow.user_id, bet]
       );
-      await ensureHouseAccount(client);
       await client.query(
         "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
         [HK_MASTER_USER_ID, poolAmount]
@@ -2362,21 +2789,9 @@ app.post("/mybot/battles/queue", async (req, res) => {
         "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
         [opponentRow.user_id, HK_MASTER_USER_ID, bet, "mybot_battle_pool"]
       );
-      await client.query(
-        "UPDATE internal_accounts SET balance = balance - $2, updated_at = NOW() WHERE user_id = $1",
-        [HK_MASTER_USER_ID, payoutAmount]
-      );
-      await client.query(
-        "UPDATE internal_accounts SET balance = balance + $2, updated_at = NOW() WHERE user_id = $1",
-        [winnerUserId, payoutAmount]
-      );
-      await client.query(
-        "INSERT INTO internal_transactions (from_user_id, to_user_id, amount, reason) VALUES ($1, $2, $3, $4)",
-        [HK_MASTER_USER_ID, winnerUserId, payoutAmount, "mybot_battle_payout"]
-      );
 
       const battleInsert = await client.query(
-        "INSERT INTO mybot_battles (id, user_id_a, user_id_b, card_id_a, card_id_b, bet_amount, battle_type, gas_pct, map_name, map_weights, seed, power_a, power_b, power_final_a, power_final_b, winner_user_id, payout_amount, gas_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *",
+        "INSERT INTO mybot_battles (id, user_id_a, user_id_b, card_id_a, card_id_b, bet_amount, battle_type, gas_pct, map_name, map_weights, modifiers, seed, power_a, power_b, random_factor_a, random_factor_b, power_final_a, power_final_b, xp_a, xp_b, winner_user_id, payout_amount, gas_amount, reason) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) RETURNING *",
         [
           battleId,
           userId,
@@ -2388,20 +2803,43 @@ app.post("/mybot/battles/queue", async (req, res) => {
           battleType.gasPct,
           selectedMap.id,
           selectedMap.weights,
+          [],
           seed,
           powerUser.raw,
           powerOpponent.raw,
+          userRandom,
+          opponentRandom,
           powerUser.final,
           powerOpponent.final,
+          0,
+          0,
           winnerUserId,
           payoutAmount,
           gasAmount,
+          "",
         ]
       );
 
       await client.query(
         "UPDATE mybot_battle_queue SET status = 'matched', matched_battle_id = $2 WHERE id = $1",
         [opponentRow.id, battleId]
+      );
+
+      const userBet = await client.query(
+        "INSERT INTO mybot_bets (user_id, card_id, bet_amount, status) VALUES ($1, $2, $3, $4) RETURNING id",
+        [userId, card.id, bet, "EM_BATALHA"]
+      );
+      const opponentBet = await client.query(
+        "SELECT id FROM mybot_bets WHERE user_id = $1 AND status = 'PENDENTE' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+        [opponentRow.user_id]
+      );
+      if (!opponentBet.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Oponente sem aposta ativa." });
+      }
+      await client.query(
+        "UPDATE mybot_bets SET status = 'EM_BATALHA', battle_id = $2 WHERE id = $1",
+        [opponentBet.rows[0].id, battleId]
       );
 
       const userProfile = await getOrCreateMyBotProfile(client, userId, card.id);
@@ -2427,6 +2865,43 @@ app.post("/mybot/battles/queue", async (req, res) => {
       await client.query(
         "UPDATE user_cards SET xp = $2, level = $3, updated_at = NOW() WHERE user_id = $1",
         [opponentRow.user_id, opponentXpAfter, opponentLevelAfter]
+      );
+
+      const reason = buildBattleExplanation({
+        mapName: selectedMap.id,
+        mapWeights: selectedMap.weights,
+        userAttrs,
+        opponentAttrs,
+        userRandom,
+        opponentRandom,
+        userFinal: powerUser.final,
+        opponentFinal: powerOpponent.final,
+      });
+
+      const updatedBattle = await client.query(
+        "UPDATE mybot_battles SET xp_a = $2, xp_b = $3, reason = $4 WHERE id = $1 RETURNING *",
+        [battleId, userXpGain, opponentXpGain, reason]
+      );
+
+      await client.query(
+        "UPDATE mybot_bets SET status = $2, possible_return = $3, gas_amount = $4, finalized_at = NOW(), battle_id = $5 WHERE id = $1",
+        [
+          userBet.rows[0].id,
+          userWon ? "VITORIA" : "DERROTA",
+          userWon ? payoutAmount : 0,
+          gasAmount,
+          battleId,
+        ]
+      );
+      await client.query(
+        "UPDATE mybot_bets SET status = $2, possible_return = $3, gas_amount = $4, finalized_at = NOW(), battle_id = $5 WHERE id = $1",
+        [
+          opponentBet.rows[0].id,
+          opponentWon ? "VITORIA" : "DERROTA",
+          opponentWon ? payoutAmount : 0,
+          gasAmount,
+          battleId,
+        ]
       );
 
       const nextUserLossStreak = userWon ? 0 : Number(userProfile.loss_streak || 0) + 1;
@@ -2468,8 +2943,37 @@ app.post("/mybot/battles/queue", async (req, res) => {
         ]
       );
 
+      await returnMyBotToOrigin(client, {
+        botId: card.id,
+        userId,
+        reason: "battle_end",
+        battleId,
+      });
+      await returnMyBotToOrigin(client, {
+        botId: opponentCard.id,
+        userId: opponentRow.user_id,
+        reason: "battle_end",
+        battleId,
+      });
+
       await client.query("COMMIT");
-      res.status(201).json({ status: "matched", battle: battleInsert.rows[0] });
+      res.status(201).json({
+        status: "matched",
+        battle: updatedBattle.rows[0],
+        betId: userBet.rows[0].id,
+        summary: {
+          map: selectedMap.id,
+          battleType: battleType.id,
+          modifiers: [],
+          betAmount: bet,
+          gasAmount,
+          xp: { user: userXpGain, opponent: opponentXpGain },
+          basePower: { user: powerUser.raw, opponent: powerOpponent.raw },
+          randomFactor: { user: userRandom, opponent: opponentRandom },
+          finalPower: { user: powerUser.final, opponent: powerOpponent.final },
+          reason,
+        },
+      });
     } catch (innerError) {
       await client.query("ROLLBACK");
       throw innerError;
@@ -3374,6 +3878,336 @@ app.post("/projects", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao criar projeto." });
+  }
+});
+
+app.get("/admin/mybot/battles", async (req, res) => {
+  const adminId = typeof req.query.adminId === "string" ? req.query.adminId : "";
+  const limit = Math.min(200, Number(req.query.limit ?? 100) || 100);
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureMyBotTables(client);
+      const result = await client.query(
+        `SELECT id, user_id_a, user_id_b, card_id_a, card_id_b, bet_amount, battle_type, gas_pct, map_name, map_weights,
+                modifiers, seed, power_a, power_b, random_factor_a, random_factor_b, power_final_a, power_final_b, xp_a, xp_b,
+                winner_user_id, payout_amount, gas_amount, reason, created_at
+         FROM mybot_battles
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      await logAdminAction(client, adminId, `mybot_battles_list:${result.rowCount ?? 0}`);
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao listar batalhas do MyBot." });
+  }
+});
+
+app.get("/admin/mybot/ecosystem", async (req, res) => {
+  const adminId = typeof req.query.adminId === "string" ? req.query.adminId : "";
+  const limit = Math.min(2000, Number(req.query.limit ?? 800) || 800);
+  const movementLimit = Math.min(1000, Number(req.query.movementLimit ?? 200) || 200);
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureMyBotTables(client);
+      await ensureUserCardsTable(client);
+      await seedMyBotMaps(client);
+
+      const cards = await client.query(
+        "SELECT id, user_id, name, image_url, rarity, level FROM user_cards ORDER BY updated_at DESC LIMIT $1",
+        [limit]
+      );
+      for (const row of cards.rows) {
+        await ensureMyBotMapState(client, row.user_id, row.id);
+      }
+
+      const profiles = await client.query(
+        `SELECT mp.user_id, mp.card_id, mp.origin_map_id, mp.current_map_id,
+                mp.origin_pos_x, mp.origin_pos_y, mp.current_pos_x, mp.current_pos_y,
+                uc.name, uc.image_url, uc.rarity, uc.level
+         FROM mybot_profiles mp
+         LEFT JOIN user_cards uc ON uc.id = mp.card_id
+         WHERE mp.card_id IS NOT NULL
+         ORDER BY mp.updated_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      for (const row of profiles.rows) {
+        if (!row.origin_map_id || !row.current_map_id) {
+          await ensureMyBotMapState(client, row.user_id, row.card_id);
+        }
+      }
+
+      const bots = await client.query(
+        `SELECT mp.user_id, mp.card_id, mp.origin_map_id, mp.current_map_id,
+                mp.origin_pos_x, mp.origin_pos_y, mp.current_pos_x, mp.current_pos_y,
+                uc.name, uc.image_url, uc.rarity, uc.level
+         FROM mybot_profiles mp
+         LEFT JOIN user_cards uc ON uc.id = mp.card_id
+         WHERE mp.card_id IS NOT NULL
+         ORDER BY mp.updated_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      const botIndex = new Map<string, any>();
+      for (const row of bots.rows) {
+        botIndex.set(String(row.user_id).toLowerCase(), row);
+      }
+      for (const row of cards.rows) {
+        const key = String(row.user_id).toLowerCase();
+        if (botIndex.has(key)) continue;
+        const originMapId = pickOriginMapId(row.user_id, row.id);
+        const originPos = computeDeterministicPosition(`${row.id}|origin|${originMapId}`);
+        botIndex.set(key, {
+          user_id: row.user_id,
+          card_id: row.id,
+          origin_map_id: originMapId,
+          current_map_id: originMapId,
+          origin_pos_x: originPos.x,
+          origin_pos_y: originPos.y,
+          current_pos_x: originPos.x,
+          current_pos_y: originPos.y,
+          name: row.name,
+          image_url: row.image_url,
+          rarity: row.rarity,
+          level: row.level,
+        });
+      }
+      let mybotsCount = 0;
+      if (botIndex.size === 0) {
+        const mybots = await client.query(
+          "SELECT user_id, image_url, stage FROM mybots ORDER BY updated_at DESC LIMIT $1",
+          [limit]
+        );
+        mybotsCount = mybots.rowCount ?? 0;
+        for (const row of mybots.rows) {
+          const key = String(row.user_id).toLowerCase();
+          if (botIndex.has(key)) continue;
+          const originMapId = pickOriginMapId(row.user_id, row.user_id);
+          const originPos = computeDeterministicPosition(`${row.user_id}|origin|${originMapId}`);
+          botIndex.set(key, {
+            user_id: row.user_id,
+            card_id: null,
+            origin_map_id: originMapId,
+            current_map_id: originMapId,
+            origin_pos_x: originPos.x,
+            origin_pos_y: originPos.y,
+            current_pos_x: originPos.x,
+            current_pos_y: originPos.y,
+            name: "MyBot",
+            image_url: row.image_url || "",
+            rarity: row.stage || "",
+            level: 1,
+          });
+        }
+      }
+      const fallbackBots = Array.from(botIndex.values());
+
+      let maps = await client.query(
+        "SELECT id, name, position_x, position_y, icon, visual_meta FROM mybot_maps ORDER BY name ASC"
+      );
+      if ((maps.rowCount ?? 0) === 0) {
+        await seedMyBotMaps(client);
+        maps = await client.query(
+          "SELECT id, name, position_x, position_y, icon, visual_meta FROM mybot_maps ORDER BY name ASC"
+        );
+      }
+      const fallbackMaps = (maps.rowCount ?? 0) === 0
+        ? MYBOT_MAP_LAYOUTS.map((map) => ({
+            id: map.id,
+            name: map.label,
+            position_x: map.x,
+            position_y: map.y,
+            icon: map.icon,
+            visual_meta: {},
+          }))
+        : maps.rows;
+
+      const movements = await client.query(
+        `SELECT id, bot_id, user_id, from_map_id, to_map_id, reason, battle_id, created_at
+         FROM mybot_movements
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [movementLimit]
+      );
+
+      await logAdminAction(client, adminId, `mybot_ecosystem:${fallbackBots.length}`);
+      res.json({
+        maps: fallbackMaps,
+        bots: fallbackBots,
+        movements: movements.rows,
+        counts: {
+          userCards: cards.rowCount ?? 0,
+          profiles: bots.rowCount ?? 0,
+          mybots: mybotsCount,
+        },
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar ecossistema MyBot." });
+  }
+});
+
+app.get("/mybot/ecosystem", async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  const limit = Math.min(1200, Number(req.query.limit ?? 800) || 800);
+  const movementLimit = Math.min(400, Number(req.query.movementLimit ?? 120) || 120);
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureMyBotTables(client);
+      await ensureUserCardsTable(client);
+      await seedMyBotMaps(client);
+
+      const cards = await client.query(
+        "SELECT id, user_id, name, image_url, rarity, level FROM user_cards ORDER BY updated_at DESC LIMIT $1",
+        [limit]
+      );
+      for (const row of cards.rows) {
+        await ensureMyBotMapState(client, row.user_id, row.id);
+      }
+
+      const profiles = await client.query(
+        `SELECT mp.user_id, mp.card_id, mp.origin_map_id, mp.current_map_id,
+                mp.origin_pos_x, mp.origin_pos_y, mp.current_pos_x, mp.current_pos_y
+         FROM mybot_profiles mp
+         WHERE mp.card_id IS NOT NULL
+         ORDER BY mp.updated_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+
+      for (const row of profiles.rows) {
+        if (!row.origin_map_id || !row.current_map_id) {
+          await ensureMyBotMapState(client, row.user_id, row.card_id);
+        }
+      }
+
+      const bots = await client.query(
+        `SELECT mp.user_id, mp.card_id, mp.origin_map_id, mp.current_map_id,
+                mp.origin_pos_x, mp.origin_pos_y, mp.current_pos_x, mp.current_pos_y,
+                uc.name, uc.image_url, uc.rarity, uc.level
+         FROM mybot_profiles mp
+         LEFT JOIN user_cards uc ON uc.id = mp.card_id
+         WHERE mp.card_id IS NOT NULL
+         ORDER BY mp.updated_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      const botIndex = new Map<string, any>();
+      for (const row of bots.rows) {
+        botIndex.set(String(row.user_id).toLowerCase(), row);
+      }
+      for (const row of cards.rows) {
+        const key = String(row.user_id).toLowerCase();
+        if (botIndex.has(key)) continue;
+        const originMapId = pickOriginMapId(row.user_id, row.id);
+        const originPos = computeDeterministicPosition(`${row.id}|origin|${originMapId}`);
+        botIndex.set(key, {
+          user_id: row.user_id,
+          card_id: row.id,
+          origin_map_id: originMapId,
+          current_map_id: originMapId,
+          origin_pos_x: originPos.x,
+          origin_pos_y: originPos.y,
+          current_pos_x: originPos.x,
+          current_pos_y: originPos.y,
+          name: row.name,
+          image_url: row.image_url,
+          rarity: row.rarity,
+          level: row.level,
+        });
+      }
+      if (botIndex.size === 0) {
+        const mybots = await client.query(
+          "SELECT user_id, image_url, stage FROM mybots ORDER BY updated_at DESC LIMIT $1",
+          [limit]
+        );
+        for (const row of mybots.rows) {
+          const key = String(row.user_id).toLowerCase();
+          if (botIndex.has(key)) continue;
+          const originMapId = pickOriginMapId(row.user_id, row.user_id);
+          const originPos = computeDeterministicPosition(`${row.user_id}|origin|${originMapId}`);
+          botIndex.set(key, {
+            user_id: row.user_id,
+            card_id: null,
+            origin_map_id: originMapId,
+            current_map_id: originMapId,
+            origin_pos_x: originPos.x,
+            origin_pos_y: originPos.y,
+            current_pos_x: originPos.x,
+            current_pos_y: originPos.y,
+            name: "MyBot",
+            image_url: row.image_url || "",
+            rarity: row.stage || "",
+            level: 1,
+          });
+        }
+      }
+      const fallbackBots = Array.from(botIndex.values());
+
+      let maps = await client.query(
+        "SELECT id, name, position_x, position_y, icon, visual_meta FROM mybot_maps ORDER BY name ASC"
+      );
+      if ((maps.rowCount ?? 0) === 0) {
+        await seedMyBotMaps(client);
+        maps = await client.query(
+          "SELECT id, name, position_x, position_y, icon, visual_meta FROM mybot_maps ORDER BY name ASC"
+        );
+      }
+      const fallbackMaps = (maps.rowCount ?? 0) === 0
+        ? MYBOT_MAP_LAYOUTS.map((map) => ({
+            id: map.id,
+            name: map.label,
+            position_x: map.x,
+            position_y: map.y,
+            icon: map.icon,
+            visual_meta: {},
+          }))
+        : maps.rows;
+
+      let movements = { rows: [] as any[] };
+      if (userId) {
+        movements = await client.query(
+          `SELECT id, bot_id, user_id, from_map_id, to_map_id, reason, battle_id, created_at
+           FROM mybot_movements
+           WHERE user_id = $2
+           ORDER BY created_at DESC
+           LIMIT $1`,
+          [movementLimit, userId]
+        );
+      }
+
+      res.json({ maps: fallbackMaps, bots: fallbackBots, movements: movements.rows });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao carregar ecossistema MyBot." });
   }
 });
 

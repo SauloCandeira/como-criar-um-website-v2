@@ -735,6 +735,10 @@
   gap: 10px;
 }
 
+.mybot-ecosystem {
+  margin-top: 24px;
+}
+
 .mybot-battle__item {
   display: flex;
   justify-content: space-between;

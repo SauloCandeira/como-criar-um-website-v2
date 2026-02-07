@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './Admin.css';
 import { Line, Bar } from 'react-chartjs-2';
@@ -10,6 +10,7 @@ import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
 import MyBotsList from '../../components/Admin/MyBotsList';
 import { MyBotsLeaderboard } from '../../components/MyBotsLeaderboard';
 import { DaoAdminPanel } from '../../components/DaoAdminPanel';
+import { MyBotsEcosystemMap } from '../../components/Admin/MyBotsEcosystemMap';
 import { createProduct, deleteProduct, fetchProducts, updateProduct } from '../../services/productsApi';
 import { createProject, deleteProject, fetchProjects, updateProject } from '../../services/projectsApi';
 import { createCost, deleteCost, fetchCosts, updateCost } from '../../services/costsApi';
@@ -19,6 +20,7 @@ import { listReportsByProject } from '../../services/aiReportApi';
 import type { AiReport } from '../../services/aiReportTypes';
 import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
 import { resetAllPurchases, resetClonedProjects, resetFreeRedeems, resetFull, resetPaidSales } from '../../services/adminToolsApi';
+import { fetchAdminMyBotBattles, AdminMyBotBattleDTO } from '../../services/adminMybotApi';
 
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -79,6 +81,7 @@ const Admin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentEmail = (localStorage.getItem('email') || '').toLowerCase();
+  const effectiveAdminId = (currentEmail || auth.currentUser?.email || '').toLowerCase();
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -101,6 +104,8 @@ const Admin: React.FC = () => {
   }, [currentEmail, navigate]);
 
   const [activeTab, setActiveTab] = useState('users');
+  const [mybotsSubTab, setMybotsSubTab] = useState<'overview' | 'battles' | 'ecosystem'>('overview');
+  const [expandedMenuId, setExpandedMenuId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -189,6 +194,60 @@ const Admin: React.FC = () => {
   const [isEditCostModalOpen, setIsEditCostModalOpen] = useState(false);
   const [editCostData, setEditCostData] = useState({ id: '', name: '', costValue: '', billingCycle: 'monthly' as 'monthly' | 'annual' });
   const [selectedPeriod, setSelectedPeriod] = useState('day'); // day, month, year
+  const [mybotBattles, setMybotBattles] = useState<AdminMyBotBattleDTO[]>([]);
+  const [mybotBattlesLoading, setMybotBattlesLoading] = useState(false);
+  const [mybotBattlesError, setMybotBattlesError] = useState<string | null>(null);
+  const [selectedMyBotBattle, setSelectedMyBotBattle] = useState<AdminMyBotBattleDTO | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+
+  type MenuItemConfig = {
+    id: string;
+    label: string;
+    children?: Array<{ id: string; label: string }>;
+    adminOnly?: boolean;
+  };
+
+  const menuItems: MenuItemConfig[] = [
+    { id: 'reports', label: 'Relatórios' },
+    { id: 'accounting', label: 'Contabilidade' },
+    { id: 'users', label: 'Usuários' },
+    { id: 'sales', label: 'Vendas' },
+    { id: 'redeems', label: 'Resgates' },
+    { id: 'projects', label: 'Projetos' },
+    { id: 'products', label: 'Produtos' },
+    { id: 'costs', label: 'Custos' },
+    { id: 'ai-reports', label: 'AI Reports' },
+    {
+      id: 'mybots',
+      label: 'MyBots',
+      children: [
+        { id: 'overview', label: 'Visão geral' },
+        { id: 'battles', label: 'Batalhas' },
+        { id: 'ecosystem', label: 'Ecossistema' },
+      ],
+    },
+    { id: 'dao', label: 'DAO' },
+    { id: 'admin-tools', label: 'Admin Tools', adminOnly: true },
+  ];
+
+  const handleSelectMenu = (menuId: string, childId?: string) => {
+    if (menuId === 'mybots' && childId) {
+      setActiveTab('mybots');
+      setMybotsSubTab(childId as 'overview' | 'battles' | 'ecosystem');
+      if (window.innerWidth < 768) {
+        setExpandedMenuId(null);
+      }
+      return;
+    }
+    setActiveTab(menuId);
+    if (window.innerWidth < 768) {
+      setExpandedMenuId(null);
+    }
+  };
+
+  const toggleMenu = (menuId: string) => {
+    setExpandedMenuId((prev) => (prev === menuId ? null : menuId));
+  };
 
 
   const loadUsers = async () => {
@@ -238,6 +297,20 @@ const Admin: React.FC = () => {
       setProjectsError('Não foi possível carregar os projetos.');
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const loadMyBotBattles = async () => {
+    setMybotBattlesLoading(true);
+    setMybotBattlesError(null);
+    try {
+      const data = await fetchAdminMyBotBattles(effectiveAdminId, 200);
+      setMybotBattles(data);
+    } catch (error) {
+      console.error('Erro ao carregar batalhas MyBot:', error);
+      setMybotBattlesError('Não foi possível carregar as batalhas do MyBot.');
+    } finally {
+      setMybotBattlesLoading(false);
     }
   };
 
@@ -365,6 +438,39 @@ const Admin: React.FC = () => {
     loadAccesses();
     loadAiReports();
   }, [aiReportsProjectId]);
+
+  useEffect(() => {
+    if (activeTab === 'mybots' && mybotsSubTab === 'battles') {
+      loadMyBotBattles();
+    }
+  }, [activeTab, mybotsSubTab]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('adminSidebarExpanded');
+    if (stored) {
+      setExpandedMenuId(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (expandedMenuId) {
+      localStorage.setItem('adminSidebarExpanded', expandedMenuId);
+    } else {
+      localStorage.removeItem('adminSidebarExpanded');
+    }
+  }, [expandedMenuId]);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (window.innerWidth >= 768) return;
+      const target = event.target as Node;
+      if (sidebarRef.current && !sidebarRef.current.contains(target)) {
+        setExpandedMenuId(null);
+      }
+    };
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleCreateUser = async () => {
     if (!newUser.name.trim() || !newUser.email.trim()) {
@@ -886,47 +992,55 @@ const Admin: React.FC = () => {
       onToggleSidebar={() => setSidebarCollapsed((s) => !s)}
     >
       <div className={`admin-container ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <aside className="admin-sidebar">
+        <aside className="admin-sidebar" ref={sidebarRef}>
           <h2>Admin</h2>
           <ul>
-            <li className={activeTab === 'reports' ? 'active' : ''} onClick={() => setActiveTab('reports')}>
-              Relatórios
-            </li>
-            <li className={activeTab === 'accounting' ? 'active' : ''} onClick={() => setActiveTab('accounting')}>
-              Contabilidade
-            </li>
-            <li className={activeTab === 'users' ? 'active' : ''} onClick={() => setActiveTab('users')}>
-              Usuários
-            </li>
-            <li className={activeTab === 'sales' ? 'active' : ''} onClick={() => setActiveTab('sales')}>
-              Vendas
-            </li>
-            <li className={activeTab === 'redeems' ? 'active' : ''} onClick={() => setActiveTab('redeems')}>
-              Resgates
-            </li>
-            <li className={activeTab === 'projects' ? 'active' : ''} onClick={() => setActiveTab('projects')}>
-              Projetos
-            </li>
-            <li className={activeTab === 'products' ? 'active' : ''} onClick={() => setActiveTab('products')}>
-              Produtos
-            </li>
-            <li className={activeTab === 'costs' ? 'active' : ''} onClick={() => setActiveTab('costs')}>
-              Custos
-            </li>
-            <li className={activeTab === 'ai-reports' ? 'active' : ''} onClick={() => setActiveTab('ai-reports')}>
-              AI Reports
-            </li>
-            <li className={activeTab === 'mybots' ? 'active' : ''} onClick={() => setActiveTab('mybots')}>
-              MyBots
-            </li>
-            <li className={activeTab === 'dao' ? 'active' : ''} onClick={() => setActiveTab('dao')}>
-              DAO
-            </li>
-            {isAdmin && (
-              <li className={activeTab === 'admin-tools' ? 'active' : ''} onClick={() => setActiveTab('admin-tools')}>
-                Admin Tools
-              </li>
-            )}
+            {menuItems.flatMap((item) => {
+              if (item.adminOnly && !isAdmin) return [];
+              const isParent = !!item.children?.length;
+              const isExpanded = expandedMenuId === item.id;
+              const isActive = activeTab === item.id;
+              const entries: JSX.Element[] = [
+                <li key={item.id} className={isActive ? 'active' : ''}>
+                  {isParent ? (
+                    <button
+                      type="button"
+                      className={`admin-menu-item ${isExpanded ? 'open' : ''}`}
+                      onClick={() => toggleMenu(item.id)}
+                      aria-expanded={isExpanded}
+                    >
+                      {item.label}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`admin-menu-item ${isActive ? 'active' : ''}`}
+                      onClick={() => handleSelectMenu(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  )}
+                </li>,
+              ];
+
+              if (isParent && isExpanded) {
+                item.children?.forEach((child) => {
+                  entries.push(
+                    <li key={`${item.id}-${child.id}`} className="admin-menu-child">
+                      <button
+                        type="button"
+                        className={`admin-submenu-item ${mybotsSubTab === child.id && isActive ? 'active' : ''}`}
+                        onClick={() => handleSelectMenu(item.id, child.id)}
+                      >
+                        {child.label}
+                      </button>
+                    </li>
+                  );
+                });
+              }
+
+              return entries;
+            })}
           </ul>
           {/* Botão removido: o projeto master HKTECH estará apenas na lista de projetos */}
         </aside>
@@ -934,10 +1048,149 @@ const Admin: React.FC = () => {
         <main className="admin-content">
         {activeTab === 'mybots' && (
           <section>
-            <h2>MyBots - Placar dos Bots</h2>
-            {/* Placar dos Bots */}
-            <MyBotsLeaderboard />
-            <MyBotsList />
+            {mybotsSubTab === 'overview' && (
+              <>
+                <h2>MyBots - Placar dos Bots</h2>
+                <MyBotsLeaderboard />
+                <MyBotsList />
+              </>
+            )}
+            {mybotsSubTab === 'battles' && (
+              <>
+                <h2>MyBots - Batalhas (Auditoria)</h2>
+                {mybotBattlesLoading && <p>Carregando batalhas...</p>}
+                {mybotBattlesError && <p>{mybotBattlesError}</p>}
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Mapa</th>
+                        <th>Tipo</th>
+                        <th>Aposta</th>
+                        <th>Gás</th>
+                        <th>Prêmio</th>
+                        <th>Vencedor</th>
+                        <th>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!mybotBattlesLoading && mybotBattles.length === 0 && (
+                        <tr>
+                          <td colSpan={8}>Nenhuma batalha registrada.</td>
+                        </tr>
+                      )}
+                      {mybotBattles.map((battle) => (
+                        <tr key={battle.id}>
+                          <td>{battle.createdAt ? new Date(battle.createdAt).toLocaleString('pt-BR') : '—'}</td>
+                          <td>{battle.mapName}</td>
+                          <td>{battle.battleType}</td>
+                          <td>{battle.betAmount.toFixed(2).replace('.', ',')}</td>
+                          <td>{battle.gasAmount.toFixed(2).replace('.', ',')}</td>
+                          <td>{battle.payoutAmount.toFixed(2).replace('.', ',')}</td>
+                          <td>{battle.winnerUserId}</td>
+                          <td>
+                            <button
+                              className="admin-btn admin-btn--ghost"
+                              onClick={() => setSelectedMyBotBattle(battle)}
+                            >
+                              Ver detalhes
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedMyBotBattle && (
+                  <div className="admin-modal-backdrop" onClick={() => setSelectedMyBotBattle(null)}>
+                    <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+                      <div className="admin-modal__header">
+                        <h3>Detalhes da batalha</h3>
+                        <button className="admin-btn admin-btn--ghost" onClick={() => setSelectedMyBotBattle(null)}>
+                          Fechar
+                        </button>
+                      </div>
+                      <div className="admin-modal__form">
+                        <div className="admin-modal__grid">
+                          <div>
+                            <span>ID</span>
+                            <strong>{selectedMyBotBattle.id}</strong>
+                          </div>
+                          <div>
+                            <span>Data</span>
+                            <strong>{selectedMyBotBattle.createdAt ? new Date(selectedMyBotBattle.createdAt).toLocaleString('pt-BR') : '—'}</strong>
+                          </div>
+                          <div>
+                            <span>Usuário A</span>
+                            <strong>{selectedMyBotBattle.userIdA}</strong>
+                          </div>
+                          <div>
+                            <span>Usuário B</span>
+                            <strong>{selectedMyBotBattle.userIdB}</strong>
+                          </div>
+                          <div>
+                            <span>Mapa</span>
+                            <strong>{selectedMyBotBattle.mapName}</strong>
+                          </div>
+                          <div>
+                            <span>Tipo</span>
+                            <strong>{selectedMyBotBattle.battleType}</strong>
+                          </div>
+                          <div>
+                            <span>Aposta</span>
+                            <strong>{selectedMyBotBattle.betAmount.toFixed(2).replace('.', ',')}</strong>
+                          </div>
+                          <div>
+                            <span>Gás</span>
+                            <strong>{selectedMyBotBattle.gasAmount.toFixed(2).replace('.', ',')} ({(selectedMyBotBattle.gasPct * 100).toFixed(0)}%)</strong>
+                          </div>
+                          <div>
+                            <span>Prêmio</span>
+                            <strong>{selectedMyBotBattle.payoutAmount.toFixed(2).replace('.', ',')}</strong>
+                          </div>
+                          <div>
+                            <span>Vencedor</span>
+                            <strong>{selectedMyBotBattle.winnerUserId}</strong>
+                          </div>
+                          <div>
+                            <span>Poder base (A/B)</span>
+                            <strong>{selectedMyBotBattle.powerA.toFixed(2)} / {selectedMyBotBattle.powerB.toFixed(2)}</strong>
+                          </div>
+                          <div>
+                            <span>Fator aleatório (A/B)</span>
+                            <strong>{selectedMyBotBattle.randomFactorA.toFixed(3)} / {selectedMyBotBattle.randomFactorB.toFixed(3)}</strong>
+                          </div>
+                          <div>
+                            <span>Poder final (A/B)</span>
+                            <strong>{selectedMyBotBattle.powerFinalA.toFixed(2)} / {selectedMyBotBattle.powerFinalB.toFixed(2)}</strong>
+                          </div>
+                          <div>
+                            <span>XP (A/B)</span>
+                            <strong>{selectedMyBotBattle.xpA} / {selectedMyBotBattle.xpB}</strong>
+                          </div>
+                          <div>
+                            <span>Seed</span>
+                            <strong>{selectedMyBotBattle.seed}</strong>
+                          </div>
+                          <div>
+                            <span>Modificadores</span>
+                            <strong>{Array.isArray(selectedMyBotBattle.modifiers) && selectedMyBotBattle.modifiers.length ? JSON.stringify(selectedMyBotBattle.modifiers) : '—'}</strong>
+                          </div>
+                          <div>
+                            <span>Motivo</span>
+                            <strong>{selectedMyBotBattle.reason || '—'}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {mybotsSubTab === 'ecosystem' && (
+              <MyBotsEcosystemMap mode="admin" viewerId={effectiveAdminId} />
+            )}
           </section>
         )}
         {activeTab === 'dao' && (

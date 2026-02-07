@@ -6,6 +6,8 @@ import { fetchProjects, ProjectDTO, updateProject } from '../../services/project
 import { fetchPurchases, PurchaseDTO, redeemPurchase } from '../../services/purchasesApi';
 import { fetchUserByEmail, UserDTO } from '../../services/usersApi';
 import MarketPlaceCard from '../../components/MarketPlaceCard/MarketPlaceCard';
+import { MyBotsEcosystemMap } from '../../components/Admin/MyBotsEcosystemMap';
+import type { MyBotEcosystemBotDTO } from '../../services/mybotEcosystemApi';
 import {
   fetchMyBotCard,
   addMyBotXp,
@@ -327,13 +329,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleQueueBattle = async () => {
+  const handleQueueBattle = async (overrideBet?: number) => {
     if (!userId) return;
-    const value = Number(battleBet.replace(',', '.'));
+    const value = Number.isFinite(Number(overrideBet)) ? Number(overrideBet) : Number(battleBet.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
       setBattleError('Informe um valor válido para apostar.');
       return;
     }
+    setBattleBet(String(value));
     setBattleLoading(true);
     setBattleError(null);
     try {
@@ -349,6 +352,16 @@ const Dashboard: React.FC = () => {
     } finally {
       setBattleLoading(false);
     }
+  };
+
+  const handleChallengeBot = (bot: MyBotEcosystemBotDTO) => {
+    if (!myBotCard) {
+      setBattleError(`Ative seu My Bot antes de disputar com ${bot.name || 'MyBot'}.`);
+      return;
+    }
+    const parsed = Number(battleBet.replace(',', '.'));
+    const betValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+    handleQueueBattle(betValue);
   };
 
   const handleEvolveAttribute = async (attribute: 'forca' | 'velocidade' | 'inteligencia') => {
@@ -1066,7 +1079,7 @@ const Dashboard: React.FC = () => {
                       value={battleBet}
                       onChange={(e) => setBattleBet(e.target.value)}
                     />
-                    <button className="action-button" onClick={handleQueueBattle} disabled={battleLoading || !myBotCard}>
+                    <button className="action-button" onClick={() => handleQueueBattle()} disabled={battleLoading || !myBotCard}>
                       {battleLoading ? 'Buscando...' : 'Buscar batalha'}
                     </button>
                   </div>
@@ -1112,6 +1125,15 @@ const Dashboard: React.FC = () => {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="mybot-ecosystem">
+                <MyBotsEcosystemMap
+                  mode="user"
+                  viewerId={userId}
+                  showChallenge
+                  onChallenge={handleChallengeBot}
+                />
               </div>
 
               <div className="mybot-marketplace">
