@@ -4,7 +4,16 @@ var code;
 var cdn = [];
 var cdnCounter = 0;
 
+// Inicializando os editores e tornando-os globais para uso consistente
 var editorHTML = ace.edit("editorHTML");
+var editorCSS = ace.edit("editorCSS");
+var editorJS = ace.edit("editorJS");
+
+window.htmlEditor = editorHTML;
+window.cssEditor = editorCSS;
+window.jsEditor = editorJS;
+
+// Configuração dos editores
 editorHTML.setTheme("ace/theme/xcode");
 editorHTML.session.setMode("ace/mode/html");
 editorHTML.session.setNewLineMode("unix");
@@ -14,217 +23,162 @@ editorHTML.setOptions({
     enableLiveAutocompletion: true
 });
 
-var editorJS = ace.edit("editorJS");
-editorJS.setTheme("ace/theme/xcode");
-editorJS.session.setMode("ace/mode/javascript");
-editorJS.session.setNewLineMode("unix");
-editorJS.session.setValue("// Enter your JavaScript code here");
-editorJS.setOptions({
-    enableBasicAutocompletion: true,
-    enableSnippets: true,
-    enableLiveAutocompletion: true
-});
-
-var editorCSS = ace.edit("editorCSS");
 editorCSS.setTheme("ace/theme/xcode");
 editorCSS.session.setMode("ace/mode/css");
 editorCSS.session.setNewLineMode("unix");
-editorCSS.setValue(`
-/* CSS Estilizado para o Layout */
-        body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        margin: 0;
-        padding: 0;
-        background-color: #0f172a;
-        color: #f1f5f9;
-        line-height: 1.6;
-        }
-
-        header {
-        background-color: #1e293b;
-        padding: 2rem;
-        text-align: center;
-        }
-
-        header h1 {
-        margin: 0;
-        font-size: 2.5rem;
-        color: #38bdf8;
-        }
-
-        header p {
-        margin: 0.5rem 0 0;
-        font-size: 1.2rem;
-        color: #cbd5e1;
-        }
-
-        section {
-        padding: 2rem;
-        max-width: 800px;
-        margin: auto;
-        }
-
-        h2 {
-        color: #7dd3fc;
-        border-bottom: 1px solid #334155;
-        padding-bottom: 0.5rem;
-        margin-bottom: 1rem;
-        }
-
-        ul {
-        list-style-type: square;
-        padding-left: 1.5rem;
-        }
-
-        footer {
-        background-color: #1e293b;
-        color: #94a3b8;
-        text-align: center;
-        padding: 1.5rem;
-        margin-top: 3rem;
-        }
-
-        .social-links {
-        display: flex;
-        justify-content: center;
-        gap: 2rem;
-        margin-top: 1rem;
-        }
-
-        .social-links a {
-        color: #38bdf8;
-        text-decoration: none;
-        font-weight: bold;
-        transition: color 0.3s ease;
-        }
-
-        .social-links a:hover {
-        color: #facc15;
-        }
-  
-`);
 editorCSS.setOptions({
     enableBasicAutocompletion: true,
     enableSnippets: true,
     enableLiveAutocompletion: true
 });
 
-window.onload = function () {
-    editorHTML.setValue(`
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dev Portfolio - Saulo Candeira</title>
-    
-    </head>
+editorJS.setTheme("ace/theme/xcode");
+editorJS.session.setMode("ace/mode/javascript");
+editorJS.session.setNewLineMode("unix");
+editorJS.setOptions({
+    enableBasicAutocompletion: true,
+    enableSnippets: true,
+    enableLiveAutocompletion: true
+});
 
-    <body>
-    <header>
-        <h1>Saulo Candeira</h1>
-        <p>Desenvolvedor Full Stack | JavaScript • React • Node.js</p>
-    </header>
+var appContext = window.APP_CONTEXT || {};
+var API_BASE = appContext.apiBase || "/api";
+var userId = appContext.userId || (localStorage.getItem("email") || "").toLowerCase();
+var projectId = appContext.projectId || new URLSearchParams(window.location.search).get("projectId") || "";
 
-    <section>
-        <h2>👨‍💻 Sobre Mim</h2>
-        <p>Sou um desenvolvedor apaixonado por tecnologia e inovação. Com experiência em aplicações web e mobile, estou sempre em busca de novos desafios.</p>
-    </section>
-
-    <section>
-        <h2>🛠️ Tecnologias</h2>
-        <ul>
-        <li>React, Next.js, Vue.js</li>
-        <li>Node.js, Express, MongoDB</li>
-        <li>Docker, Git, CI/CD</li>
-        </ul>
-    </section>
-
-    <section>
-        <h2>📞 Contato</h2>
-        <p>Você pode me encontrar nas redes abaixo:</p>
-        <div class="social-links">
-        <a href="https://www.linkedin.com/in/joaosilva" target="_blank">LinkedIn</a>
-        <a href="https://github.com/joaosilva" target="_blank">GitHub</a>
-        <a href="https://wa.me/5511999999999" target="_blank">WhatsApp</a>
-        </div>
-    </section>
-
-    <footer>
-        <p>&copy; 2025 IHK. Todos os direitos reservados.</p>
-    </footer>
-    </body>
-    </html>
-
-    `);
-
-    updatePageContent();
-}
-
-var getHTMLContent = function () {
+function getHTMLContent() {
     return editorHTML.getValue();
 }
 
-var getCSSContent = function () {
+function getCSSContent() {
     return editorCSS.getValue();
 }
 
-var getJSContent = function () {
+function getJSContent() {
     return editorJS.getValue();
 }
 
-var setHTMLContent = function (content) {
-    editorHTML.setValue(content);
-}
-
-var beautifyHTML = function () {
+function beautifyHTML() {
     beautify.beautify(editorHTML.session);
 }
 
-var setPreview = function (content) {
-    document.getElementById('output').src = "data:text/html;charset=utf-8," + encodeURIComponent(content);
+function setPreview(content) {
+    document.getElementById("output").src = "data:text/html;charset=utf-8," + encodeURIComponent(content);
 }
 
-var updatePageContent = function () {
-    var html = localStorage.getItem("htmlContent") || getHTMLContent();
-    var css = getCSSContent();
-    var js = getJSContent();
+function buildPreview(htmlCode, cssCode, jsCode) {
+    try {
+        var parser = new DOMParser();
+        var parsed = parser.parseFromString(htmlCode || "", "text/html");
+        var styleTag = parsed.querySelector("style#dynamicCSS");
+        if (!styleTag) {
+            styleTag = parsed.createElement("style");
+            styleTag.id = "dynamicCSS";
+            parsed.head.appendChild(styleTag);
+        }
+        styleTag.textContent = cssCode || "";
 
-    if (html.includes('<style id="dynamicCSS"></style>')) {
-        html = html.replace('<style id="dynamicCSS"></style>', `<style id="dynamicCSS">${css}</style>`);
-    } else {
-        html = html.replace('</head>', `<style id="dynamicCSS">${css}</style></head>`);
+        if (jsCode) {
+            var scriptTag = parsed.createElement("script");
+            scriptTag.textContent = `try {\n${jsCode}\n} catch (error) { document.body.innerHTML += '<pre style="color:red;">Erro no JavaScript:\n' + error + '</pre>'; }`;
+            parsed.body.appendChild(scriptTag);
+        }
+
+        return "<!DOCTYPE html>\n" + parsed.documentElement.outerHTML;
+    } catch (err) {
+        console.error("❌ HTML inválido:", err.message);
+        return "<html><body style=\"font-family:sans-serif; color: red;\"><h2>❌ HTML inválido</h2><pre>" + err.message + "</pre></body></html>";
     }
-
-    html = html.replace('<script id="dynamicJS"></script>', `<script id="dynamicJS">${js}</script>`);
-
-    setPreview(html);
-    localStorage.setItem("htmlContent", html);
 }
 
-editorHTML.getSession().on('change', function () {
-    localStorage.setItem("htmlContent", getHTMLContent());
+function updatePageContent() {
+    var htmlCode = getHTMLContent();
+    var cssCode = getCSSContent();
+    var jsCode = getJSContent();
+    var fullDocument = buildPreview(htmlCode, cssCode, jsCode);
+
+    var previewFrame = document.getElementById("previewFrame");
+    if (previewFrame) {
+        previewFrame.srcdoc = fullDocument;
+    }
+}
+
+function fetchProjectContent() {
+    if (!projectId || !userId) {
+        console.warn("⚠️ projectId/userId ausentes para carregar conteúdo.");
+        return;
+    }
+    fetch(API_BASE + "/projects/" + encodeURIComponent(projectId) + "/content?userId=" + encodeURIComponent(userId))
+        .then(function (res) {
+            if (!res.ok) throw new Error("Falha ao carregar conteúdo");
+            return res.json();
+        })
+        .then(function (data) {
+            editorHTML.setValue(data.htmlContent || "", -1);
+            editorCSS.setValue(data.cssContent || "", -1);
+            editorJS.setValue("", -1);
+            updatePageContent();
+        })
+        .catch(function (err) {
+            console.error("❌ Erro ao carregar conteúdo:", err);
+        });
+}
+
+var saveTimer = null;
+function scheduleSave() {
+    if (!projectId || !userId) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+        var payload = {
+            userId: userId,
+            htmlContent: getHTMLContent(),
+            cssContent: getCSSContent()
+        };
+        fetch(API_BASE + "/projects/" + encodeURIComponent(projectId) + "/content", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        }).catch(function (err) {
+            console.error("❌ Erro ao salvar conteúdo:", err);
+        });
+    }, 600);
+}
+
+window.onload = function () {
+    fetchProjectContent();
     updatePageContent();
+};
+
+// Eventos de mudança
+editorHTML.getSession().on("change", function () {
+    updatePageContent();
+    scheduleSave();
 });
 
-editorCSS.getSession().on('change', function () {
+editorCSS.getSession().on("change", function () {
     updatePageContent();
+    scheduleSave();
 });
 
-editorJS.getSession().on('change', function () {
-    updatePageContent();
-});
+editorJS.getSession().on("change", updatePageContent);
 
 function newPage() {
-    var url = "data:text/html;charset=utf-8," + encodeURIComponent(localStorage.getItem("htmlContent"));
-    var tabOrWindow = window.open(url, '_blank');
-    tabOrWindow.focus();
+    var html = getHTMLContent();
+    if (html) {
+        var win = window.open("data:text/html;charset=utf-8," + encodeURIComponent(html), "_blank");
+        if (win) win.focus();
+    } else {
+        alert("Nenhum conteúdo salvo para exibir!");
+    }
 }
 
 function clearCR() {
-    location.reload();
+    editorHTML.setValue("", -1);
+    editorCSS.setValue("", -1);
+    editorJS.setValue("", -1);
+    updatePageContent();
+    scheduleSave();
 }
-
 
 function changeTab(tabNumber) {
     document.getElementById("editorHTML").style.display = (tabNumber === 1) ? 'block' : 'none';
