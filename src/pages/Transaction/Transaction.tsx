@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import './Product.css';
+import { logger } from '../../lib/logger';
 
 const Transaction: React.FC = () => {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ const Transaction: React.FC = () => {
     const checkoutData = location.state?.checkoutData; // Captura os dados enviados pelo navigate
   
     useEffect(() => {
-      console.log('Dados recebidos no Checkout:', checkoutData);
+      logger.info('Dados recebidos no Checkout', { checkoutData });
     }, [checkoutData]);
 
   const handleEnroll = () => {

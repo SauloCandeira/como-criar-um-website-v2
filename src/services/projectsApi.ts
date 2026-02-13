@@ -20,6 +20,9 @@ export interface ProjectDTO {
   createdFromPurchase?: boolean;
   isTemplate?: boolean;
   purchaseId?: string;
+  version?: number;
+  templateId?: string;
+  templateVersion?: number;
   htmlContent?: string;
   cssContent?: string;
   createdAt?: string;
@@ -38,6 +41,11 @@ const normalizeProject = (project: any): ProjectDTO => ({
   createdFromPurchase: project.createdFromPurchase ?? project.created_from_purchase ?? false,
   isTemplate: project.isTemplate ?? project.is_template ?? false,
   purchaseId: project.purchaseId ?? project.purchase_id ?? '',
+  version: Number.isFinite(Number(project.version)) ? Number(project.version) : 1,
+  templateId: project.templateId ?? project.template_id ?? '',
+  templateVersion: Number.isFinite(Number(project.templateVersion ?? project.template_version))
+    ? Number(project.templateVersion ?? project.template_version)
+    : undefined,
   htmlContent: project.htmlContent ?? project.html_content ?? '',
   cssContent: project.cssContent ?? project.css_content ?? '',
   createdAt: project.createdAt ?? project.created_at ?? '',
@@ -51,6 +59,17 @@ export interface ProjectContentDTO {
   projectId: string;
   htmlContent: string;
   cssContent: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ProjectFileDTO {
+  id: string;
+  projectId: string;
+  fileName: string;
+  fileType: string;
+  content: string;
+  storagePath?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -78,6 +97,7 @@ export async function createProject(payload: Omit<ProjectDTO, "id">) {
       purchaseCount: payload.purchaseCount,
       ownerUserId: payload.ownerUserId,
       productId: payload.productId,
+      templateId: payload.templateId,
     }),
   });
   if (!res.ok) throw new Error("Falha ao criar projeto");
@@ -125,4 +145,64 @@ export async function updateProjectContent(projectId: string, payload: { userId:
   });
   if (!res.ok) throw new Error("Falha ao salvar conteúdo do projeto");
   return res.json();
+}
+
+export async function cloneTemplate(templateId: string, userId: string) {
+  const res = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/clone`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error("Falha ao clonar template");
+  const data = await res.json();
+  return normalizeProject(data);
+}
+
+const normalizeProjectFile = (file: any): ProjectFileDTO => ({
+  id: file.id,
+  projectId: file.projectId ?? file.project_id ?? "",
+  fileName: file.fileName ?? file.file_name ?? "",
+  fileType: file.fileType ?? file.file_type ?? "html",
+  content: file.content ?? "",
+  storagePath: file.storagePath ?? file.storage_path ?? "",
+  createdAt: file.createdAt ?? file.created_at ?? "",
+  updatedAt: file.updatedAt ?? file.updated_at ?? "",
+});
+
+export async function fetchProjectFiles(projectId: string, userId: string): Promise<ProjectFileDTO[]> {
+  const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/files?userId=${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error("Falha ao carregar arquivos do projeto");
+  const data = await res.json();
+  return Array.isArray(data) ? data.map(normalizeProjectFile) : [];
+}
+
+export async function createProjectFile(projectId: string, payload: { userId: string; fileName: string; fileType: string; content: string }) {
+  const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Falha ao criar arquivo do projeto");
+  const data = await res.json();
+  return normalizeProjectFile(data);
+}
+
+export async function updateProjectFile(projectId: string, fileId: string, payload: { userId: string; fileName: string; fileType: string; content: string }) {
+  const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Falha ao atualizar arquivo do projeto");
+  const data = await res.json();
+  return normalizeProjectFile(data);
+}
+
+export async function deleteProjectFile(projectId: string, fileId: string, userId: string) {
+  const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) throw new Error("Falha ao excluir arquivo do projeto");
 }

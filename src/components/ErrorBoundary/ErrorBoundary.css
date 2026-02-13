@@ -1,0 +1,14 @@
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 32px;
+  text-align: center;
+  color: #0f172a;
+}
+
+.error-boundary h2 {
+  margin-bottom: 12px;
+}

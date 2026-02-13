@@ -8,10 +8,11 @@ type TodoBoardProps = {
   onAdd: (text: string) => void | Promise<void>;
   onMove: (itemId: string, status: KanbanStatus) => void | Promise<void>;
   onRemove: (itemId: string) => void | Promise<void>;
+  onEdit?: (itemId: string, text: string) => void | Promise<void>;
   isLoading?: boolean;
 };
 
-export default function TodoBoard({ columns, items, onAdd, onMove, onRemove, isLoading }: TodoBoardProps) {
+export default function TodoBoard({ columns, items, onAdd, onMove, onRemove, onEdit, isLoading }: TodoBoardProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [newTodo, setNewTodo] = useState("");
 
@@ -29,6 +30,14 @@ export default function TodoBoard({ columns, items, onAdd, onMove, onRemove, isL
 
   function removeTodo(id: string) {
     onRemove(id);
+  }
+
+  async function editTodo(id: string, currentText: string) {
+    if (!onEdit) return;
+    const nextText = window.prompt("Editar tarefa", currentText);
+    if (nextText === null) return;
+    if (!nextText.trim()) return;
+    await onEdit(id, nextText.trim());
   }
 
   function renderColumn(column: KanbanColumn) {
@@ -50,6 +59,11 @@ export default function TodoBoard({ columns, items, onAdd, onMove, onRemove, isL
               onDragStart={() => setDraggedId(item.id)}
             >
               <span>{item.text}</span>
+              {onEdit && (
+                <button className="todo-edit" onClick={() => editTodo(item.id, item.text)} aria-label="Editar">
+                  ✏️
+                </button>
+              )}
               <span className="close" onClick={() => removeTodo(item.id)}>
                 ×
               </span>

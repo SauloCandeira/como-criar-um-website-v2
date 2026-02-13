@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './Admin.css';
 import { Line, Bar } from 'react-chartjs-2';
@@ -7,20 +7,44 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../lib/init-firebase';
 import { deleteUser, fetchUserByEmail, fetchUsers, updateUser, upsertUser, UserDTO } from '../../services/usersApi';
 import LayoutPrivate from '../../components/LayoutPrivate/LayoutPrivate';
+import { BreadcrumbleItem } from '../../components/Breadcrumble/Breadcrumble';
 import MyBotsList from '../../components/Admin/MyBotsList';
 import { MyBotsLeaderboard } from '../../components/MyBotsLeaderboard';
 import { DaoAdminPanel } from '../../components/DaoAdminPanel';
 import { MyBotsEcosystemMap } from '../../components/Admin/MyBotsEcosystemMap';
 import { createProduct, deleteProduct, fetchProducts, updateProduct } from '../../services/productsApi';
-import { createProject, deleteProject, fetchProjects, updateProject } from '../../services/projectsApi';
+import { cloneTemplate, createProject, deleteProject, fetchProjects, updateProject } from '../../services/projectsApi';
+import { fetchTemplateById, updateTemplate } from '../../services/templatesApi';
 import { createCost, deleteCost, fetchCosts, updateCost } from '../../services/costsApi';
 import { fetchSales, SaleDTO } from '../../services/salesApi';
 import { fetchAccesses, AccessDTO } from '../../services/accessesApi';
-import { listReportsByProject } from '../../services/aiReportApi';
+import { listIaReports } from '../../services/iaReportsApi';
 import type { AiReport } from '../../services/aiReportTypes';
+import { createIaTask, listAiTasks } from '../../services/aiTasksApi.ts';
+import type { AiTask } from '../../services/aiTaskTypes';
+import { createIaConversation, listIaConversations, listIaMessages, sendIaMessage } from '../../services/iaChatApi.ts';
+import type { IaConversation, IaMessage } from '../../services/iaChatTypes.ts';
+import { createIaAgent, executeIaAgent, listIaAgents, updateIaAgent } from '../../services/iaAgentsApi.ts';
+import type { IaAgent, IaAgentExecutionResult } from '../../services/iaAgentsTypes.ts';
+import { createIaContext, deleteIaContext, listIaContexts, updateIaContext } from '../../services/iaContextsApi.ts';
+import type { IaContext } from '../../services/iaContextsTypes.ts';
+import { createIaMemory, fetchIaMemoryStats, searchIaMemory } from '../../services/iaMemoryApi.ts';
+import type { IaMemoryItem, IaMemoryStats } from '../../services/iaMemoryTypes.ts';
+import { activateIaPromptVersion, fetchIaPrompt, listIaPromptVersions, listIaPrompts, reembedIaPrompt, updateIaPrompt } from '../../services/iaPromptsApi.ts';
+import type { IaPromptItem, IaPromptVersion } from '../../services/iaPromptsTypes.ts';
+import { activateIaOrchestrator, createIaOrchestrator, fetchActiveIaOrchestrator, fetchIaOrchestratorContent, fetchIaOrchestratorSummary, listIaOrchestratorExecutions, listIaOrchestrators, updateIaOrchestrator } from '../../services/iaOrchestratorsApi';
+import type { IaOrchestrator, IaOrchestratorContent, IaOrchestratorExecution, IaOrchestratorSummary } from '../../services/iaOrchestratorsTypes';
+import { fetchIaConfig, updateIaConfig, IaConfig } from '../../services/iaConfigApi';
+import { fetchSonarIssues, fetchSonarSummary, SonarIssueDTO, SonarSummaryDTO } from '../../services/sonarCloudApi';
+import { fetchCiStatus, type CiStatusDTO } from '../../services/ciStatusApi';
+import { fetchHealthStatus, type HealthStatusDTO } from '../../services/healthApi.ts';
+import { resolveHKTechIssues, runHKTechAutofix, simulateHKTechFix, HKTechAiResult } from '../../services/hktechAiApi';
 import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
-import { resetAllPurchases, resetClonedProjects, resetFreeRedeems, resetFull, resetPaidSales } from '../../services/adminToolsApi';
+import { migrateIaTasks, resetAllPurchases, resetClonedProjects, resetFreeRedeems, resetFull, resetIaTasks, resetPaidSales } from '../../services/adminToolsApi';
 import { fetchAdminMyBotBattles, AdminMyBotBattleDTO } from '../../services/adminMybotApi';
+import AdminSidebarMenu, { MenuGroupConfig, MenuItemConfig } from '../../components/Admin/AdminSidebarMenu';
+import TemplateEditor from '../../components/Admin/TemplateEditor';
+import { FinanceiroCustos, FinanceiroResgates, FinanceiroVendas } from './Financeiro';
 
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -33,6 +57,7 @@ interface ProductItem {
   price: string;
   description: string;
   productType?: string;
+  templateId?: string;
   showOnHome?: boolean;
   showOnMarketplace?: boolean;
   purchasePrice?: string;
@@ -54,6 +79,12 @@ interface ProjectItem {
   paid: boolean;
   isPublic: boolean;
   ownerUserId?: string;
+  isTemplate?: boolean;
+  templateId?: string;
+  templateVersion?: number;
+  baseProjectId?: string;
+  createdFromPurchase?: boolean;
+  version?: number;
 }
 
 interface CostItem {
@@ -80,6 +111,13 @@ interface UserItem {
 const Admin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const swaggerUrl = '/api-docs';
+  const storybookUrl = import.meta.env.VITE_STORYBOOK_URL || '/storybook';
+  const architectureUrl = import.meta.env.VITE_ARCHITECTURE_DOC_URL || '/docs/hktech.architecture.action-plan.md';
+  const templatePathMatch = location.pathname.match(/^\/admin\/projetos\/templates\/(.+)$/);
+  const templateEditorId = templatePathMatch ? templatePathMatch[1] : null;
+  const isTemplateCreateRoute = templateEditorId === 'novo';
+  const isTemplateEditorRoute = !!templateEditorId && templateEditorId !== 'novo';
   const currentEmail = (localStorage.getItem('email') || '').toLowerCase();
   const effectiveAdminId = (currentEmail || auth.currentUser?.email || '').toLowerCase();
   useEffect(() => {
@@ -103,9 +141,34 @@ const Admin: React.FC = () => {
     return () => unsubscribe();
   }, [currentEmail, navigate]);
 
+  useEffect(() => {
+    if (!isTemplateEditorRoute || !templateEditorId) {
+      setTemplateBreadcrumbLabel('');
+      return;
+    }
+    let isMounted = true;
+    const loadTemplateLabel = async () => {
+      try {
+        const template = await fetchTemplateById(templateEditorId);
+        if (isMounted) setTemplateBreadcrumbLabel(template.name ?? '');
+      } catch (error) {
+        if (isMounted) setTemplateBreadcrumbLabel('');
+      }
+    };
+    loadTemplateLabel();
+    return () => {
+      isMounted = false;
+    };
+  }, [isTemplateEditorRoute, templateEditorId]);
+
   const [activeTab, setActiveTab] = useState('users');
   const [mybotsSubTab, setMybotsSubTab] = useState<'overview' | 'battles' | 'ecosystem'>('overview');
-  const [expandedMenuId, setExpandedMenuId] = useState<string | null>(null);
+  const [daoSubTab, setDaoSubTab] = useState<'propostas' | 'votacoes' | 'tesouraria' | 'membros'>('propostas');
+  const [financeSubTab, setFinanceSubTab] = useState<'vendas' | 'resgates' | 'custos'>('vendas');
+  const [projectsSubTab, setProjectsSubTab] = useState<'templates' | 'clonados'>('templates');
+  const [expandedSectionIds, setExpandedSectionIds] = useState<string[]>([
+    
+  ]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -125,12 +188,13 @@ const Admin: React.FC = () => {
     email: '',
     permissionLevel: 'A' as 'A' | 'B' | 'C'
   });
+
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', productType: 'digital', templateId: '', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
-  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
+  const [editProductData, setEditProductData] = useState({ id: '', name: '', price: '', description: '', productType: 'digital', templateId: '', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -150,6 +214,92 @@ const Admin: React.FC = () => {
   const [aiReports, setAiReports] = useState<AiReport[]>([]);
   const [aiReportsLoading, setAiReportsLoading] = useState(false);
   const [aiReportsError, setAiReportsError] = useState<string | null>(null);
+  const [aiTasks, setAiTasks] = useState<AiTask[]>([]);
+  const [aiTasksLoading, setAiTasksLoading] = useState(false);
+  const [aiTasksError, setAiTasksError] = useState<string | null>(null);
+  const [iaTasksStatusFilter, setIaTasksStatusFilter] = useState<string>('all');
+  const [iaTasksPage, setIaTasksPage] = useState(1);
+  const [iaTaskForm, setIaTaskForm] = useState({ title: '', description: '', status: 'TODO', linkedAgentId: '', specialistType: '', contextReference: '' });
+  const [iaConversations, setIaConversations] = useState<IaConversation[]>([]);
+  const [iaConversationsLoading, setIaConversationsLoading] = useState(false);
+  const [iaConversationsError, setIaConversationsError] = useState<string | null>(null);
+  const [iaMessages, setIaMessages] = useState<IaMessage[]>([]);
+  const [iaMessagesLoading, setIaMessagesLoading] = useState(false);
+  const [iaMessagesError, setIaMessagesError] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [newConversationTitle, setNewConversationTitle] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const [iaAgents, setIaAgents] = useState<IaAgent[]>([]);
+  const [iaAgentsLoading, setIaAgentsLoading] = useState(false);
+  const [iaAgentsError, setIaAgentsError] = useState<string | null>(null);
+  const [agentForm, setAgentForm] = useState({ name: '', description: '', specialty: '', system_prompt: '', autonomy_level: 'manual', is_active: true });
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [agentExecutionResult, setAgentExecutionResult] = useState<IaAgentExecutionResult | null>(null);
+  const [selectedAgentToExecute, setSelectedAgentToExecute] = useState('');
+  const [iaContexts, setIaContexts] = useState<IaContext[]>([]);
+  const [iaContextsLoading, setIaContextsLoading] = useState(false);
+  const [iaContextsError, setIaContextsError] = useState<string | null>(null);
+  const [contextForm, setContextForm] = useState({ title: '', content: '', context_type: '', related_agent_id: '' });
+  const [editingContextId, setEditingContextId] = useState<string | null>(null);
+  const [iaMemoryStats, setIaMemoryStats] = useState<IaMemoryStats | null>(null);
+  const [iaMemoryLoading, setIaMemoryLoading] = useState(false);
+  const [iaMemoryError, setIaMemoryError] = useState<string | null>(null);
+  const [memorySearchQuery, setMemorySearchQuery] = useState('');
+  const [memorySearchResults, setMemorySearchResults] = useState<IaMemoryItem[]>([]);
+  const [memorySearchLoading, setMemorySearchLoading] = useState(false);
+  const [iaPrompts, setIaPrompts] = useState<IaPromptItem[]>([]);
+  const [iaPromptsLoading, setIaPromptsLoading] = useState(false);
+  const [iaPromptsError, setIaPromptsError] = useState<string | null>(null);
+  const [iaPromptsCategory, setIaPromptsCategory] = useState('');
+  const [selectedPrompt, setSelectedPrompt] = useState<IaPromptItem | null>(null);
+  const [promptVersions, setPromptVersions] = useState<IaPromptVersion[]>([]);
+  const [promptVersionsLoading, setPromptVersionsLoading] = useState(false);
+  const [promptVersionsError, setPromptVersionsError] = useState<string | null>(null);
+  const [promptForm, setPromptForm] = useState({ title: '', category: '', description: '', content: '', is_active: true, reembed: false });
+  const [iaOrchestrators, setIaOrchestrators] = useState<IaOrchestrator[]>([]);
+  const [iaOrchestratorsLoading, setIaOrchestratorsLoading] = useState(false);
+  const [iaOrchestratorsError, setIaOrchestratorsError] = useState<string | null>(null);
+  const [activeOrchestrator, setActiveOrchestrator] = useState<IaOrchestrator | null>(null);
+  const [orchestratorSummary, setOrchestratorSummary] = useState<IaOrchestratorSummary | null>(null);
+  const [orchestratorExecutions, setOrchestratorExecutions] = useState<IaOrchestratorExecution[]>([]);
+  const [orchestratorExecutionsLoading, setOrchestratorExecutionsLoading] = useState(false);
+  const [orchestratorExecutionsError, setOrchestratorExecutionsError] = useState<string | null>(null);
+  const [supremePromptModal, setSupremePromptModal] = useState<IaOrchestrator | null>(null);
+  const [supremePromptContent, setSupremePromptContent] = useState<IaOrchestratorContent | null>(null);
+  const [supremePromptLoading, setSupremePromptLoading] = useState(false);
+  const [editingOrchestratorId, setEditingOrchestratorId] = useState<string | null>(null);
+  const [orchestratorForm, setOrchestratorForm] = useState({ name: '', supreme_prompt: '', execution_flow: '[]', is_active: true });
+  const [viewingContext, setViewingContext] = useState<IaContext | null>(null);
+  const [iaConfig, setIaConfig] = useState<IaConfig | null>(null);
+  const [iaConfigLoading, setIaConfigLoading] = useState(false);
+  const [iaConfigError, setIaConfigError] = useState<string | null>(null);
+  const [sonarSummary, setSonarSummary] = useState<SonarSummaryDTO | null>(null);
+  const [sonarIssues, setSonarIssues] = useState<SonarIssueDTO[]>([]);
+  const [sonarLoading, setSonarLoading] = useState(false);
+  const [sonarError, setSonarError] = useState<string | null>(null);
+  const [ciStatus, setCiStatus] = useState<CiStatusDTO | null>(null);
+  const [ciLoading, setCiLoading] = useState(false);
+  const [ciError, setCiError] = useState<string | null>(null);
+  const [healthStatus, setHealthStatus] = useState<HealthStatusDTO | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [docsLoading, setDocsLoading] = useState({ api: false, ui: false, architecture: false });
+  const [docsError, setDocsError] = useState<{ api: string | null; ui: string | null; architecture: string | null }>({
+    api: null,
+    ui: null,
+    architecture: null,
+  });
+  const [hktechAiResult, setHktechAiResult] = useState<HKTechAiResult | null>(null);
+  const [hktechAiLoading, setHktechAiLoading] = useState(false);
+  const [hktechAiError, setHktechAiError] = useState<string | null>(null);
+  const [automationMode, setAutomationMode] = useState<'manual' | 'semi' | 'controlled'>('manual');
+  const [maxIssuesPerRun, setMaxIssuesPerRun] = useState(5);
+  const [maxExecutionsPerHour, setMaxExecutionsPerHour] = useState(2);
+  const [cooldownMinutes, setCooldownMinutes] = useState(30);
+  const [simulateModalIssue, setSimulateModalIssue] = useState<SonarIssueDTO | null>(null);
+  const [simulateResult, setSimulateResult] = useState<HKTechAiResult | null>(null);
+  const [simulateLoading, setSimulateLoading] = useState(false);
   const [adminToolsConfirm, setAdminToolsConfirm] = useState('');
   const [adminToolsLoading, setAdminToolsLoading] = useState<string | null>(null);
   const [adminToolsError, setAdminToolsError] = useState<string | null>(null);
@@ -167,7 +317,16 @@ const Admin: React.FC = () => {
     status: 'Ativo',
     paid: false,
     isPublic: true,
+    isTemplate: false,
   });
+  const [templateCreateData, setTemplateCreateData] = useState({
+    name: '',
+    description: '',
+    level: '',
+    category: '',
+    blogContent: '',
+  });
+  const [templateCreateError, setTemplateCreateError] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectEditModalOpen, setIsProjectEditModalOpen] = useState(false);
   const [editProjectData, setEditProjectData] = useState({
@@ -184,8 +343,8 @@ const Admin: React.FC = () => {
     status: 'Ativo',
     paid: false,
     isPublic: true,
+    isTemplate: false,
   });
-  const aiReportsProjectId = new URLSearchParams(location.search).get('projectId') || 'HKTECH';
   const isAdmin = (localStorage.getItem('permissionLevel') || 'A') === 'B';
   const [costs, setCosts] = useState<CostItem[]>([]);
   const [costsLoading, setCostsLoading] = useState(false);
@@ -198,55 +357,257 @@ const Admin: React.FC = () => {
   const [mybotBattlesLoading, setMybotBattlesLoading] = useState(false);
   const [mybotBattlesError, setMybotBattlesError] = useState<string | null>(null);
   const [selectedMyBotBattle, setSelectedMyBotBattle] = useState<AdminMyBotBattleDTO | null>(null);
+  const [templateBreadcrumbLabel, setTemplateBreadcrumbLabel] = useState<string>('');
   const sidebarRef = useRef<HTMLElement | null>(null);
 
-  type MenuItemConfig = {
-    id: string;
-    label: string;
-    children?: Array<{ id: string; label: string }>;
-    adminOnly?: boolean;
+  const permissionFlags = (localStorage.getItem('permissionFlags') || '')
+    .split(',')
+    .map((flag) => flag.trim())
+    .filter(Boolean);
+
+  const hasPermission = (flag?: string) => {
+    if (!flag) return true;
+    return isAdmin || permissionFlags.includes(flag);
   };
 
-  const menuItems: MenuItemConfig[] = [
-    { id: 'reports', label: 'Relatórios' },
-    { id: 'accounting', label: 'Contabilidade' },
-    { id: 'users', label: 'Usuários' },
-    { id: 'sales', label: 'Vendas' },
-    { id: 'redeems', label: 'Resgates' },
-    { id: 'projects', label: 'Projetos' },
-    { id: 'products', label: 'Produtos' },
-    { id: 'costs', label: 'Custos' },
-    { id: 'ai-reports', label: 'AI Reports' },
+  const canViewFinance = hasPermission('ADMIN_FINANCEIRO_VIEW');
+
+  const menuGroups: MenuGroupConfig[] = [
+    {
+      id: 'governanca',
+      label: 'Governança',
+      items: [
+        { id: 'reports', label: 'Relatórios' },
+      ],
+    },
+    {
+      id: 'ia',
+      label: 'IA',
+      items: [
+        { id: 'ia-hktech', label: 'HK IA', adminOnly: true },
+        { id: 'ia-tasks', label: 'Tasks IA', adminOnly: true },
+        { id: 'ia-agents', label: 'Agentes IA', adminOnly: true },
+        { id: 'ia-orchestrator', label: 'Orquestrador IA', adminOnly: true },
+        { id: 'ia-context', label: 'Contextos IA', adminOnly: true },
+        { id: 'ia-memory', label: 'Memória IA', adminOnly: true },
+        { id: 'ia-reports', label: 'AI Reports' },
+      ],
+    },
+    {
+      id: 'monitoramento',
+      label: 'Monitoramento',
+      items: [
+        { id: 'monitoramento-overview', label: 'Visão geral' },
+        { id: 'monitoramento-sonar', label: 'SonarCloud' },
+        { id: 'monitoramento-coverage', label: 'Test Coverage' },
+        { id: 'monitoramento-ci', label: 'CI Status' },
+      ],
+    },
+    {
+      id: 'documentacao',
+      label: 'Documentação',
+      items: [
+        { id: 'documentacao-api', label: 'API (Swagger)' },
+        { id: 'documentacao-ui', label: 'UI (Storybook)' },
+        { id: 'documentacao-architecture', label: 'Architecture' },
+      ],
+    },
     {
       id: 'mybots',
       label: 'MyBots',
-      children: [
-        { id: 'overview', label: 'Visão geral' },
-        { id: 'battles', label: 'Batalhas' },
-        { id: 'ecosystem', label: 'Ecossistema' },
+      items: [
+        { id: 'overview', label: 'Visão geral', targetMenuId: 'mybots', childId: 'overview' },
+        { id: 'battles', label: 'Batalhas', targetMenuId: 'mybots', childId: 'battles' },
+        { id: 'ecosystem', label: 'Ecossistema', targetMenuId: 'mybots', childId: 'ecosystem' },
       ],
     },
-    { id: 'dao', label: 'DAO' },
-    { id: 'admin-tools', label: 'Admin Tools', adminOnly: true },
+    {
+      id: 'dao',
+      label: 'DAO',
+      items: [
+        { id: 'propostas', label: 'Propostas', targetMenuId: 'dao', childId: 'propostas' },
+        { id: 'votacoes', label: 'Votações', targetMenuId: 'dao', childId: 'votacoes' },
+        { id: 'tesouraria', label: 'Tesouraria', targetMenuId: 'dao', childId: 'tesouraria' },
+        { id: 'membros', label: 'Membros', targetMenuId: 'dao', childId: 'membros' },
+      ],
+    },
+    {
+      id: 'financeiro',
+      label: 'Financeiro',
+      items: [
+        { id: 'vendas', label: 'Vendas', permissionFlag: 'ADMIN_FINANCEIRO_VIEW', targetMenuId: 'financeiro', childId: 'vendas' },
+        { id: 'resgates', label: 'Resgates', permissionFlag: 'ADMIN_FINANCEIRO_VIEW', targetMenuId: 'financeiro', childId: 'resgates' },
+        { id: 'custos', label: 'Custos', permissionFlag: 'ADMIN_FINANCEIRO_VIEW', targetMenuId: 'financeiro', childId: 'custos' },
+      ],
+    },
+    {
+      id: 'operacoes',
+      label: 'Operações',
+      items: [
+        { id: 'users', label: 'Usuários' },
+        { id: 'products', label: 'Produtos' },
+      ],
+    },
+    {
+      id: 'projetos',
+      label: 'Projetos',
+      items: [
+        { id: 'templates', label: 'Templates', targetMenuId: 'projetos', childId: 'templates' },
+        { id: 'clonados', label: 'Projetos Clonados', targetMenuId: 'projetos', childId: 'clonados' },
+      ],
+    },
+    {
+      id: 'sistema',
+      label: 'Sistema',
+      items: [
+        { id: 'admin-tools', label: 'Admin Tools', adminOnly: true },
+      ],
+    },
   ];
 
-  const handleSelectMenu = (menuId: string, childId?: string) => {
-    if (menuId === 'mybots' && childId) {
-      setActiveTab('mybots');
-      setMybotsSubTab(childId as 'overview' | 'battles' | 'ecosystem');
-      if (window.innerWidth < 768) {
-        setExpandedMenuId(null);
-      }
-      return;
-    }
-    setActiveTab(menuId);
-    if (window.innerWidth < 768) {
-      setExpandedMenuId(null);
-    }
+  const adminRouteMap: Record<string, string> = {
+    reports: '/admin/governanca/relatorios',
+    'ia-hktech': '/admin/ia/hktech',
+    'ia-tasks': '/admin/ia/tasks',
+    'ia-agents': '/admin/ia/agents',
+    'ia-orchestrator': '/admin/ia/orchestrator',
+    'ia-context': '/admin/ia/context',
+    'ia-memory': '/admin/ia/memory',
+    'ia-reports': '/admin/ia/reports',
+    'monitoramento-overview': '/admin/monitoramento/overview',
+    'monitoramento-sonar': '/admin/monitoramento/sonar',
+    'monitoramento-coverage': '/admin/monitoramento/coverage',
+    'monitoramento-ci': '/admin/monitoramento/ci',
+    'documentacao-api': '/admin/documentacao/api',
+    'documentacao-ui': '/admin/documentacao/ui',
+    'documentacao-architecture': '/admin/documentacao/architecture',
+    'mybots/overview': '/admin/mybots/overview',
+    'mybots/battles': '/admin/mybots/battles',
+    'mybots/ecosystem': '/admin/mybots/ecosystem',
+    'dao/propostas': '/admin/dao/propostas',
+    'dao/votacoes': '/admin/dao/votacoes',
+    'dao/tesouraria': '/admin/dao/tesouraria',
+    'dao/membros': '/admin/dao/membros',
+    'financeiro/vendas': '/admin/financeiro/vendas',
+    'financeiro/resgates': '/admin/financeiro/resgates',
+    'financeiro/custos': '/admin/financeiro/custos',
+    'projetos/templates': '/admin/projetos/templates',
+    'projetos/clonados': '/admin/projetos/clonados',
+    users: '/admin/operacoes/usuarios',
+    products: '/admin/operacoes/produtos',
+    'admin-tools': '/admin/sistema/tools',
   };
 
-  const toggleMenu = (menuId: string) => {
-    setExpandedMenuId((prev) => (prev === menuId ? null : menuId));
+  const getRouteForMenuItem = (item?: MenuItemConfig) => {
+    if (!item) return undefined;
+    const targetKey = item.targetMenuId && item.childId ? `${item.targetMenuId}/${item.childId}` : item.id;
+    return adminRouteMap[targetKey];
+  };
+
+  const getDefaultRouteForGroup = (group?: MenuGroupConfig) => {
+    if (!group) return undefined;
+    const firstItem = group.items.find((item) => {
+      if (item.adminOnly && !isAdmin) return false;
+      if (item.permissionFlag && !hasPermission(item.permissionFlag)) return false;
+      return true;
+    });
+    return getRouteForMenuItem(firstItem);
+  };
+
+  const adminCrumbs = useMemo(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts[0] !== 'admin') return [] as BreadcrumbleItem[];
+
+    const section = parts[1] || 'governanca';
+    const page = parts[2];
+
+    let groupId = section;
+    let itemId: string | undefined;
+
+    if (section === 'governanca') {
+      itemId = 'reports';
+    } else if (section === 'mybots') {
+      const allowed = ['overview', 'battles', 'ecosystem'] as const;
+      itemId = allowed.includes(page as typeof allowed[number]) ? page : mybotsSubTab;
+    } else if (section === 'dao') {
+      const allowed = ['propostas', 'votacoes', 'tesouraria', 'membros'] as const;
+      itemId = allowed.includes(page as typeof allowed[number]) ? page : daoSubTab;
+    } else if (section === 'financeiro') {
+      const allowed = ['vendas', 'resgates', 'custos'] as const;
+      itemId = allowed.includes(page as typeof allowed[number]) ? page : financeSubTab;
+    } else if (section === 'projetos') {
+      const allowed = ['templates', 'clonados'] as const;
+      itemId = allowed.includes(page as typeof allowed[number]) ? page : projectsSubTab;
+    } else if (section === 'ia') {
+      if (page === 'hktech') itemId = 'ia-hktech';
+      else if (page === 'tasks') itemId = 'ia-tasks';
+      else if (page === 'agents') itemId = 'ia-agents';
+      else if (page === 'orchestrator') itemId = 'ia-orchestrator';
+      else if (page === 'context') itemId = 'ia-context';
+      else if (page === 'memory') itemId = 'ia-memory';
+      else if (page === 'reports') itemId = 'ia-reports';
+      else itemId = 'ia-hktech';
+    } else if (section === 'monitoramento') {
+      if (page === 'sonar') itemId = 'monitoramento-sonar';
+      else if (page === 'coverage') itemId = 'monitoramento-coverage';
+      else if (page === 'ci') itemId = 'monitoramento-ci';
+      else itemId = 'monitoramento-sonar';
+    } else if (section === 'documentacao') {
+      if (page === 'api') itemId = 'documentacao-api';
+      else if (page === 'ui') itemId = 'documentacao-ui';
+      else if (page === 'architecture') itemId = 'documentacao-architecture';
+      else itemId = 'documentacao-api';
+    } else if (section === 'operacoes') {
+      if (page === 'usuarios') itemId = 'users';
+      else if (page === 'produtos') itemId = 'products';
+      else itemId = 'users';
+    } else if (section === 'sistema') {
+      if (page === 'tools') itemId = 'admin-tools';
+      else itemId = 'admin-tools';
+    } else {
+      groupId = 'governanca';
+      itemId = 'reports';
+    }
+
+    const group = menuGroups.find((entry) => entry.id === groupId) ?? menuGroups[0];
+    const item = group?.items.find((entry) => entry.id === itemId) ?? group?.items[0];
+    const groupRoute = getDefaultRouteForGroup(group);
+    const itemRoute = getRouteForMenuItem(item);
+
+    const crumbs: BreadcrumbleItem[] = [{ label: 'Admin', to: '/admin' }];
+    if (group) {
+      crumbs.push({ label: group.label, to: groupRoute });
+    }
+    if (item) {
+      crumbs.push({ label: item.label, to: itemRoute });
+    }
+    if (isTemplateEditorRoute && templateBreadcrumbLabel) {
+      crumbs.push({ label: templateBreadcrumbLabel });
+    }
+    return crumbs;
+  }, [
+    location.pathname,
+    menuGroups,
+    mybotsSubTab,
+    daoSubTab,
+    financeSubTab,
+    projectsSubTab,
+    isAdmin,
+    hasPermission,
+    isTemplateEditorRoute,
+    templateBreadcrumbLabel,
+  ]);
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSectionIds((prev) =>
+      prev.includes(sectionId) ? prev.filter((id) => id !== sectionId) : [...prev, sectionId]
+    );
+  };
+
+  const handleSelectMenu = (menuId: string, childId?: string) => {
+    const target = childId ? `${menuId}/${childId}` : menuId;
+    const nextRoute = adminRouteMap[target] ?? '/admin/governanca/relatorios';
+    navigate(nextRoute);
   };
 
 
@@ -329,16 +690,560 @@ const Admin: React.FC = () => {
   };
 
   const loadAiReports = async () => {
+    if (!effectiveAdminId) return;
     setAiReportsLoading(true);
     setAiReportsError(null);
     try {
-      const data = await listReportsByProject(aiReportsProjectId);
+      const data = await listIaReports(effectiveAdminId);
       setAiReports(data);
     } catch (error) {
       console.error('Erro ao buscar AI reports:', error);
       setAiReportsError('Não foi possível carregar os relatórios de IA.');
     } finally {
       setAiReportsLoading(false);
+    }
+  };
+
+  const loadIaConfig = async () => {
+    if (!effectiveAdminId) return;
+    setIaConfigLoading(true);
+    setIaConfigError(null);
+    try {
+      const data = await fetchIaConfig(effectiveAdminId);
+      setIaConfig(data);
+      if (typeof data.maxTasksPerRun === 'number') {
+        setMaxIssuesPerRun(data.maxTasksPerRun);
+      }
+      if (typeof data.maxExecutionsPerHour === 'number') {
+        setMaxExecutionsPerHour(data.maxExecutionsPerHour);
+      }
+      if (typeof data.cooldownMinutes === 'number') {
+        setCooldownMinutes(data.cooldownMinutes);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar config IA:', error);
+      setIaConfigError('Não foi possível carregar a configuração de IA.');
+    } finally {
+      setIaConfigLoading(false);
+    }
+  };
+
+  const loadAiTasks = async () => {
+    if (!effectiveAdminId) return;
+    setAiTasksLoading(true);
+    setAiTasksError(null);
+    try {
+      const data = await listAiTasks(effectiveAdminId);
+      setAiTasks(data);
+    } catch (error) {
+      console.error('Erro ao buscar tarefas de IA:', error);
+      setAiTasksError('Não foi possível carregar as tarefas de IA.');
+    } finally {
+      setAiTasksLoading(false);
+    }
+  };
+
+  const loadIaConversations = async () => {
+    if (!effectiveAdminId) return;
+    setIaConversationsLoading(true);
+    setIaConversationsError(null);
+    try {
+      const data = await listIaConversations(effectiveAdminId);
+      setIaConversations(data);
+      if (!selectedConversationId && data[0]?.id) {
+        setSelectedConversationId(data[0].id);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar conversas IA:', error);
+      setIaConversationsError('Não foi possível carregar as conversas IA.');
+    } finally {
+      setIaConversationsLoading(false);
+    }
+  };
+
+  const loadIaMessages = async (conversationId: string) => {
+    if (!effectiveAdminId) return;
+    setIaMessagesLoading(true);
+    setIaMessagesError(null);
+    try {
+      const data = await listIaMessages(effectiveAdminId, conversationId);
+      setIaMessages(data);
+    } catch (error) {
+      console.error('Erro ao carregar mensagens IA:', error);
+      setIaMessagesError('Não foi possível carregar as mensagens IA.');
+    } finally {
+      setIaMessagesLoading(false);
+    }
+  };
+
+  const handleCreateConversation = async () => {
+    if (!effectiveAdminId) return;
+    try {
+      const convo = await createIaConversation(effectiveAdminId, newConversationTitle || undefined);
+      setNewConversationTitle('');
+      setIaConversations((prev) => [convo, ...prev]);
+      setSelectedConversationId(convo.id);
+      setIaMessages([]);
+    } catch (error) {
+      console.error('Erro ao criar conversa IA:', error);
+      setIaConversationsError('Não foi possível criar a conversa IA.');
+    }
+  };
+
+  const handleSendChat = async () => {
+    if (!effectiveAdminId || !chatInput.trim()) return;
+    setChatSending(true);
+    try {
+      const response = await sendIaMessage(effectiveAdminId, selectedConversationId, chatInput.trim());
+      setChatInput('');
+      if (!selectedConversationId && response.conversationId) {
+        setSelectedConversationId(response.conversationId);
+      }
+      if (response.conversationId) {
+        await loadIaMessages(response.conversationId);
+        await loadIaConversations();
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mensagem IA:', error);
+      setIaMessagesError('Não foi possível enviar a mensagem.');
+    } finally {
+      setChatSending(false);
+    }
+  };
+
+  const loadIaAgents = async () => {
+    if (!effectiveAdminId) return;
+    setIaAgentsLoading(true);
+    setIaAgentsError(null);
+    try {
+      const data = await listIaAgents(effectiveAdminId);
+      setIaAgents(data);
+    } catch (error) {
+      console.error('Erro ao carregar agentes IA:', error);
+      setIaAgentsError('Não foi possível carregar agentes IA.');
+    } finally {
+      setIaAgentsLoading(false);
+    }
+  };
+
+  const handleSaveAgent = async () => {
+    if (!effectiveAdminId || !agentForm.name.trim()) return;
+    try {
+      if (editingAgentId) {
+        const updated = await updateIaAgent(effectiveAdminId, editingAgentId, agentForm);
+        setIaAgents((prev) => prev.map((agent) => (agent.id === updated.id ? updated : agent)));
+      } else {
+        const created = await createIaAgent(effectiveAdminId, agentForm);
+        setIaAgents((prev) => [created, ...prev]);
+      }
+      setAgentForm({ name: '', description: '', specialty: '', system_prompt: '', autonomy_level: 'manual', is_active: true });
+      setEditingAgentId(null);
+    } catch (error) {
+      console.error('Erro ao salvar agente IA:', error);
+      setIaAgentsError('Não foi possível salvar agente IA.');
+    }
+  };
+
+  const handleExecuteAgent = async (agentId: string) => {
+    if (!effectiveAdminId) return;
+    try {
+      const result = await executeIaAgent(effectiveAdminId, agentId);
+      setAgentExecutionResult(result);
+      await loadAiTasks();
+      await loadAiReports();
+    } catch (error) {
+      console.error('Erro ao executar agente IA:', error);
+      setIaAgentsError('Não foi possível executar agente IA.');
+    }
+  };
+
+  const loadIaContexts = async () => {
+    if (!effectiveAdminId) return;
+    setIaContextsLoading(true);
+    setIaContextsError(null);
+    try {
+      const data = await listIaContexts(effectiveAdminId);
+      setIaContexts(data);
+    } catch (error) {
+      console.error('Erro ao carregar contextos IA:', error);
+      setIaContextsError('Não foi possível carregar contextos IA.');
+    } finally {
+      setIaContextsLoading(false);
+    }
+  };
+
+  const handleSaveContext = async () => {
+    if (!effectiveAdminId || !contextForm.title.trim() || !contextForm.content.trim()) return;
+    try {
+      if (editingContextId) {
+        const updated = await updateIaContext(effectiveAdminId, editingContextId, contextForm);
+        setIaContexts((prev) => prev.map((ctx) => (ctx.id === updated.id ? updated : ctx)));
+      } else {
+        const created = await createIaContext(effectiveAdminId, contextForm);
+        setIaContexts((prev) => [created, ...prev]);
+      }
+      setContextForm({ title: '', content: '', context_type: '', related_agent_id: '' });
+      setEditingContextId(null);
+    } catch (error) {
+      console.error('Erro ao salvar contexto IA:', error);
+      setIaContextsError('Não foi possível salvar contexto IA.');
+    }
+  };
+
+  const handleDeleteContext = async (id: string) => {
+    if (!effectiveAdminId) return;
+    try {
+      await deleteIaContext(effectiveAdminId, id);
+      setIaContexts((prev) => prev.filter((ctx) => ctx.id !== id));
+    } catch (error) {
+      console.error('Erro ao remover contexto IA:', error);
+      setIaContextsError('Não foi possível remover contexto IA.');
+    }
+  };
+
+  const loadIaMemoryStats = async () => {
+    if (!effectiveAdminId) return;
+    setIaMemoryLoading(true);
+    setIaMemoryError(null);
+    try {
+      const stats = await fetchIaMemoryStats(effectiveAdminId);
+      setIaMemoryStats(stats);
+    } catch (error) {
+      console.error('Erro ao carregar memória IA:', error);
+      setIaMemoryError('Não foi possível carregar memória IA.');
+    } finally {
+      setIaMemoryLoading(false);
+    }
+  };
+
+  const loadIaPrompts = async () => {
+    if (!effectiveAdminId) return;
+    setIaPromptsLoading(true);
+    setIaPromptsError(null);
+    try {
+      const data = await listIaPrompts(effectiveAdminId, iaPromptsCategory || undefined);
+      setIaPrompts(data);
+    } catch (error) {
+      console.error('Erro ao carregar prompts IA:', error);
+      setIaPromptsError('Não foi possível carregar prompts IA.');
+    } finally {
+      setIaPromptsLoading(false);
+    }
+  };
+
+  const loadPromptVersions = async (promptId: string) => {
+    if (!effectiveAdminId) return;
+    setPromptVersionsLoading(true);
+    setPromptVersionsError(null);
+    try {
+      const data = await listIaPromptVersions(effectiveAdminId, promptId);
+      setPromptVersions(data);
+    } catch (error) {
+      console.error('Erro ao carregar versões do prompt IA:', error);
+      setPromptVersionsError('Não foi possível carregar o histórico do prompt.');
+    } finally {
+      setPromptVersionsLoading(false);
+    }
+  };
+
+  const loadIaOrchestrators = async () => {
+    if (!effectiveAdminId) return;
+    setIaOrchestratorsLoading(true);
+    setIaOrchestratorsError(null);
+    try {
+      const data = await listIaOrchestrators(effectiveAdminId);
+      setIaOrchestrators(data);
+    } catch (error) {
+      console.error('Erro ao carregar orquestradores IA:', error);
+      setIaOrchestratorsError('Não foi possível carregar orquestradores IA.');
+    } finally {
+      setIaOrchestratorsLoading(false);
+    }
+  };
+
+  const loadActiveOrchestrator = async () => {
+    if (!effectiveAdminId) return;
+    try {
+      const data = await fetchActiveIaOrchestrator(effectiveAdminId);
+      setActiveOrchestrator(data);
+    } catch (error) {
+      console.error('Erro ao carregar orquestrador ativo:', error);
+    }
+  };
+
+  const loadOrchestratorSummary = async () => {
+    if (!effectiveAdminId) return;
+    try {
+      const data = await fetchIaOrchestratorSummary(effectiveAdminId);
+      setOrchestratorSummary(data);
+    } catch (error) {
+      console.error('Erro ao carregar resumo do orquestrador IA:', error);
+    }
+  };
+
+  const loadOrchestratorExecutions = async (orchestratorId?: string) => {
+    if (!effectiveAdminId) return;
+    setOrchestratorExecutionsLoading(true);
+    setOrchestratorExecutionsError(null);
+    try {
+      const data = await listIaOrchestratorExecutions(effectiveAdminId, { orchestratorId, limit: 20 });
+      setOrchestratorExecutions(data);
+    } catch (error) {
+      console.error('Erro ao carregar execuções do orquestrador IA:', error);
+      setOrchestratorExecutionsError('Não foi possível carregar execuções do orquestrador IA.');
+    } finally {
+      setOrchestratorExecutionsLoading(false);
+    }
+  };
+
+  const loadOrchestratorContent = async (id: string) => {
+    if (!effectiveAdminId) return;
+    setSupremePromptLoading(true);
+    try {
+      const data = await fetchIaOrchestratorContent(effectiveAdminId, id);
+      setSupremePromptContent(data);
+      if (editingOrchestratorId === id) {
+        setOrchestratorForm((prev) => ({ ...prev, supreme_prompt: data.content }));
+      }
+      return data;
+    } catch (error) {
+      console.error('Erro ao carregar conteúdo do orquestrador IA:', error);
+      setIaOrchestratorsError('Não foi possível carregar o Supreme Prompt.');
+      return null;
+    } finally {
+      setSupremePromptLoading(false);
+    }
+  };
+
+  const handleSelectPrompt = async (promptId: string) => {
+    if (!effectiveAdminId) return;
+    try {
+      const full = await fetchIaPrompt(effectiveAdminId, promptId);
+      setSelectedPrompt(full);
+      setPromptForm({
+        title: full.title || '',
+        category: full.category || '',
+        description: full.description || '',
+        content: full.content || '',
+        is_active: full.is_active ?? true,
+        reembed: false,
+      });
+      setPromptVersions([]);
+      await loadPromptVersions(promptId);
+    } catch (error) {
+      console.error('Erro ao carregar prompt IA:', error);
+      setIaPromptsError('Não foi possível carregar o prompt.');
+    }
+  };
+
+  const handleSavePrompt = async () => {
+    if (!effectiveAdminId || !selectedPrompt) return;
+    try {
+      await updateIaPrompt(effectiveAdminId, selectedPrompt.id, {
+        title: promptForm.title,
+        category: promptForm.category,
+        description: promptForm.description,
+        content: promptForm.content,
+        is_active: promptForm.is_active,
+        reembed: promptForm.reembed,
+      });
+      setSelectedPrompt(null);
+      setPromptForm({ title: '', category: '', description: '', content: '', is_active: true, reembed: false });
+      await loadIaPrompts();
+      await loadIaMemoryStats();
+    } catch (error) {
+      console.error('Erro ao salvar prompt IA:', error);
+      setIaPromptsError('Não foi possível salvar o prompt.');
+    }
+  };
+
+  const handleReembedPrompt = async (promptId: string) => {
+    if (!effectiveAdminId) return;
+    try {
+      await reembedIaPrompt(effectiveAdminId, promptId);
+      await loadIaPrompts();
+      await loadIaMemoryStats();
+    } catch (error) {
+      console.error('Erro ao re-embutir prompt IA:', error);
+      setIaPromptsError('Não foi possível re-embutir o prompt.');
+    }
+  };
+
+  const handleExportPrompts = () => {
+    if (!effectiveAdminId) return;
+    const base = import.meta.env.VITE_API_BASE || '/api';
+    const url = `${base}/ia/prompts/export?adminId=${encodeURIComponent(effectiveAdminId)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleAdminPromptBackup = () => {
+    handleExportPrompts();
+    setAdminToolsSuccess('Backup de prompts iniciado.');
+  };
+
+  const handleAdminPromptUpdate = () => {
+    handleExportPrompts();
+    setAdminToolsSuccess('Atualização de prompts iniciada.');
+  };
+
+  const handleActivatePromptVersion = async (promptId: string, version: number) => {
+    if (!effectiveAdminId) return;
+    try {
+      await activateIaPromptVersion(effectiveAdminId, promptId, version, true);
+      await loadIaPrompts();
+      await loadPromptVersions(promptId);
+      await loadIaMemoryStats();
+    } catch (error) {
+      console.error('Erro ao ativar versão do prompt IA:', error);
+      setIaPromptsError('Não foi possível ativar a versão do prompt.');
+    }
+  };
+
+  const handleSaveOrchestrator = async () => {
+    if (!effectiveAdminId) return;
+    try {
+      const flow = orchestratorForm.execution_flow?.trim() ? JSON.parse(orchestratorForm.execution_flow) : [];
+      if (editingOrchestratorId) {
+        await updateIaOrchestrator(effectiveAdminId, editingOrchestratorId, {
+          name: orchestratorForm.name,
+          supreme_prompt: orchestratorForm.supreme_prompt,
+          execution_flow: flow,
+          is_active: orchestratorForm.is_active,
+        });
+      } else {
+        await createIaOrchestrator(effectiveAdminId, {
+          name: orchestratorForm.name,
+          supreme_prompt: orchestratorForm.supreme_prompt,
+          execution_flow: flow,
+          is_active: orchestratorForm.is_active,
+        });
+      }
+      setEditingOrchestratorId(null);
+      setOrchestratorForm({ name: '', supreme_prompt: '', execution_flow: '[]', is_active: true });
+      await loadIaOrchestrators();
+    } catch (error) {
+      console.error('Erro ao salvar orquestrador IA:', error);
+      setIaOrchestratorsError('Não foi possível salvar o orquestrador IA.');
+    }
+  };
+
+  const handleActivateOrchestrator = async (id: string) => {
+    if (!effectiveAdminId) return;
+    try {
+      await activateIaOrchestrator(effectiveAdminId, id);
+      await loadIaOrchestrators();
+    } catch (error) {
+      console.error('Erro ao ativar orquestrador IA:', error);
+      setIaOrchestratorsError('Não foi possível ativar o orquestrador IA.');
+    }
+  };
+
+
+  const handleMemorySearch = async () => {
+    if (!effectiveAdminId || !memorySearchQuery.trim()) return;
+    setMemorySearchLoading(true);
+    try {
+      const results = await searchIaMemory(effectiveAdminId, { query: memorySearchQuery.trim(), topK: 5 });
+      setMemorySearchResults(results);
+    } catch (error) {
+      console.error('Erro ao buscar memória IA:', error);
+      setIaMemoryError('Não foi possível buscar memória IA.');
+    } finally {
+      setMemorySearchLoading(false);
+    }
+  };
+
+  const handleCreateMemory = async () => {
+    if (!effectiveAdminId || !memorySearchQuery.trim()) return;
+    try {
+      await createIaMemory(effectiveAdminId, { content: memorySearchQuery.trim(), context_type: 'manual' });
+      await loadIaMemoryStats();
+      setMemorySearchQuery('');
+    } catch (error) {
+      console.error('Erro ao criar memória IA:', error);
+      setIaMemoryError('Não foi possível criar memória IA.');
+    }
+  };
+
+  const handleCreateIaTask = async () => {
+    if (!effectiveAdminId || !iaTaskForm.title.trim()) return;
+    try {
+      await createIaTask(effectiveAdminId, {
+        title: iaTaskForm.title.trim(),
+        description: iaTaskForm.description,
+        status: iaTaskForm.status,
+        linkedAgentId: iaTaskForm.linkedAgentId || undefined,
+        specialistType: iaTaskForm.specialistType,
+        contextReference: iaTaskForm.contextReference,
+        origin: 'Manual',
+      });
+      setIaTaskForm({ title: '', description: '', status: 'TODO', linkedAgentId: '', specialistType: '', contextReference: '' });
+      await loadAiTasks();
+    } catch (error) {
+      console.error('Erro ao criar task IA:', error);
+      setAiTasksError('Não foi possível criar a task IA.');
+    }
+  };
+
+  const loadSonarData = async () => {
+    setSonarLoading(true);
+    setSonarError(null);
+    try {
+      const [summary, issues] = await Promise.all([
+        fetchSonarSummary(),
+        fetchSonarIssues(),
+      ]);
+      setSonarSummary(summary);
+      setSonarIssues(issues);
+    } catch (error) {
+      console.error('Erro ao buscar SonarCloud:', error);
+      setSonarError('Não foi possível carregar dados do SonarCloud.');
+    } finally {
+      setSonarLoading(false);
+    }
+  };
+
+  const loadCiStatus = async () => {
+    setCiLoading(true);
+    setCiError(null);
+    try {
+      const data = await fetchCiStatus();
+      setCiStatus(data);
+    } catch (error) {
+      console.error('Erro ao buscar status do CI:', error);
+      setCiError('Não foi possível carregar o status do CI.');
+    } finally {
+      setCiLoading(false);
+    }
+  };
+
+  const loadHealthStatus = async () => {
+    setHealthLoading(true);
+    setHealthError(null);
+    try {
+      const data = await fetchHealthStatus();
+      setHealthStatus(data);
+    } catch (error) {
+      console.error('Erro ao buscar status de saúde:', error);
+      setHealthError('Não foi possível carregar o status de saúde.');
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const checkDocUrl = async (key: 'api' | 'ui' | 'architecture', url: string) => {
+    setDocsLoading((prev) => ({ ...prev, [key]: true }));
+    setDocsError((prev) => ({ ...prev, [key]: null }));
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) {
+        throw new Error(`Falha ao acessar ${key}.`);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar documentação:', error);
+      setDocsError((prev) => ({ ...prev, [key]: 'Não foi possível carregar a documentação.' }));
+    } finally {
+      setDocsLoading((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -427,6 +1332,121 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleRunHKTechFix = async () => {
+    if (!effectiveAdminId) {
+      setHktechAiError('Admin não identificado.');
+      return;
+    }
+    setHktechAiLoading(true);
+    setHktechAiError(null);
+    try {
+      const result = await runHKTechAutofix(effectiveAdminId);
+      setHktechAiResult(result);
+      loadAiReports();
+      loadSonarData();
+    } catch (error) {
+      console.error('Erro ao executar HKTECH IA:', error);
+      setHktechAiError('Não foi possível executar a rotina de autofix.');
+    } finally {
+      setHktechAiLoading(false);
+    }
+  };
+
+  const handleSimulateIssue = async (issue: SonarIssueDTO) => {
+    if (!effectiveAdminId) {
+      setHktechAiError('Admin não identificado.');
+      return;
+    }
+    setSimulateModalIssue(issue);
+    setSimulateLoading(true);
+    setSimulateResult(null);
+    try {
+      const result = await simulateHKTechFix(effectiveAdminId, issue.key);
+      setSimulateResult(result);
+    } catch (error) {
+      console.error('Erro ao simular issue:', error);
+      setSimulateResult({
+        status: 'blocked',
+        reason: 'Falha ao simular.',
+        issues: [],
+        plan: null,
+      });
+    } finally {
+      setSimulateLoading(false);
+    }
+  };
+
+  const handleResolveIssue = async (issue: SonarIssueDTO) => {
+    if (!effectiveAdminId) {
+      setHktechAiError('Admin não identificado.');
+      return;
+    }
+    setHktechAiLoading(true);
+    setHktechAiError(null);
+    try {
+      const result = await resolveHKTechIssues(effectiveAdminId, [issue.key], maxIssuesPerRun);
+      setHktechAiResult(result);
+      loadAiReports();
+      loadSonarData();
+    } catch (error) {
+      console.error('Erro ao resolver issue:', error);
+      setHktechAiError('Não foi possível resolver a issue selecionada.');
+    } finally {
+      setHktechAiLoading(false);
+    }
+  };
+
+  const handleResolveBatch = async () => {
+    if (!effectiveAdminId) {
+      setHktechAiError('Admin não identificado.');
+      return;
+    }
+    const eligible = sonarIssues.filter((issue) => issue.riskLevel !== 'HIGH');
+    const batch = eligible.slice(0, maxIssuesPerRun);
+    if (batch.length === 0) {
+      setHktechAiError('Nenhuma issue elegível para resolução automática.');
+      return;
+    }
+    setHktechAiLoading(true);
+    setHktechAiError(null);
+    try {
+      const result = await resolveHKTechIssues(effectiveAdminId, batch.map((issue) => issue.key), maxIssuesPerRun);
+      setHktechAiResult(result);
+      loadAiReports();
+      loadSonarData();
+    } catch (error) {
+      console.error('Erro ao resolver batch:', error);
+      setHktechAiError('Não foi possível resolver o lote.');
+    } finally {
+      setHktechAiLoading(false);
+    }
+  };
+
+  const handleSaveIaConfig = async () => {
+    if (!effectiveAdminId) {
+      setIaConfigError('Admin não identificado.');
+      return;
+    }
+    setIaConfigLoading(true);
+    setIaConfigError(null);
+    try {
+      const data = await updateIaConfig(effectiveAdminId, {
+        managedByAI: true,
+        taskCreationPolicy: 'AI_ALLOWED',
+        allowAutoBacklogIfEmpty: true,
+        maxTasksPerRun: maxIssuesPerRun,
+        maxExecutionsPerHour,
+        cooldownMinutes,
+      });
+      setIaConfig(data);
+    } catch (error) {
+      console.error('Erro ao salvar config IA:', error);
+      setIaConfigError('Não foi possível salvar a configuração de IA.');
+    } finally {
+      setIaConfigLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
     loadProducts();
@@ -437,7 +1457,70 @@ const Admin: React.FC = () => {
     loadRedeems();
     loadAccesses();
     loadAiReports();
-  }, [aiReportsProjectId]);
+    loadAiTasks();
+    loadIaConfig();
+    loadIaConversations();
+    loadIaAgents();
+    loadIaContexts();
+    loadIaMemoryStats();
+    loadIaPrompts();
+  }, [effectiveAdminId]);
+
+  useEffect(() => {
+    if (activeTab === 'monitoramento-overview' || activeTab === 'monitoramento-sonar' || activeTab === 'monitoramento-coverage' || activeTab === 'ia-hktech' || activeTab === 'ia-tasks') {
+      loadSonarData();
+    }
+    if (activeTab === 'monitoramento-overview' || activeTab === 'monitoramento-ci') {
+      loadCiStatus();
+    }
+    if (activeTab === 'monitoramento-overview') {
+      loadHealthStatus();
+    }
+    if (activeTab === 'documentacao-api') {
+      checkDocUrl('api', swaggerUrl);
+    }
+    if (activeTab === 'documentacao-ui') {
+      checkDocUrl('ui', storybookUrl);
+    }
+    if (activeTab === 'documentacao-architecture') {
+      checkDocUrl('architecture', architectureUrl);
+    }
+    if (activeTab === 'ia-hktech' || activeTab === 'ia-tasks' || activeTab === 'ia-reports') {
+      loadAiReports();
+    }
+    if (activeTab === 'ia-tasks') {
+      loadAiTasks();
+    }
+    if (activeTab === 'ia-hktech') {
+      loadIaConfig();
+      loadIaConversations();
+      loadIaAgents();
+      loadActiveOrchestrator();
+      if (selectedConversationId) {
+        loadIaMessages(selectedConversationId);
+      }
+    }
+    if (activeTab === 'ia-tasks') {
+      loadIaAgents();
+    }
+    if (activeTab === 'ia-agents') {
+      loadIaAgents();
+    }
+    if (activeTab === 'ia-orchestrator') {
+      loadIaOrchestrators();
+      loadActiveOrchestrator();
+      loadOrchestratorSummary();
+      loadOrchestratorExecutions();
+    }
+    if (activeTab === 'ia-context') {
+      loadIaContexts();
+      loadIaAgents();
+      loadIaPrompts();
+    }
+    if (activeTab === 'ia-memory') {
+      loadIaMemoryStats();
+    }
+  }, [activeTab, selectedConversationId]);
 
   useEffect(() => {
     if (activeTab === 'mybots' && mybotsSubTab === 'battles') {
@@ -446,26 +1529,213 @@ const Admin: React.FC = () => {
   }, [activeTab, mybotsSubTab]);
 
   useEffect(() => {
-    const stored = localStorage.getItem('adminSidebarExpanded');
-    if (stored) {
-      setExpandedMenuId(stored);
-    }
-  }, []);
+    setIaTasksPage(1);
+  }, [iaTasksStatusFilter]);
 
   useEffect(() => {
-    if (expandedMenuId) {
-      localStorage.setItem('adminSidebarExpanded', expandedMenuId);
-    } else {
-      localStorage.removeItem('adminSidebarExpanded');
+    if (activeTab === 'ia-context') {
+      loadIaPrompts();
     }
-  }, [expandedMenuId]);
+  }, [iaPromptsCategory]);
+
+  const normalizeIaStatus = (status?: string) => (status || '').toUpperCase();
+  const filteredIaTasks = useMemo(() => {
+    const domainTasks = aiTasks.filter((task) => (task.domain ?? 'IA') === 'IA');
+    if (iaTasksStatusFilter === 'all') return domainTasks;
+    const target = iaTasksStatusFilter.toUpperCase();
+    return domainTasks.filter((task) => normalizeIaStatus(task.status) === target);
+  }, [aiTasks, iaTasksStatusFilter]);
+
+  const iaTasksPageSize = 20;
+  const iaTasksTotalPages = Math.max(1, Math.ceil(filteredIaTasks.length / iaTasksPageSize));
+  const pagedIaTasks = useMemo(() => {
+    const start = (iaTasksPage - 1) * iaTasksPageSize;
+    return filteredIaTasks.slice(start, start + iaTasksPageSize);
+  }, [filteredIaTasks, iaTasksPage]);
+
+  useEffect(() => {
+    if (location.pathname === '/admin' || location.pathname === '/admin/') {
+      navigate('/admin/governanca/relatorios', { replace: true });
+      return;
+    }
+
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts[0] !== 'admin') return;
+
+    const section = parts[1] || 'governanca';
+    const page = parts[2] || 'relatorios';
+
+    if (section === 'financeiro') {
+      if (!canViewFinance) {
+        navigate('/admin/governanca/relatorios', { replace: true });
+        return;
+      }
+      const allowed = ['vendas', 'resgates', 'custos'] as const;
+      const resolved = allowed.includes(page as typeof allowed[number]) ? page : 'vendas';
+      setActiveTab('financeiro');
+      setFinanceSubTab(resolved as 'vendas' | 'resgates' | 'custos');
+      setExpandedSectionIds(['financeiro']);
+      if (page !== resolved) {
+        navigate(`/admin/financeiro/${resolved}`, { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'mybots') {
+      const allowed = ['overview', 'battles', 'ecosystem'] as const;
+      const resolved = allowed.includes(page as typeof allowed[number]) ? page : 'overview';
+      setActiveTab('mybots');
+      setMybotsSubTab(resolved as 'overview' | 'battles' | 'ecosystem');
+      setExpandedSectionIds(['mybots']);
+      if (page !== resolved) {
+        navigate(`/admin/mybots/${resolved}`, { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'dao') {
+      const allowed = ['propostas', 'votacoes', 'tesouraria', 'membros'] as const;
+      const resolved = allowed.includes(page as typeof allowed[number]) ? page : 'propostas';
+      setActiveTab('dao');
+      setDaoSubTab(resolved as 'propostas' | 'votacoes' | 'tesouraria' | 'membros');
+      setExpandedSectionIds(['dao']);
+      if (page !== resolved) {
+        navigate(`/admin/dao/${resolved}`, { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'operacoes') {
+      const map: Record<string, string> = {
+        usuarios: 'users',
+        produtos: 'products',
+      };
+      if (page === 'ai-reports') {
+        navigate('/admin/ia/reports', { replace: true });
+        return;
+      }
+      const resolved = map[page] ?? 'users';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['operacoes']);
+      if (!map[page]) {
+        const fallback = resolved === 'users' ? 'usuarios' : page;
+        navigate(`/admin/operacoes/${fallback}`, { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'projetos') {
+      const map: Record<string, string> = {
+        templates: 'templates',
+        clonados: 'clonados',
+      };
+      const resolved = map[page] ?? 'templates';
+      setActiveTab('projetos');
+      setProjectsSubTab(resolved as 'templates' | 'clonados');
+      setExpandedSectionIds(['projetos']);
+      if (!map[page]) {
+        navigate('/admin/projetos/templates', { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'ia') {
+      const map: Record<string, string> = {
+        hktech: 'ia-hktech',
+        tasks: 'ia-tasks',
+        agents: 'ia-agents',
+        orchestrator: 'ia-orchestrator',
+        context: 'ia-context',
+        memory: 'ia-memory',
+        reports: 'ia-reports',
+      };
+      const resolved = map[page] ?? 'ia-hktech';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['ia']);
+      if (!map[page]) {
+        navigate('/admin/ia/hktech', { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'monitoramento') {
+      const map: Record<string, string> = {
+        overview: 'monitoramento-overview',
+        sonar: 'monitoramento-sonar',
+        coverage: 'monitoramento-coverage',
+        ci: 'monitoramento-ci',
+      };
+      const resolved = map[page] ?? 'monitoramento-overview';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['monitoramento']);
+      if (!map[page]) {
+        navigate('/admin/monitoramento/overview', { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'documentacao') {
+      const map: Record<string, string> = {
+        api: 'documentacao-api',
+        ui: 'documentacao-ui',
+        architecture: 'documentacao-architecture',
+      };
+      const resolved = map[page] ?? 'documentacao-api';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['documentacao']);
+      if (!map[page]) {
+        navigate('/admin/documentacao/api', { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'sistema') {
+      if (page === 'sonarcloud') {
+        navigate('/admin/monitoramento/sonar', { replace: true });
+        return;
+      }
+      if (page === 'hktech-ia') {
+        navigate('/admin/ia/hktech', { replace: true });
+        return;
+      }
+      if (page === 'ai-reports') {
+        navigate('/admin/ia/reports', { replace: true });
+        return;
+      }
+      const map: Record<string, string> = {
+        tools: 'admin-tools',
+      };
+      const resolved = map[page] ?? 'admin-tools';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['sistema']);
+      if (!map[page]) {
+        navigate('/admin/sistema/tools', { replace: true });
+      }
+      return;
+    }
+
+    if (section === 'governanca') {
+      const map: Record<string, string> = {
+        relatorios: 'reports',
+      };
+      const resolved = map[page] ?? 'reports';
+      setActiveTab(resolved);
+      setExpandedSectionIds(['governanca']);
+      if (!map[page]) {
+        navigate('/admin/governanca/relatorios', { replace: true });
+      }
+      return;
+    }
+
+    navigate('/admin/governanca/relatorios', { replace: true });
+  }, [location.pathname, canViewFinance, navigate]);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
       if (window.innerWidth >= 768) return;
       const target = event.target as Node;
       if (sidebarRef.current && !sidebarRef.current.contains(target)) {
-        setExpandedMenuId(null);
+        setExpandedSectionIds([]);
       }
     };
     window.addEventListener('mousedown', handler);
@@ -555,12 +1825,13 @@ const Admin: React.FC = () => {
         price: newProduct.price.trim(),
         description: newProduct.description.trim(),
         productType: newProduct.productType,
+        templateId: newProduct.templateId.trim() || undefined,
         showOnHome: newProduct.showOnHome,
         showOnMarketplace: newProduct.showOnMarketplace,
         purchasePrice: newProduct.purchasePrice.trim(),
         salePrice: newProduct.salePrice.trim() || newProduct.price.trim()
       });
-      setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
+      setNewProduct({ name: '', price: '', description: '', productType: 'digital', templateId: '', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
       setIsProductModalOpen(false);
       loadProducts();
     } catch (error) {
@@ -577,6 +1848,7 @@ const Admin: React.FC = () => {
       price: product.price,
       description: product.description,
       productType: product.productType ?? 'digital',
+      templateId: product.templateId ?? '',
       showOnHome: product.showOnHome ?? false,
       showOnMarketplace: product.showOnMarketplace ?? false,
       purchasePrice: product.purchasePrice ?? '',
@@ -596,6 +1868,7 @@ const Admin: React.FC = () => {
         price: editProductData.price.trim(),
         description: editProductData.description.trim(),
         productType: editProductData.productType,
+        templateId: editProductData.templateId.trim() || undefined,
         showOnHome: editProductData.showOnHome,
         showOnMarketplace: editProductData.showOnMarketplace,
         purchasePrice: editProductData.purchasePrice.trim(),
@@ -617,6 +1890,7 @@ const Admin: React.FC = () => {
         price: product.price,
         description: product.description,
         productType: product.productType ?? 'digital',
+        templateId: product.templateId ?? '',
         showOnHome: nextValue,
         showOnMarketplace: product.showOnMarketplace ?? false,
         purchasePrice: product.purchasePrice ?? '',
@@ -638,6 +1912,7 @@ const Admin: React.FC = () => {
         description: product.description,
         productType: product.productType ?? 'digital',
         showOnHome: product.showOnHome ?? false,
+        templateId: product.templateId ?? '',
         showOnMarketplace: nextValue,
         purchasePrice: product.purchasePrice ?? '',
         salePrice: product.salePrice ?? product.price,
@@ -741,6 +2016,7 @@ const Admin: React.FC = () => {
         status: newProject.status.trim(),
         paid: newProject.paid,
         isPublic: newProject.isPublic,
+        isTemplate: newProject.isTemplate,
       });
       setNewProject({
         name: '',
@@ -755,12 +2031,53 @@ const Admin: React.FC = () => {
         status: 'Ativo',
         paid: false,
         isPublic: true,
+        isTemplate: false,
       });
       setIsProjectModalOpen(false);
       loadProjects();
     } catch (error) {
       console.error('Erro ao criar projeto:', error);
       setProjectsError('Não foi possível criar o projeto.');
+    }
+  };
+
+  const handleCreateTemplateFromRoute = async () => {
+    setTemplateCreateError(null);
+    if (!templateCreateData.name.trim()) {
+      setTemplateCreateError('Preencha o nome do template.');
+      return;
+    }
+    try {
+      const created = await createProject({
+        name: templateCreateData.name.trim(),
+        description: templateCreateData.description.trim(),
+        projectType: 'Landingpage',
+        salePrice: '',
+        productionCost: '',
+        purchaseCount: 0,
+        repository: '',
+        domain: '',
+        hosting: 'Vercel',
+        status: 'Ativo',
+        paid: false,
+        isPublic: true,
+        isTemplate: true,
+        ownerUserId: effectiveAdminId,
+      });
+      await updateTemplate(created.id, {
+        name: templateCreateData.name.trim(),
+        description: templateCreateData.description.trim(),
+        blogContent: templateCreateData.blogContent ?? '',
+        level: templateCreateData.level ?? '',
+        category: templateCreateData.category ?? '',
+        adminId: effectiveAdminId,
+      });
+      setTemplateCreateData({ name: '', description: '', level: '', category: '', blogContent: '' });
+      await loadProjects();
+      navigate(`/admin/projetos/templates/${created.id}`);
+    } catch (error) {
+      console.error('Erro ao criar template:', error);
+      setTemplateCreateError('Não foi possível criar o template.');
     }
   };
 
@@ -780,8 +2097,20 @@ const Admin: React.FC = () => {
       status: project.status || 'Ativo',
       paid: project.paid,
       isPublic: project.isPublic ?? true,
+      isTemplate: project.isTemplate ?? false,
     });
     setIsProjectEditModalOpen(true);
+  };
+
+  const handleCloneTemplate = async (templateId: string) => {
+    setProjectsError(null);
+    try {
+      await cloneTemplate(templateId, effectiveAdminId);
+      await loadProjects();
+    } catch (error) {
+      console.error('Erro ao clonar template:', error);
+      setProjectsError('Não foi possível clonar o template.');
+    }
   };
 
   const handleSaveProjectEdit = async () => {
@@ -803,6 +2132,7 @@ const Admin: React.FC = () => {
         status: editProjectData.status.trim(),
         paid: editProjectData.paid,
         isPublic: editProjectData.isPublic,
+        isTemplate: editProjectData.isTemplate,
       });
       setIsProjectEditModalOpen(false);
       loadProjects();
@@ -985,63 +2315,53 @@ const Admin: React.FC = () => {
   const totalCostsAnnual = costs.reduce((acc, cost) => acc + getAnnualCost(cost), 0);
   const profit = totalRevenue - totalCostsMonthly;
   const totalAccesses = accesses.length;
+  const latestCiRun = ciStatus?.runs?.[0] ?? null;
+  const jestRun = ciStatus?.runs?.find((run) => /jest/i.test(run.name))
+    ?? ciStatus?.runs?.find((run) => /test/i.test(run.name))
+    ?? null;
+  const activeChildByMenuId: Record<string, string | undefined> = {
+    mybots: mybotsSubTab,
+    dao: daoSubTab,
+    financeiro: financeSubTab,
+    projetos: projectsSubTab,
+  };
+  const activeOrchestratorRecord = orchestratorSummary?.activeOrchestrator ?? activeOrchestrator ?? iaOrchestrators.find((item) => item.is_active) ?? null;
+  const executionFlowList = useMemo(
+    () => (Array.isArray(activeOrchestratorRecord?.execution_flow) ? (activeOrchestratorRecord?.execution_flow as string[]) : []),
+    [activeOrchestratorRecord]
+  );
+  const latestOrchestratorExecution = orchestratorSummary?.lastExecution ?? orchestratorExecutions[0] ?? null;
 
   return (
     <LayoutPrivate
+      crumbs={adminCrumbs}
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={() => setSidebarCollapsed((s) => !s)}
     >
-      <div className={`admin-container ${sidebarCollapsed ? 'collapsed' : ''}`}>
+      <div className={`admin-container ${adminCrumbs.length > 0 ? 'has-breadcrumb' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <aside className="admin-sidebar" ref={sidebarRef}>
-          <h2>Admin</h2>
-          <ul>
-            {menuItems.flatMap((item) => {
-              if (item.adminOnly && !isAdmin) return [];
-              const isParent = !!item.children?.length;
-              const isExpanded = expandedMenuId === item.id;
-              const isActive = activeTab === item.id;
-              const entries: JSX.Element[] = [
-                <li key={item.id} className={isActive ? 'active' : ''}>
-                  {isParent ? (
-                    <button
-                      type="button"
-                      className={`admin-menu-item ${isExpanded ? 'open' : ''}`}
-                      onClick={() => toggleMenu(item.id)}
-                      aria-expanded={isExpanded}
-                    >
-                      {item.label}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`admin-menu-item ${isActive ? 'active' : ''}`}
-                      onClick={() => handleSelectMenu(item.id)}
-                    >
-                      {item.label}
-                    </button>
-                  )}
-                </li>,
-              ];
-
-              if (isParent && isExpanded) {
-                item.children?.forEach((child) => {
-                  entries.push(
-                    <li key={`${item.id}-${child.id}`} className="admin-menu-child">
-                      <button
-                        type="button"
-                        className={`admin-submenu-item ${mybotsSubTab === child.id && isActive ? 'active' : ''}`}
-                        onClick={() => handleSelectMenu(item.id, child.id)}
-                      >
-                        {child.label}
-                      </button>
-                    </li>
-                  );
-                });
-              }
-
-              return entries;
-            })}
-          </ul>
+          <h2 className="admin-sidebar__brand">Admin</h2>
+          <div className="admin-table-wrapper" style={{ margin: '0 16px 16px', padding: 12 }}>
+            <h4 style={{ marginBottom: 6 }}>Orquestrador Ativo</h4>
+            {activeOrchestrator ? (
+              <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                <strong>{activeOrchestrator.name}</strong>
+                <span>v{activeOrchestrator.version ?? 1}</span>
+              </div>
+            ) : (
+              <span style={{ fontSize: 12 }}>Nenhum ativo</span>
+            )}
+          </div>
+          <AdminSidebarMenu
+            groups={menuGroups}
+            activeTab={activeTab}
+            activeChildByMenuId={activeChildByMenuId}
+            expandedSectionIds={expandedSectionIds}
+            onToggleSection={toggleSection}
+            onSelectMenu={handleSelectMenu}
+            isAdmin={isAdmin}
+            hasPermission={hasPermission}
+          />
           {/* Botão removido: o projeto master HKTECH estará apenas na lista de projetos */}
         </aside>
 
@@ -1503,98 +2823,50 @@ const Admin: React.FC = () => {
           </section>
         )}
 
-        {activeTab === 'sales' && (
+        {activeTab === 'financeiro' && !canViewFinance && (
           <section>
-            <h2>Vendas (Pagas)</h2>
-            {paidSalesLoading && <p>Carregando vendas...</p>}
-            {paidSalesError && <p>{paidSalesError}</p>}
-            <table className="admin-table admin-table--sales">
-              <thead>
-                <tr>
-                  <th>Usuário</th>
-                  <th>Produto</th>
-                  <th>Preço</th>
-                  <th>Status</th>
-                  <th>Projeto</th>
-                  <th>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!paidSalesLoading && paidSales.length === 0 && (
-                  <tr>
-                    <td colSpan={6}>Nenhuma venda encontrada.</td>
-                  </tr>
-                )}
-                {paidSales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td>{sale.userId}</td>
-                    <td>{sale.productName || 'Produto'}</td>
-                    <td>R$ {Number(sale.price || 0).toFixed(2).replace('.', ',')}</td>
-                    <td>{sale.status}</td>
-                    <td>
-                      {sale.projectId ? (
-                        <button
-                          className="admin-btn admin-btn--ghost"
-                          onClick={() => navigate(`/manager?projectId=${encodeURIComponent(sale.projectId || '')}`)}
-                        >
-                          Ver projeto
-                        </button>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{sale.createdAt ? new Date(sale.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <h2>Financeiro</h2>
+            <p>Você não possui permissão para acessar este domínio.</p>
           </section>
         )}
 
-        {activeTab === 'redeems' && (
-          <section>
-            <h2>Resgates (Gratuitos)</h2>
-            {redeemsLoading && <p>Carregando resgates...</p>}
-            {redeemsError && <p>{redeemsError}</p>}
-            <table className="admin-table admin-table--sales">
-              <thead>
-                <tr>
-                  <th>Usuário</th>
-                  <th>Produto</th>
-                  <th>Tipo</th>
-                  <th>Projeto</th>
-                  <th>Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!redeemsLoading && redeems.length === 0 && (
-                  <tr>
-                    <td colSpan={5}>Nenhum resgate encontrado.</td>
-                  </tr>
-                )}
-                {redeems.map((redeem) => (
-                  <tr key={redeem.id}>
-                    <td>{redeem.userId}</td>
-                    <td>{redeem.productName || 'Produto'}</td>
-                    <td>FREE</td>
-                    <td>
-                      {redeem.projectId ? (
-                        <button
-                          className="admin-btn admin-btn--ghost"
-                          onClick={() => navigate(`/manager?projectId=${encodeURIComponent(redeem.projectId || '')}`)}
-                        >
-                          Ver projeto
-                        </button>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{redeem.createdAt ? new Date(redeem.createdAt).toLocaleDateString('pt-BR') : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+        {activeTab === 'financeiro' && canViewFinance && financeSubTab === 'vendas' && (
+          <FinanceiroVendas
+            paidSales={paidSales}
+            loading={paidSalesLoading}
+            error={paidSalesError}
+            onViewProject={(projectId) => navigate(`/manager?projectId=${encodeURIComponent(projectId)}`)}
+          />
+        )}
+
+        {activeTab === 'financeiro' && canViewFinance && financeSubTab === 'resgates' && (
+          <FinanceiroResgates
+            redeems={redeems}
+            loading={redeemsLoading}
+            error={redeemsError}
+            onViewProject={(projectId) => navigate(`/manager?projectId=${encodeURIComponent(projectId)}`)}
+          />
+        )}
+
+        {activeTab === 'financeiro' && canViewFinance && financeSubTab === 'custos' && (
+          <FinanceiroCustos
+            costs={costs}
+            loading={costsLoading}
+            error={costsError}
+            totalCostsMonthly={totalCostsMonthly}
+            totalCostsAnnual={totalCostsAnnual}
+            newCost={newCost}
+            setNewCost={setNewCost}
+            onCreateCost={handleCreateCost}
+            onEditCost={handleEditCost}
+            onDeleteCost={handleDeleteCost}
+            getMonthlyCost={getMonthlyCost}
+            isEditCostModalOpen={isEditCostModalOpen}
+            setIsEditCostModalOpen={setIsEditCostModalOpen}
+            editCostData={editCostData}
+            setEditCostData={setEditCostData}
+            onSaveCostEdit={handleSaveCostEdit}
+          />
         )}
 
         {activeTab === 'admin-tools' && isAdmin && (
@@ -1614,6 +2886,32 @@ const Admin: React.FC = () => {
             {adminToolsError && <p className="admin-modal__error">{adminToolsError}</p>}
             {adminToolsSuccess && <p className="admin-modal__success">{adminToolsSuccess}</p>}
             <div className="admin-user-actions" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <button
+                className="admin-btn"
+                onClick={handleAdminPromptUpdate}
+              >
+                Atualizar Prompts
+              </button>
+              <button
+                className="admin-btn admin-btn--ghost"
+                onClick={handleAdminPromptBackup}
+              >
+                Gerar Backup
+              </button>
+              <button
+                className="admin-btn admin-btn--danger"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('reset-ia-tasks', resetIaTasks)}
+              >
+                Reset IA Tasks
+              </button>
+              <button
+                className="admin-btn"
+                disabled={adminToolsLoading !== null}
+                onClick={() => runAdminTool('migrate-ia-tasks', migrateIaTasks)}
+              >
+                Migrar IA Tasks (HKTECH)
+              </button>
               <button
                 className="admin-btn admin-btn--danger"
                 disabled={adminToolsLoading !== null}
@@ -1654,105 +2952,1837 @@ const Admin: React.FC = () => {
           </section>
         )}
 
-
-        {activeTab === 'projects' && (
+        {activeTab === 'monitoramento-overview' && (
           <section>
-            <h2>Projetos</h2>
-            {projectsLoading && <p>Carregando projetos...</p>}
-            {projectsError && <p>{projectsError}</p>}
-            <div className="admin-user-actions">
-              <button
-                className="admin-btn"
-                onClick={() => {
-                  setProjectsError(null);
-                  setNewProject({
-                    name: '',
-                    description: '',
-                    projectType: 'Landingpage',
-                    salePrice: '',
-                    productionCost: '',
-                    purchaseCount: 0,
-                    repository: '',
-                    domain: '',
-                    hosting: 'Vercel',
-                    status: 'Ativo',
-                    paid: false,
-                    isPublic: true,
-                  });
-                  setIsProjectModalOpen(true);
-                }}
-              >
-                Criar projeto
-              </button>
+            <h2>Monitoramento</h2>
+            <p>Resumo dos serviços críticos para análise do admin.</p>
+            <div className="report-summary">
+              <div className="report-card">
+                <span>SonarCloud</span>
+                <strong>
+                  {sonarLoading
+                    ? 'Carregando...'
+                    : sonarError
+                      ? 'Indisponível'
+                      : sonarSummary?.qualityGateStatus ?? '—'}
+                </strong>
+                <em>
+                  {!sonarLoading && !sonarError && sonarSummary
+                    ? `Coverage ${sonarSummary.metrics.coverage}%`
+                    : '—'}
+                </em>
+              </div>
+              <div className="report-card">
+                <span>Jest</span>
+                <strong>
+                  {ciLoading
+                    ? 'Carregando...'
+                    : ciError
+                      ? 'Indisponível'
+                      : jestRun?.conclusion ?? jestRun?.status ?? '—'}
+                </strong>
+                <em>{jestRun?.headBranch ?? '—'}</em>
+              </div>
+              <div className="report-card">
+                <span>CI</span>
+                <strong>
+                  {ciLoading
+                    ? 'Carregando...'
+                    : ciError
+                      ? 'Indisponível'
+                      : latestCiRun?.conclusion ?? latestCiRun?.status ?? '—'}
+                </strong>
+                <em>{latestCiRun?.name ?? '—'}</em>
+              </div>
+              <div className="report-card">
+                <span>Health</span>
+                <strong>
+                  {healthLoading
+                    ? 'Carregando...'
+                    : healthError
+                      ? 'Indisponível'
+                      : healthStatus?.status ?? '—'}
+                </strong>
+                <em>
+                  {!healthLoading && !healthError && healthStatus
+                    ? `DB ${healthStatus.database}`
+                    : '—'}
+                </em>
+              </div>
             </div>
-
-            <table className="admin-table admin-table--projects">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Tipo</th>
-                  <th>Venda</th>
-                  <th>Produção</th>
-                  <th>Compras</th>
-                  <th>Repo</th>
-                  <th>Domínio</th>
-                  <th>Hospedagem</th>
-                  <th>Status</th>
-                  <th>Pago</th>
-                  <th>Público</th>
-                  <th>Criador</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!projectsLoading && projects.length === 0 && (
+            <div className="admin-table-wrapper" style={{ marginTop: 16 }}>
+              <table className="admin-table">
+                <thead>
                   <tr>
-                    <td colSpan={13}>Nenhum projeto encontrado.</td>
+                    <th>Serviço</th>
+                    <th>Status</th>
+                    <th>Detalhes</th>
                   </tr>
-                )}
-                {projects.map((project) => (
-                  <tr key={project.id}>
-                    <td><strong>{project.name}</strong></td>
-                    <td>{project.projectType || '-'}</td>
-                    <td>{project.salePrice || '-'}</td>
-                    <td>{project.productionCost || '-'}</td>
-                    <td>{project.purchaseCount ?? 0}</td>
-                    <td>{project.repository || '-'}</td>
-                    <td>{project.domain || '-'}</td>
-                    <td>{project.hosting || '-'}</td>
-                    <td>{project.status}</td>
-                    <td>{project.paid ? 'Pago' : 'Não pago'}</td>
-                    <td>{project.isPublic ? 'Sim' : 'Não'}</td>
-                    <td>{project.ownerUserId || '—'}</td>
-                    <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => handleEditProject(project)} aria-label="Editar">
-                        <span className="admin-action-icon">✏️</span>
-                        <span className="admin-action-text">Editar</span>
-                      </button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)} aria-label="Excluir">
-                        <span className="admin-action-icon">🗑️</span>
-                        <span className="admin-action-text">Excluir</span>
-                      </button>
-                      <button
-                        className="admin-btn admin-btn--primary"
-                        style={{ marginLeft: 8, background: '#38bdf8', color: '#fff', borderRadius: 8, fontWeight: 600 }}
-                        onClick={() => navigate(`/manager?projectId=${encodeURIComponent(project.id)}`)}
-                        aria-label={`Administrar ${project.name}`}
-                      >
-                        <span className="admin-action-icon">🛠️</span>
-                        <span className="admin-action-text">Administrar</span>
-                      </button>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>SonarCloud</td>
+                    <td>
+                      {sonarLoading
+                        ? 'Carregando...'
+                        : sonarError
+                          ? 'Indisponível'
+                          : sonarSummary?.qualityGateStatus ?? '—'}
+                    </td>
+                    <td>
+                      {!sonarLoading && !sonarError && sonarSummary
+                        ? `Coverage ${sonarSummary.metrics.coverage}% • Bugs ${sonarSummary.metrics.bugs}`
+                        : '—'}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                  <tr>
+                    <td>Jest</td>
+                    <td>
+                      {ciLoading
+                        ? 'Carregando...'
+                        : ciError
+                          ? 'Indisponível'
+                          : jestRun?.conclusion ?? jestRun?.status ?? '—'}
+                    </td>
+                    <td>
+                      {jestRun
+                        ? `Branch ${jestRun.headBranch} • Run #${jestRun.runNumber}`
+                        : '—'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>GitHub Actions</td>
+                    <td>
+                      {ciLoading
+                        ? 'Carregando...'
+                        : ciError
+                          ? 'Indisponível'
+                          : latestCiRun?.conclusion ?? latestCiRun?.status ?? '—'}
+                    </td>
+                    <td>
+                      {latestCiRun
+                        ? `${latestCiRun.name} • ${latestCiRun.updatedAt ? new Date(latestCiRun.updatedAt).toLocaleString('pt-BR') : '—'}`
+                        : '—'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>API/DB Health</td>
+                    <td>
+                      {healthLoading
+                        ? 'Carregando...'
+                        : healthError
+                          ? 'Indisponível'
+                          : healthStatus?.status ?? '—'}
+                    </td>
+                    <td>
+                      {!healthLoading && !healthError && healthStatus
+                        ? `DB ${healthStatus.database} • Version ${healthStatus.version ?? '—'}`
+                        : '—'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'monitoramento-sonar' && (
+          <section>
+            <h2>SonarCloud</h2>
+            {sonarLoading && <p>Carregando dados do SonarCloud...</p>}
+            {sonarError && <p>{sonarError}</p>}
+            {!sonarLoading && !sonarError && sonarSummary && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Technical Health Score</th>
+                      <th>Total Bugs</th>
+                      <th>Major/Critical</th>
+                      <th>Quality Gate</th>
+                      <th>Último Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{Math.max(0, 100 - (sonarSummary.metrics.bugs * 5 + sonarSummary.metrics.vulnerabilities * 8 + sonarSummary.metrics.codeSmells * 1 + Number(sonarSummary.metrics.duplicatedLinesDensity || 0) * 2))}</td>
+                      <td>{sonarSummary.metrics.bugs}</td>
+                      <td>{sonarIssues.filter((issue) => issue.severity === 'MAJOR' || issue.severity === 'CRITICAL').length}</td>
+                      <td>{sonarSummary.qualityGateStatus}</td>
+                      <td>{sonarSummary.qualityGateStatus}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ marginTop: 16 }}>
+              <h4>Issues (Major/Critical)</h4>
+              <div className="admin-actions" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                <button className="admin-btn" onClick={handleResolveBatch} disabled={hktechAiLoading}>
+                  Resolve {maxIssuesPerRun} Major Issues
+                </button>
+              </div>
+              {!sonarLoading && sonarIssues.length === 0 && <p>Nenhuma issue crítica encontrada.</p>}
+              {sonarIssues.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Severidade</th>
+                        <th>Tipo</th>
+                        <th>Mensagem</th>
+                        <th>Risk Level</th>
+                        <th>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sonarIssues.map((issue) => (
+                        <tr key={issue.key}>
+                          <td>{issue.severity}</td>
+                          <td>{issue.type}</td>
+                          <td>{issue.message}</td>
+                          <td>
+                            <span className={`sonar-risk sonar-risk--${issue.riskLevel?.toLowerCase() || 'medium'}`}>
+                              {issue.riskLevel ?? 'MEDIUM'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="admin-actions">
+                              <button className="admin-btn admin-btn--ghost" onClick={() => handleSimulateIssue(issue)}>
+                                Simulate
+                              </button>
+                              <button className="admin-btn" disabled={issue.riskLevel === 'HIGH'} onClick={() => handleResolveIssue(issue)}>
+                                Resolve
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'monitoramento-coverage' && (
+          <section>
+            <h2>Test Coverage</h2>
+            {sonarLoading && <p>Carregando métricas...</p>}
+            {sonarError && <p>{sonarError}</p>}
+            {!sonarLoading && !sonarError && sonarSummary && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Coverage</th>
+                      <th>Bugs</th>
+                      <th>Code Smells</th>
+                      <th>Duplicated Lines</th>
+                      <th>Quality Gate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{sonarSummary.metrics.coverage}%</td>
+                      <td>{sonarSummary.metrics.bugs}</td>
+                      <td>{sonarSummary.metrics.codeSmells}</td>
+                      <td>{sonarSummary.metrics.duplicatedLinesDensity}%</td>
+                      <td>{sonarSummary.qualityGateStatus}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'monitoramento-ci' && (
+          <section>
+            <h2>CI Status</h2>
+            {ciLoading && <p>Carregando status do CI...</p>}
+            {ciError && <p>{ciError}</p>}
+            {!ciLoading && !ciError && ciStatus && ciStatus.runs.length > 0 && (
+              <div className="report-summary">
+                <div className="report-card">
+                  <span>Último build</span>
+                  <strong>{ciStatus.runs[0].conclusion ?? ciStatus.runs[0].status}</strong>
+                </div>
+                <div className="report-card">
+                  <span>Status</span>
+                  <strong>{ciStatus.runs[0].status}</strong>
+                </div>
+                <div className="report-card">
+                  <span>Branch</span>
+                  <strong>{ciStatus.runs[0].headBranch}</strong>
+                </div>
+              </div>
+            )}
+            {!ciLoading && !ciError && ciStatus && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Workflow</th>
+                      <th>Status</th>
+                      <th>Conclusion</th>
+                      <th>Branch</th>
+                      <th>Atualizado</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ciStatus.runs.map((run) => (
+                      <tr key={run.id}>
+                        <td>{run.name}</td>
+                        <td>{run.status}</td>
+                        <td>{run.conclusion ?? '—'}</td>
+                        <td>{run.headBranch}</td>
+                        <td>{run.updatedAt ? new Date(run.updatedAt).toLocaleString('pt-BR') : '—'}</td>
+                        <td>
+                          <a href={run.htmlUrl} target="_blank" rel="noreferrer">Abrir</a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!ciLoading && !ciError && (!ciStatus || ciStatus.runs.length === 0) && (
+              <p>Nenhuma execução recente encontrada.</p>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ia-hktech' && isAdmin && (
+          <section>
+            <h2>HKTECH IA</h2>
+            <p>Controle de desenvolvimento autônomo e logs de execução.</p>
+            {hktechAiError && <p>{hktechAiError}</p>}
+            {iaConfigError && <p>{iaConfigError}</p>}
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 12 }}>
+              <h4>Orquestrador Ativo</h4>
+              {activeOrchestrator ? (
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong>{activeOrchestrator.name}</strong>
+                  <span>Versão: v{activeOrchestrator.version ?? 1}</span>
+                  <span>Atualizado: {activeOrchestrator.updated_at ? new Date(activeOrchestrator.updated_at).toLocaleString('pt-BR') : '—'}</span>
+                </div>
+              ) : (
+                <p>Nenhum orquestrador ativo.</p>
+              )}
+            </div>
+            <div className="report-summary" style={{ marginTop: 12 }}>
+              <div className="report-card">
+                <span>Tasks IA (total)</span>
+                <strong>{aiTasks.length}</strong>
+              </div>
+              <div className="report-card">
+                <span>Em progresso</span>
+                <strong>{aiTasks.filter((task) => normalizeIaStatus(task.status) === 'IN_PROGRESS').length}</strong>
+              </div>
+              <div className="report-card">
+                <span>Bloqueadas</span>
+                <strong>{aiTasks.filter((task) => normalizeIaStatus(task.status) === 'BLOCKED').length}</strong>
+              </div>
+              <div className="report-card">
+                <span>Última execução</span>
+                <strong>{aiReports[0]?.createdAt ? new Date(aiReports[0].createdAt).toLocaleString('pt-BR') : '—'}</strong>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginTop: 16 }}>
+              <div className="admin-table-wrapper" style={{ padding: 16 }}>
+                <h4>Conversas IA</h4>
+                <div className="admin-actions" style={{ gap: 8, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Título da conversa"
+                    value={newConversationTitle}
+                    onChange={(e) => setNewConversationTitle(e.target.value)}
+                  />
+                  <button className="admin-btn" onClick={handleCreateConversation}>
+                    Nova conversa
+                  </button>
+                </div>
+                {iaConversationsLoading && <p>Carregando conversas...</p>}
+                {iaConversationsError && <p>{iaConversationsError}</p>}
+                <div style={{ maxHeight: 240, overflowY: 'auto', display: 'grid', gap: 8 }}>
+                  {iaConversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      className={`admin-btn ${selectedConversationId === conv.id ? '' : 'admin-btn--ghost'}`}
+                      onClick={() => setSelectedConversationId(conv.id)}
+                    >
+                      {conv.title || 'Conversa'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="admin-table-wrapper" style={{ padding: 16 }}>
+                <h4>Chat HK IA</h4>
+                {iaMessagesLoading && <p>Carregando mensagens...</p>}
+                {iaMessagesError && <p>{iaMessagesError}</p>}
+                <div style={{ maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 8, marginBottom: 12 }}>
+                  {iaMessages.map((msg) => (
+                    <div key={msg.id} style={{ padding: 8, borderRadius: 8, background: msg.role === 'assistant' ? '#f5f7ff' : '#f3f4f6' }}>
+                      <strong style={{ marginRight: 6 }}>{msg.role}</strong>
+                      <span>{msg.content}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="admin-actions" style={{ gap: 8 }}>
+                  <textarea
+                    rows={3}
+                    placeholder="Digite sua mensagem"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="admin-btn" onClick={handleSendChat} disabled={chatSending}>
+                    {chatSending ? 'Enviando...' : 'Enviar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <h4>Trigger de Agentes</h4>
+              <div className="admin-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
+                <select value={selectedAgentToExecute} onChange={(e) => setSelectedAgentToExecute(e.target.value)}>
+                  <option value="">Selecione um agente</option>
+                  {iaAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
+                </select>
+                <button className="admin-btn" disabled={!selectedAgentToExecute} onClick={() => handleExecuteAgent(selectedAgentToExecute)}>
+                  Executar agente
+                </button>
+              </div>
+              {agentExecutionResult && (
+                <p style={{ marginTop: 8 }}>Task criada: {agentExecutionResult.task?.id}</p>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ marginBottom: 16 }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Modo</th>
+                    <th>Max Issues/Run</th>
+                    <th>Max Execuções/Hora</th>
+                    <th>Cooldown (min)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <select value={automationMode} onChange={(e) => setAutomationMode(e.target.value as typeof automationMode)}>
+                        <option value="manual">Manual</option>
+                        <option value="semi">Semi-Automatic</option>
+                        <option value="controlled">Controlled Automatic</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input type="number" min={1} max={20} value={maxIssuesPerRun} onChange={(e) => setMaxIssuesPerRun(Number(e.target.value || 1))} />
+                    </td>
+                    <td>
+                      <input type="number" min={1} max={10} value={maxExecutionsPerHour} onChange={(e) => setMaxExecutionsPerHour(Number(e.target.value || 1))} />
+                    </td>
+                    <td>
+                      <input type="number" min={5} max={120} value={cooldownMinutes} onChange={(e) => setCooldownMinutes(Number(e.target.value || 5))} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-actions" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <button className="admin-btn admin-btn--ghost" onClick={handleSaveIaConfig} disabled={iaConfigLoading}>
+                {iaConfigLoading ? 'Salvando...' : 'Salvar Config IA'}
+              </button>
+              <button className="admin-btn" onClick={handleRunHKTechFix} disabled={hktechAiLoading}>
+                {hktechAiLoading ? 'Executando...' : 'Run Autonomous Fix'}
+              </button>
+            </div>
+            {iaConfig && (
+              <p style={{ marginTop: 8 }}>Config carregada: {iaConfig.managedByAI ? 'Managed by AI' : 'Manual'}</p>
+            )}
+
+            {hktechAiResult && (
+              <div style={{ marginTop: 16 }}>
+                <h4>Status</h4>
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Resultado</th>
+                        <th>Quality Gate</th>
+                        <th>Branch</th>
+                        <th>PR</th>
+                        <th>Risco</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{hktechAiResult.status.toUpperCase()} {hktechAiResult.reason ? `- ${hktechAiResult.reason}` : ''}</td>
+                        <td>{hktechAiResult.qualityGate ?? '—'}</td>
+                        <td>{hktechAiResult.branchName ?? '—'}</td>
+                        <td>{hktechAiResult.prLink ?? '—'}</td>
+                        <td>{hktechAiResult.plan?.risk ?? '—'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {hktechAiResult.plan && (
+                  <>
+                    <h4>Plano de Correção</h4>
+                    <div className="admin-table-wrapper">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>Etapas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hktechAiResult.plan.steps.map((step) => (
+                            <tr key={step}>
+                              <td>{step}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Sonar Issues Atuais</h4>
+              {!sonarLoading && sonarIssues.length === 0 && <p>Sem issues críticas no momento.</p>}
+              {sonarIssues.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Severidade</th>
+                        <th>Tipo</th>
+                        <th>Mensagem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sonarIssues.map((issue) => (
+                        <tr key={issue.key}>
+                          <td>{issue.severity}</td>
+                          <td>{issue.type}</td>
+                          <td>{issue.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Autonomous Tasks</h4>
+              {aiReports.length === 0 && <p>Sem tarefas registradas.</p>}
+              {aiReports.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Task ID</th>
+                        <th>Origem</th>
+                        <th>Issue Key</th>
+                        <th>Risk Level</th>
+                        <th>Branch</th>
+                        <th>PR</th>
+                        <th>Status</th>
+                        <th>Resultado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiReports.slice(0, 10).map((report) => (
+                        <tr key={report.id}>
+                          <td>{report.id}</td>
+                          <td>Sonar</td>
+                          <td>{report.issueKeys?.[0] ?? '—'}</td>
+                          <td>{report.riskClassification ?? '—'}</td>
+                          <td>{report.prLink ? report.prLink.split('/').slice(-2, -1)[0] : '—'}</td>
+                          <td>{report.prLink ?? '—'}</td>
+                          <td>{report.status ?? '—'}</td>
+                          <td>{report.summary}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Última execução</h4>
+              {aiReportsLoading && <p>Carregando logs...</p>}
+              {!aiReportsLoading && aiReports.length === 0 && <p>Sem logs recentes.</p>}
+              {aiReports.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Resumo</th>
+                        <th>Issues</th>
+                        <th>Arquivos</th>
+                        <th>PR</th>
+                        <th>Quality Gate</th>
+                        <th>Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>{aiReports[0].summary}</strong></td>
+                        <td>{aiReports[0].issueKeys?.join(', ') ?? '—'}</td>
+                        <td>{aiReports[0].filesModified?.join(', ') ?? '—'}</td>
+                        <td>{aiReports[0].prLink ?? '—'}</td>
+                        <td>{aiReports[0].qualityGate ?? '—'}</td>
+                        <td>{aiReports[0].confidenceScore ?? '—'}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Execution History</h4>
+              {aiReports.length === 0 && <p>Sem histórico.</p>}
+              {aiReports.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Issues</th>
+                        <th>Build</th>
+                        <th>Quality Gate</th>
+                        <th>Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiReports.slice(0, 10).map((report) => (
+                        <tr key={report.id}>
+                          <td>{report.createdAt ?? '—'}</td>
+                          <td>{report.issueKeys?.join(', ') ?? '—'}</td>
+                          <td>{report.buildResult ?? '—'}</td>
+                          <td>{report.qualityGate ?? '—'}</td>
+                          <td>{report.confidenceScore ?? '—'}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'ia-tasks' && isAdmin && (
+          <section>
+            <h2>Tasks IA</h2>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
+              <h4>Criar Task IA</h4>
+              <div className="admin-modal__form">
+                <label>
+                  <span>Título</span>
+                  <input
+                    type="text"
+                    value={iaTaskForm.title}
+                    onChange={(e) => setIaTaskForm((prev) => ({ ...prev, title: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Descrição</span>
+                  <textarea
+                    rows={3}
+                    value={iaTaskForm.description}
+                    onChange={(e) => setIaTaskForm((prev) => ({ ...prev, description: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select value={iaTaskForm.status} onChange={(e) => setIaTaskForm((prev) => ({ ...prev, status: e.target.value }))}>
+                    <option value="TODO">TODO</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="REVIEW">REVIEW</option>
+                    <option value="BLOCKED">BLOCKED</option>
+                    <option value="DONE">DONE</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Agente</span>
+                  <select value={iaTaskForm.linkedAgentId} onChange={(e) => setIaTaskForm((prev) => ({ ...prev, linkedAgentId: e.target.value }))}>
+                    <option value="">Sem agente</option>
+                    {iaAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Especialidade</span>
+                  <input
+                    type="text"
+                    value={iaTaskForm.specialistType}
+                    onChange={(e) => setIaTaskForm((prev) => ({ ...prev, specialistType: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Contexto</span>
+                  <input
+                    type="text"
+                    value={iaTaskForm.contextReference}
+                    onChange={(e) => setIaTaskForm((prev) => ({ ...prev, contextReference: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="admin-actions" style={{ marginTop: 12 }}>
+                <button className="admin-btn" onClick={handleCreateIaTask}>Criar Task</button>
+              </div>
+            </div>
+            <div className="admin-actions" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+              <label>
+                <span>Status</span>
+                <select value={iaTasksStatusFilter} onChange={(e) => setIaTasksStatusFilter(e.target.value)}>
+                  <option value="all">Todos</option>
+                  <option value="TODO">TODO</option>
+                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                  <option value="REVIEW">REVIEW</option>
+                  <option value="BLOCKED">BLOCKED</option>
+                  <option value="DONE">DONE</option>
+                </select>
+              </label>
+              <div style={{ alignSelf: 'flex-end' }}>
+                {filteredIaTasks.length} tasks
+              </div>
+            </div>
+            {aiTasksLoading && <p>Carregando tarefas...</p>}
+            {aiTasksError && <p>{aiTasksError}</p>}
+            {!aiTasksLoading && !aiTasksError && filteredIaTasks.length === 0 && <p>Sem tarefas de IA no momento.</p>}
+            {filteredIaTasks.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Origem</th>
+                      <th>Agente</th>
+                      <th>Especialista</th>
+                      <th>Risco</th>
+                      <th>Status</th>
+                      <th>PR</th>
+                      <th>Confiança</th>
+                      <th>Resultado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedIaTasks.map((task) => (
+                      <tr key={task.id}>
+                        <td>{task.title || '—'}</td>
+                        <td>{task.origin || (task.generatedByAI ? 'Automation' : 'Manual') || '—'}</td>
+                        <td>{iaAgents.find((agent) => agent.id === task.linkedAgentId)?.name || '—'}</td>
+                        <td>{task.specialistType || '—'}</td>
+                        <td>
+                          {task.riskLevel ? (
+                            <span className={`sonar-risk sonar-risk--${String(task.riskLevel).toLowerCase()}`}>
+                              {task.riskLevel}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td>{normalizeIaStatus(task.status) || '—'}</td>
+                        <td>
+                          {task.prLink ? (
+                            <a href={task.prLink} target="_blank" rel="noreferrer">{task.prLink}</a>
+                          ) : '—'}
+                        </td>
+                        <td>{typeof task.confidenceScore === 'number' ? `${task.confidenceScore}%` : '—'}</td>
+                        <td>{task.executionResult ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="admin-actions" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button
+                    className="admin-btn admin-btn--ghost"
+                    disabled={iaTasksPage <= 1}
+                    onClick={() => setIaTasksPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Anterior
+                  </button>
+                  <span>{iaTasksPage} / {iaTasksTotalPages}</span>
+                  <button
+                    className="admin-btn admin-btn--ghost"
+                    disabled={iaTasksPage >= iaTasksTotalPages}
+                    onClick={() => setIaTasksPage((prev) => Math.min(iaTasksTotalPages, prev + 1))}
+                  >
+                    Próximo
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ia-agents' && isAdmin && (
+          <section>
+            <h2>Agentes IA</h2>
+            {iaAgentsError && <p>{iaAgentsError}</p>}
+            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
+              <h4>{editingAgentId ? 'Editar agente' : 'Criar agente'}</h4>
+              <div className="admin-modal__form">
+                <label>
+                  <span>Nome</span>
+                  <input type="text" value={agentForm.name} onChange={(e) => setAgentForm((prev) => ({ ...prev, name: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Descrição</span>
+                  <textarea rows={3} value={agentForm.description} onChange={(e) => setAgentForm((prev) => ({ ...prev, description: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Especialidade</span>
+                  <input type="text" value={agentForm.specialty} onChange={(e) => setAgentForm((prev) => ({ ...prev, specialty: e.target.value }))} />
+                </label>
+                <label>
+                  <span>System Prompt</span>
+                  <textarea rows={3} value={agentForm.system_prompt} onChange={(e) => setAgentForm((prev) => ({ ...prev, system_prompt: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Autonomia</span>
+                  <input type="text" value={agentForm.autonomy_level} onChange={(e) => setAgentForm((prev) => ({ ...prev, autonomy_level: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Ativo</span>
+                  <select value={agentForm.is_active ? 'true' : 'false'} onChange={(e) => setAgentForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
+                    <option value="true">Ativo</option>
+                    <option value="false">Inativo</option>
+                  </select>
+                </label>
+              </div>
+              <div className="admin-actions" style={{ marginTop: 12 }}>
+                <button className="admin-btn" onClick={handleSaveAgent}>{editingAgentId ? 'Salvar' : 'Criar'}</button>
+              </div>
+            </div>
+            {iaAgentsLoading && <p>Carregando agentes...</p>}
+            {!iaAgentsLoading && iaAgents.length === 0 && <p>Sem agentes cadastrados.</p>}
+            {iaAgents.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Especialidade</th>
+                      <th>Autonomia</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {iaAgents.map((agent) => (
+                      <tr key={agent.id}>
+                        <td>{agent.name}</td>
+                        <td>{agent.specialty || '—'}</td>
+                        <td>{agent.autonomy_level || '—'}</td>
+                        <td>{agent.is_active ? 'Ativo' : 'Inativo'}</td>
+                        <td>
+                          <div className="admin-actions">
+                            <button className="admin-btn admin-btn--ghost" onClick={() => {
+                              setEditingAgentId(agent.id);
+                              setAgentForm({
+                                name: agent.name,
+                                description: agent.description || '',
+                                specialty: agent.specialty || '',
+                                system_prompt: agent.system_prompt || '',
+                                autonomy_level: agent.autonomy_level || 'manual',
+                                is_active: agent.is_active ?? true,
+                              });
+                            }}>
+                              Editar
+                            </button>
+                            <button className="admin-btn" onClick={() => handleExecuteAgent(agent.id)}>
+                              Executar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ia-orchestrator' && isAdmin && (
+          <section>
+            <h2>Orquestrador IA</h2>
+            {iaOrchestratorsError && <p>{iaOrchestratorsError}</p>}
+            <div className="report-summary" style={{ marginTop: 12 }}>
+              <div className="report-card">
+                <span>Contextos ativos</span>
+                <strong>{orchestratorSummary?.activeContextsCount ?? 0}</strong>
+              </div>
+              <div className="report-card">
+                <span>Agentes ativos</span>
+                <strong>{orchestratorSummary?.activeAgentsCount ?? 0}</strong>
+              </div>
+              <div className="report-card">
+                <span>Versão ativa</span>
+                <strong>{activeOrchestratorRecord ? `v${activeOrchestratorRecord.version ?? 1}` : '—'}</strong>
+              </div>
+              <div className="report-card">
+                <span>Última execução</span>
+                <strong>{latestOrchestratorExecution?.created_at ? new Date(latestOrchestratorExecution.created_at).toLocaleString('pt-BR') : '—'}</strong>
+              </div>
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>SystemConfig Flags</h4>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Flag</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>managedByAI</td>
+                    <td>{String(orchestratorSummary?.systemFlags?.managedByAI ?? false)}</td>
+                  </tr>
+                  <tr>
+                    <td>taskCreationPolicy</td>
+                    <td>{orchestratorSummary?.systemFlags?.taskCreationPolicy ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>allowAutoBacklogIfEmpty</td>
+                    <td>{String(orchestratorSummary?.systemFlags?.allowAutoBacklogIfEmpty ?? false)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>Agentes ativos</h4>
+              {!orchestratorSummary?.activeAgents || orchestratorSummary.activeAgents.length === 0 ? (
+                <p>Sem agentes ativos.</p>
+              ) : (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Especialidade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orchestratorSummary.activeAgents.map((agent) => (
+                      <tr key={agent.id}>
+                        <td>{agent.name}</td>
+                        <td>{agent.specialty || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <div className="admin-actions" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4>Supreme Prompt</h4>
+                <button
+                  className="admin-btn admin-btn--ghost"
+                  onClick={async () => {
+                    if (!activeOrchestratorRecord) return;
+                    setSupremePromptModal(activeOrchestratorRecord);
+                    await loadOrchestratorContent(activeOrchestratorRecord.id);
+                  }}
+                  disabled={!activeOrchestratorRecord?.storage_url}
+                >
+                  Ver Supreme Prompt
+                </button>
+              </div>
+              {!activeOrchestratorRecord && <p>Nenhum orquestrador ativo.</p>}
+              {activeOrchestratorRecord && (
+                <div style={{ marginTop: 8 }}>
+                  <strong>{activeOrchestratorRecord.name}</strong>
+                </div>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>Execution Flow</h4>
+              {executionFlowList.length === 0 && <p>Sem etapas configuradas.</p>}
+              {executionFlowList.length > 0 && (
+                <ol style={{ paddingLeft: 20, display: 'grid', gap: 4 }}>
+                  {executionFlowList.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>Última execução - Steps</h4>
+              {!latestOrchestratorExecution && <p>Sem execuções registradas.</p>}
+              {latestOrchestratorExecution && (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Step</th>
+                      <th>Status</th>
+                      <th>Tempo (ms)</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestOrchestratorExecution.steps_executed?.map((step) => (
+                      <tr key={step.step}>
+                        <td>{step.step}</td>
+                        <td>{step.status}</td>
+                        <td>{step.execution_time_ms ?? 0}</td>
+                        <td>{step.token_usage ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>Execuções</h4>
+              {orchestratorExecutionsError && <p>{orchestratorExecutionsError}</p>}
+              {orchestratorExecutionsLoading && <p>Carregando execuções...</p>}
+              {!orchestratorExecutionsLoading && orchestratorExecutions.length === 0 && <p>Sem execuções registradas.</p>}
+              {orchestratorExecutions.length > 0 && (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Status</th>
+                      <th>Versão</th>
+                      <th>Tokens</th>
+                      <th>Tempo (ms)</th>
+                      <th>Memória</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orchestratorExecutions.map((exec) => (
+                      <tr key={exec.id}>
+                        <td>{exec.created_at ? new Date(exec.created_at).toLocaleString('pt-BR') : '—'}</td>
+                        <td>{exec.status ?? '—'}</td>
+                        <td>v{exec.version ?? 1}</td>
+                        <td>{exec.token_usage ?? 0}</td>
+                        <td>{exec.execution_time ?? 0}</td>
+                        <td>{exec.memory_retrieved_count ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
+              <h4>{editingOrchestratorId ? 'Editar orquestrador' : 'Criar orquestrador'}</h4>
+              <div className="admin-modal__form">
+                <label>
+                  <span>Nome</span>
+                  <input
+                    type="text"
+                    value={orchestratorForm.name}
+                    onChange={(e) => setOrchestratorForm((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Supreme Prompt</span>
+                  <textarea
+                    rows={6}
+                    value={orchestratorForm.supreme_prompt}
+                    onChange={(e) => setOrchestratorForm((prev) => ({ ...prev, supreme_prompt: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Execution Flow (JSON)</span>
+                  <textarea
+                    rows={6}
+                    value={orchestratorForm.execution_flow}
+                    onChange={(e) => setOrchestratorForm((prev) => ({ ...prev, execution_flow: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Ativo</span>
+                  <select
+                    value={orchestratorForm.is_active ? 'true' : 'false'}
+                    onChange={(e) => setOrchestratorForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}
+                  >
+                    <option value="true">Ativo</option>
+                    <option value="false">Inativo</option>
+                  </select>
+                </label>
+              </div>
+              <div className="admin-actions" style={{ marginTop: 12 }}>
+                <button className="admin-btn" onClick={handleSaveOrchestrator}>
+                  {editingOrchestratorId ? 'Salvar' : 'Criar'}
+                </button>
+              </div>
+            </div>
+            {iaOrchestratorsLoading && <p>Carregando orquestradores...</p>}
+            {!iaOrchestratorsLoading && iaOrchestrators.length === 0 && <p>Sem orquestradores cadastrados.</p>}
+            {iaOrchestrators.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Versão</th>
+                      <th>Status</th>
+                      <th>Atualizado</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {iaOrchestrators.map((orchestrator) => (
+                      <tr key={orchestrator.id}>
+                        <td>{orchestrator.name}</td>
+                        <td>v{orchestrator.version ?? 1}</td>
+                        <td>{orchestrator.is_active ? 'Ativo' : 'Inativo'}</td>
+                        <td>{orchestrator.updated_at ? new Date(orchestrator.updated_at).toLocaleString() : '—'}</td>
+                        <td>
+                          <div className="admin-actions">
+                            <button
+                              className="admin-btn admin-btn--ghost"
+                              onClick={async () => {
+                                setEditingOrchestratorId(orchestrator.id);
+                                setOrchestratorForm({
+                                  name: orchestrator.name,
+                                  supreme_prompt: '',
+                                  execution_flow: JSON.stringify(orchestrator.execution_flow || [], null, 2),
+                                  is_active: orchestrator.is_active ?? true,
+                                });
+                                await loadOrchestratorContent(orchestrator.id);
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="admin-btn"
+                              onClick={() => handleActivateOrchestrator(orchestrator.id)}
+                              disabled={orchestrator.is_active}
+                            >
+                              Ativar
+                            </button>
+                            <button
+                              className="admin-btn admin-btn--ghost"
+                              onClick={() => {
+                                if (!orchestrator.id) return;
+                                loadOrchestratorContent(orchestrator.id).then((data) => {
+                                  if (!data?.content) return;
+                                  navigator.clipboard.writeText(data.content).catch((error) => {
+                                    console.error('Erro ao copiar Supreme Prompt:', error);
+                                    setIaOrchestratorsError('Não foi possível copiar o Supreme Prompt.');
+                                  });
+                                });
+                              }}
+                            >
+                              Copiar Supreme Prompt
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {supremePromptModal && (
+              <div className="admin-modal-backdrop" onClick={() => {
+                setSupremePromptModal(null);
+                setSupremePromptContent(null);
+              }}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>Supreme Prompt</h3>
+                    <button className="admin-btn admin-btn--ghost" onClick={() => {
+                      setSupremePromptModal(null);
+                      setSupremePromptContent(null);
+                    }}>Fechar</button>
+                  </div>
+                  <div className="admin-modal__form">
+                    <label>
+                      <span>Orquestrador</span>
+                      <input type="text" value={supremePromptModal.name} readOnly />
+                    </label>
+                    <label>
+                      <span>Prompt</span>
+                      <textarea rows={16} value={supremePromptContent?.content || ''} readOnly />
+                    </label>
+                    {supremePromptLoading && <p>Carregando conteúdo...</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ia-context' && isAdmin && (
+          <section>
+            <h2>Contextos IA</h2>
+            {iaContextsError && <p>{iaContextsError}</p>}
+            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
+              <h4>{editingContextId ? 'Editar contexto' : 'Criar contexto'}</h4>
+              <div className="admin-modal__form">
+                <label>
+                  <span>Título</span>
+                  <input type="text" value={contextForm.title} onChange={(e) => setContextForm((prev) => ({ ...prev, title: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Conteúdo</span>
+                  <textarea rows={4} value={contextForm.content} onChange={(e) => setContextForm((prev) => ({ ...prev, content: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Tipo</span>
+                  <input type="text" value={contextForm.context_type} onChange={(e) => setContextForm((prev) => ({ ...prev, context_type: e.target.value }))} />
+                </label>
+                <label>
+                  <span>Agente relacionado</span>
+                  <select value={contextForm.related_agent_id} onChange={(e) => setContextForm((prev) => ({ ...prev, related_agent_id: e.target.value }))}>
+                    <option value="">Nenhum</option>
+                    {iaAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="admin-actions" style={{ marginTop: 12 }}>
+                <button className="admin-btn" onClick={handleSaveContext}>{editingContextId ? 'Salvar' : 'Criar'}</button>
+              </div>
+            </div>
+            {iaContextsLoading && <p>Carregando contextos...</p>}
+            {!iaContextsLoading && iaContexts.length === 0 && <p>Sem contextos cadastrados.</p>}
+            {iaContexts.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Título</th>
+                      <th>Tipo</th>
+                      <th>Agente</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {iaContexts.map((ctx) => (
+                      <tr key={ctx.id}>
+                        <td>{ctx.title}</td>
+                        <td>{ctx.context_type || '—'}</td>
+                        <td>{iaAgents.find((agent) => agent.id === ctx.related_agent_id)?.name || '—'}</td>
+                        <td>
+                          <div className="admin-actions">
+                            <button className="admin-btn admin-btn--ghost" onClick={() => setViewingContext(ctx)}>
+                              Ver
+                            </button>
+                            <button className="admin-btn admin-btn--ghost" onClick={() => {
+                              setEditingContextId(ctx.id);
+                              setContextForm({
+                                title: ctx.title,
+                                content: ctx.content,
+                                context_type: ctx.context_type || '',
+                                related_agent_id: ctx.related_agent_id || '',
+                              });
+                            }}>
+                              Editar
+                            </button>
+                            <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteContext(ctx.id)}>
+                              Remover
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ marginTop: 24 }}>
+              <h3>Prompt Library</h3>
+              {iaPromptsError && <p>{iaPromptsError}</p>}
+              <div className="admin-actions" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <label>
+                  <span>Categoria</span>
+                  <select value={iaPromptsCategory} onChange={(e) => setIaPromptsCategory(e.target.value)}>
+                    <option value="">Todas</option>
+                    <option value="orchestrator">orchestrator</option>
+                    <option value="system">system</option>
+                    <option value="architecture">architecture</option>
+                    <option value="security">security</option>
+                    <option value="workflow">workflow</option>
+                    <option value="bootstrap">bootstrap</option>
+                    <option value="mybot">mybot</option>
+                    <option value="governance">governance</option>
+                  </select>
+                </label>
+                <button className="admin-btn" onClick={loadIaPrompts} disabled={iaPromptsLoading}>
+                  {iaPromptsLoading ? 'Carregando...' : 'Atualizar'}
+                </button>
+                <button className="admin-btn admin-btn--ghost" onClick={handleExportPrompts}>
+                  Exportar Prompts
+                </button>
+              </div>
+              {iaPrompts.length === 0 && !iaPromptsLoading && <p>Sem prompts cadastrados.</p>}
+              {iaPrompts.length > 0 && (
+                <div className="admin-table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Título</th>
+                        <th>Categoria</th>
+                        <th>Versão</th>
+                        <th>Memória</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {iaPrompts.map((prompt) => (
+                        <tr key={prompt.id}>
+                          <td>{prompt.title}</td>
+                          <td>{prompt.category}</td>
+                          <td>v{prompt.version ?? 1}</td>
+                          <td>{prompt.memory_count ?? 0}</td>
+                          <td>
+                            <div className="admin-actions">
+                              <button className="admin-btn admin-btn--ghost" onClick={() => handleSelectPrompt(prompt.id)}>
+                                Ver/Editar
+                              </button>
+                              <button className="admin-btn" onClick={() => handleReembedPrompt(prompt.id)}>
+                                Re-embed
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {selectedPrompt && (
+              <div className="admin-modal-backdrop" onClick={() => {
+                setSelectedPrompt(null);
+                setPromptVersions([]);
+              }}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>Editar Prompt</h3>
+                    <button
+                      className="admin-btn admin-btn--ghost"
+                      onClick={() => {
+                        setSelectedPrompt(null);
+                        setPromptVersions([]);
+                      }}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  <div className="admin-modal__form">
+                    <label>
+                      <span>Título</span>
+                      <input type="text" value={promptForm.title} onChange={(e) => setPromptForm((prev) => ({ ...prev, title: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Categoria</span>
+                      <input type="text" value={promptForm.category} onChange={(e) => setPromptForm((prev) => ({ ...prev, category: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Descrição</span>
+                      <input type="text" value={promptForm.description} onChange={(e) => setPromptForm((prev) => ({ ...prev, description: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Conteúdo</span>
+                      <textarea rows={10} value={promptForm.content} onChange={(e) => setPromptForm((prev) => ({ ...prev, content: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Ativo</span>
+                      <select value={promptForm.is_active ? 'true' : 'false'} onChange={(e) => setPromptForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
+                        <option value="true">Ativo</option>
+                        <option value="false">Inativo</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Re-embed</span>
+                      <select value={promptForm.reembed ? 'true' : 'false'} onChange={(e) => setPromptForm((prev) => ({ ...prev, reembed: e.target.value === 'true' }))}>
+                        <option value="false">Não</option>
+                        <option value="true">Sim</option>
+                      </select>
+                    </label>
+                    <div>
+                      <h4>Histórico de versões</h4>
+                      {promptVersionsError && <p>{promptVersionsError}</p>}
+                      {promptVersionsLoading && <p>Carregando versões...</p>}
+                      {!promptVersionsLoading && promptVersions.length === 0 && <p>Sem versões registradas.</p>}
+                      {promptVersions.length > 0 && (
+                        <div className="admin-table-wrapper" style={{ marginTop: 8 }}>
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th>Versão</th>
+                                <th>Storage</th>
+                                <th>Criado em</th>
+                                <th>Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {promptVersions.map((version) => (
+                                <tr key={version.id}>
+                                  <td>v{version.version}</td>
+                                  <td>
+                                    {version.storage_url ? (
+                                      <a href={version.storage_url} target="_blank" rel="noreferrer">Abrir</a>
+                                    ) : '—'}
+                                  </td>
+                                  <td>{version.created_at ? new Date(version.created_at).toLocaleString() : '—'}</td>
+                                  <td>
+                                    <button
+                                      className="admin-btn admin-btn--ghost"
+                                      onClick={() => selectedPrompt && handleActivatePromptVersion(selectedPrompt.id, version.version)}
+                                    >
+                                      Ativar
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="admin-modal__footer">
+                    <button
+                      className="admin-btn admin-btn--ghost"
+                      onClick={() => {
+                        setSelectedPrompt(null);
+                        setPromptVersions([]);
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button className="admin-btn" onClick={handleSavePrompt}>Salvar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {viewingContext && (
+              <div className="admin-modal-backdrop" onClick={() => setViewingContext(null)}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>Visualizar contexto</h3>
+                    <button className="admin-btn admin-btn--ghost" onClick={() => setViewingContext(null)}>Fechar</button>
+                  </div>
+                  <div className="admin-modal__form">
+                    <label>
+                      <span>Título</span>
+                      <input type="text" value={viewingContext.title} readOnly />
+                    </label>
+                    <label>
+                      <span>Tipo</span>
+                      <input type="text" value={viewingContext.context_type || ''} readOnly />
+                    </label>
+                    <label>
+                      <span>Conteúdo</span>
+                      <textarea rows={12} value={viewingContext.content} readOnly />
+                    </label>
+                  </div>
+                  <div className="admin-modal__footer">
+                    <button className="admin-btn" onClick={() => setViewingContext(null)}>Fechar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'ia-memory' && isAdmin && (
+          <section>
+            <h2>Memória IA</h2>
+            {iaMemoryError && <p>{iaMemoryError}</p>}
+            {iaMemoryLoading && <p>Carregando memória...</p>}
+            <div className="report-summary" style={{ marginTop: 12 }}>
+              <div className="report-card">
+                <span>Total embeddings</span>
+                <strong>{iaMemoryStats?.total ?? 0}</strong>
+              </div>
+              <div className="report-card">
+                <span>Tokens estimados</span>
+                <strong>{iaMemoryStats?.tokenEstimate ?? 0}</strong>
+              </div>
+            </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginTop: 16 }}>
+              <h4>Buscar memória</h4>
+              <div className="admin-actions" style={{ gap: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Pergunta ou contexto"
+                  value={memorySearchQuery}
+                  onChange={(e) => setMemorySearchQuery(e.target.value)}
+                />
+                <button className="admin-btn" onClick={handleMemorySearch} disabled={memorySearchLoading}>
+                  {memorySearchLoading ? 'Buscando...' : 'Buscar'}
+                </button>
+                <button className="admin-btn admin-btn--ghost" onClick={handleCreateMemory}>
+                  Salvar como memória
+                </button>
+              </div>
+              {memorySearchResults.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <h4>Resultados</h4>
+                  <div className="admin-table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Conteúdo</th>
+                          <th>Tipo</th>
+                          <th>Distância</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {memorySearchResults.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.content}</td>
+                            <td>{item.context_type || '—'}</td>
+                            <td>{typeof item.distance === 'number' ? item.distance.toFixed(4) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {iaMemoryStats?.byType && iaMemoryStats.byType.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <h4>Categorias</h4>
+                  <div className="admin-table-wrapper">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Tipo</th>
+                          <th>Quantidade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {iaMemoryStats.byType.map((row: { context_type: string; count: number }) => (
+                          <tr key={row.context_type || 'default'}>
+                            <td>{row.context_type || '—'}</td>
+                            <td>{row.count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'monitoramento-executions' && (
+          <section>
+            <h2>Execuções</h2>
+            {aiReportsLoading && <p>Carregando execuções...</p>}
+            {!aiReportsLoading && aiReports.length === 0 && <p>Sem execuções registradas.</p>}
+            {aiReports.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Issues</th>
+                      <th>Build</th>
+                      <th>Quality Gate</th>
+                      <th>Confidence</th>
+                      <th>PR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiReports.map((report) => (
+                      <tr key={report.id}>
+                        <td>{report.createdAt ?? '—'}</td>
+                        <td>{report.issueKeys?.join(', ') ?? '—'}</td>
+                        <td>{report.buildResult ?? '—'}</td>
+                        <td>{report.qualityGate ?? '—'}</td>
+                        <td>{report.confidenceScore ?? '—'}%</td>
+                        <td>{report.prLink ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'monitoramento-health' && (
+          <section>
+            <h2>Saúde Técnica</h2>
+            {sonarLoading && <p>Carregando métricas...</p>}
+            {sonarError && <p>{sonarError}</p>}
+            {!sonarLoading && !sonarError && sonarSummary && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Technical Health Score</th>
+                      <th>Bugs</th>
+                      <th>Major/Critical</th>
+                      <th>Duplications %</th>
+                      <th>Coverage %</th>
+                      <th>Quality Gate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{Math.max(0, 100 - (sonarSummary.metrics.bugs * 5 + sonarSummary.metrics.vulnerabilities * 8 + sonarSummary.metrics.codeSmells * 1 + Number(sonarSummary.metrics.duplicatedLinesDensity || 0) * 2))}</td>
+                      <td>{sonarSummary.metrics.bugs}</td>
+                      <td>{sonarIssues.filter((issue) => issue.severity === 'MAJOR' || issue.severity === 'CRITICAL').length}</td>
+                      <td>{sonarSummary.metrics.duplicatedLinesDensity}%</td>
+                      <td>{sonarSummary.metrics.coverage}%</td>
+                      <td>{sonarSummary.qualityGateStatus}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {simulateModalIssue && (
+          <div className="admin-modal-backdrop" onClick={() => setSimulateModalIssue(null)}>
+            <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="admin-modal__header">
+                <h3>Simulação – {simulateModalIssue.key}</h3>
+                <button className="admin-btn admin-btn--ghost" onClick={() => setSimulateModalIssue(null)}>Fechar</button>
+              </div>
+              <div className="admin-modal__form">
+                {simulateLoading && <p>Gerando simulação...</p>}
+                {!simulateLoading && simulateResult && (
+                  <>
+                    <p><strong>Status:</strong> {simulateResult.status.toUpperCase()} {simulateResult.reason ? `- ${simulateResult.reason}` : ''}</p>
+                    {simulateResult.plan && (
+                      <div>
+                        <p><strong>Risco:</strong> {simulateResult.plan.risk}</p>
+                        <ul>
+                          {simulateResult.plan.steps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {simulateResult.confidenceScore !== undefined && (
+                      <p><strong>Confidence:</strong> {simulateResult.confidenceScore}%</p>
+                    )}
+                    <p><em>Simulação não aplica mudanças nem cria PR.</em></p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+
+        {activeTab === 'projetos' && (
+          <section>
+            {isTemplateEditorRoute && templateEditorId && (
+              <TemplateEditor
+                templateId={templateEditorId}
+                adminId={effectiveAdminId}
+                onBack={() => navigate('/admin/projetos/templates')}
+              />
+            )}
+
+            {isTemplateCreateRoute && (
+              <div className="template-create">
+                <div className="template-create__header">
+                  <button className="admin-btn admin-btn--ghost" onClick={() => navigate('/admin/projetos/templates')}>Voltar</button>
+                  <h2>Novo template</h2>
+                  <button className="admin-btn" onClick={handleCreateTemplateFromRoute}>Criar</button>
+                </div>
+                {templateCreateError && <p className="admin-modal__error">{templateCreateError}</p>}
+                <div className="template-create__form">
+                  <label>
+                    <span>Nome</span>
+                    <input
+                      value={templateCreateData.name}
+                      onChange={(e) => setTemplateCreateData((prev) => ({ ...prev, name: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Descrição</span>
+                    <input
+                      value={templateCreateData.description}
+                      onChange={(e) => setTemplateCreateData((prev) => ({ ...prev, description: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Nível</span>
+                    <select
+                      value={templateCreateData.level}
+                      onChange={(e) => setTemplateCreateData((prev) => ({ ...prev, level: e.target.value }))}
+                    >
+                      <option value="">Selecione</option>
+                      <option value="iniciante">Iniciante</option>
+                      <option value="intermediario">Intermediário</option>
+                      <option value="avancado">Avançado</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Categoria</span>
+                    <input
+                      value={templateCreateData.category}
+                      onChange={(e) => setTemplateCreateData((prev) => ({ ...prev, category: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Conteúdo</span>
+                    <textarea
+                      value={templateCreateData.blogContent}
+                      onChange={(e) => setTemplateCreateData((prev) => ({ ...prev, blogContent: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {!isTemplateEditorRoute && !isTemplateCreateRoute && (
+              <>
+                <h2>Projetos</h2>
+                {projectsLoading && <p>Carregando projetos...</p>}
+                {projectsError && <p>{projectsError}</p>}
+                <div className="admin-user-actions">
+                  <button
+                    className="admin-btn"
+                    onClick={() => {
+                      setProjectsError(null);
+                      setNewProject({
+                        name: '',
+                        description: '',
+                        projectType: 'Landingpage',
+                        salePrice: '',
+                        productionCost: '',
+                        purchaseCount: 0,
+                        repository: '',
+                        domain: '',
+                        hosting: 'Vercel',
+                        status: 'Ativo',
+                        paid: false,
+                        isPublic: true,
+                        isTemplate: projectsSubTab === 'templates',
+                      });
+                      setIsProjectModalOpen(true);
+                    }}
+                  >
+                    {projectsSubTab === 'templates' ? 'Criar template' : 'Criar projeto'}
+                  </button>
+                  {projectsSubTab === 'templates' && (
+                    <button className="admin-btn" onClick={() => navigate('/admin/projetos/templates/novo')}>Novo template (avançado)</button>
+                  )}
+                </div>
+
+                {projectsSubTab === 'templates' && (
+              <table className="admin-table admin-table--projects">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Versão</th>
+                    <th>Status</th>
+                    <th>Tipo</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!projectsLoading && projects.filter((project) => project.isTemplate).length === 0 && (
+                    <tr>
+                      <td colSpan={5}>Nenhum template encontrado.</td>
+                    </tr>
+                  )}
+                  {projects.filter((project) => project.isTemplate).map((project) => (
+                    <tr key={project.id}>
+                      <td><strong>{project.name}</strong></td>
+                      <td>{project.version ?? 1}</td>
+                      <td>{project.status}</td>
+                      <td>{project.projectType || '-'}</td>
+                      <td className="admin-actions">
+                        <button className="admin-btn" onClick={() => navigate(`/admin/projetos/templates/${project.id}`)} aria-label="Gerenciar">
+                          <span className="admin-action-icon">🧩</span>
+                          <span className="admin-action-text">Gerenciar</span>
+                        </button>
+                        <button className="admin-btn" onClick={() => handleEditProject(project)} aria-label="Editar">
+                          <span className="admin-action-icon">✏️</span>
+                          <span className="admin-action-text">Editar</span>
+                        </button>
+                        <button className="admin-btn" onClick={() => handleCloneTemplate(project.id)} aria-label="Clonar">
+                          <span className="admin-action-icon">📄</span>
+                          <span className="admin-action-text">Clonar</span>
+                        </button>
+                        <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)} aria-label="Excluir">
+                          <span className="admin-action-icon">🗑️</span>
+                          <span className="admin-action-text">Excluir</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {projectsSubTab === 'clonados' && (
+              <table className="admin-table admin-table--projects">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Template</th>
+                    <th>Versão</th>
+                    <th>Status</th>
+                    <th>Criador</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!projectsLoading && projects.filter((project) => !project.isTemplate && (project.templateId || project.baseProjectId || project.createdFromPurchase)).length === 0 && (
+                    <tr>
+                      <td colSpan={6}>Nenhum projeto clonado encontrado.</td>
+                    </tr>
+                  )}
+                  {projects
+                    .filter((project) => !project.isTemplate && (project.templateId || project.baseProjectId || project.createdFromPurchase))
+                    .map((project) => (
+                      <tr key={project.id}>
+                        <td><strong>{project.name}</strong></td>
+                        <td>{project.templateId || project.baseProjectId || '—'}</td>
+                        <td>{project.templateVersion ?? '—'}</td>
+                        <td>{project.status}</td>
+                        <td>{project.ownerUserId || '—'}</td>
+                        <td className="admin-actions">
+                          <button
+                            className="admin-btn admin-btn--primary"
+                            style={{ marginLeft: 8, background: '#38bdf8', color: '#fff', borderRadius: 8, fontWeight: 600 }}
+                            onClick={() => navigate(`/manager?projectId=${encodeURIComponent(project.id)}`)}
+                            aria-label={`Administrar ${project.name}`}
+                          >
+                            <span className="admin-action-icon">🛠️</span>
+                            <span className="admin-action-text">Administrar</span>
+                          </button>
+                          <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteProject(project)} aria-label="Excluir">
+                            <span className="admin-action-icon">🗑️</span>
+                            <span className="admin-action-text">Excluir</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
 
             {isProjectModalOpen && (
               <div className="admin-modal-backdrop" onClick={() => setIsProjectModalOpen(false)}>
                 <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
                   <div className="admin-modal__header">
-                    <h3>Novo projeto</h3>
+                    <h3>{newProject.isTemplate ? 'Novo template' : 'Novo projeto'}</h3>
                     <button className="admin-btn admin-btn--ghost" onClick={() => setIsProjectModalOpen(false)}>Fechar</button>
                   </div>
                   {projectsError && <p className="admin-modal__error">{projectsError}</p>}
@@ -1852,6 +4882,14 @@ const Admin: React.FC = () => {
                         <option value="Pausado">Pausado</option>
                         <option value="Finalizado">Finalizado</option>
                       </select>
+                    </label>
+                    <label className="admin-modal__checkbox">
+                      <input
+                        type="checkbox"
+                        checked={newProject.isTemplate}
+                        onChange={(e) => setNewProject({ ...newProject, isTemplate: e.target.checked })}
+                      />
+                      <span>Template</span>
                     </label>
                     <label className="admin-modal__checkbox">
                       <input
@@ -1984,6 +5022,14 @@ const Admin: React.FC = () => {
                     <label className="admin-modal__checkbox">
                       <input
                         type="checkbox"
+                        checked={editProjectData.isTemplate}
+                        onChange={(e) => setEditProjectData({ ...editProjectData, isTemplate: e.target.checked })}
+                      />
+                      <span>Template</span>
+                    </label>
+                    <label className="admin-modal__checkbox">
+                      <input
+                        type="checkbox"
                         checked={editProjectData.paid}
                         onChange={(e) => setEditProjectData({ ...editProjectData, paid: e.target.checked })}
                       />
@@ -2005,10 +5051,12 @@ const Admin: React.FC = () => {
                 </div>
               </div>
             )}
+              </>
+            )}
           </section>
         )}
 
-        {activeTab === 'ai-reports' && (
+        {activeTab === 'ia-reports' && (
           <section>
             <h2>AI Reports</h2>
             {aiReportsLoading && <p>Carregando relatórios...</p>}
@@ -2051,7 +5099,7 @@ const Admin: React.FC = () => {
                 className="admin-btn"
                 onClick={() => {
                   setProductsError(null);
-                  setNewProduct({ name: '', price: '', description: '', productType: 'digital', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
+                  setNewProduct({ name: '', price: '', description: '', productType: 'digital', templateId: '', showOnHome: false, showOnMarketplace: false, purchasePrice: '', salePrice: '' });
                   setIsProductModalOpen(true);
                 }}
               >
@@ -2160,6 +5208,15 @@ const Admin: React.FC = () => {
                       />
                     </label>
                     <label>
+                      <span>Template ID</span>
+                      <input
+                        type="text"
+                        placeholder="ID do template"
+                        value={newProduct.templateId}
+                        onChange={(e) => setNewProduct({ ...newProduct, templateId: e.target.value })}
+                      />
+                    </label>
+                    <label>
                       <span>Preço compra</span>
                       <input
                         type="text"
@@ -2239,6 +5296,14 @@ const Admin: React.FC = () => {
                       />
                     </label>
                     <label>
+                      <span>Template ID</span>
+                      <input
+                        type="text"
+                        value={editProductData.templateId}
+                        onChange={(e) => setEditProductData({ ...editProductData, templateId: e.target.value })}
+                      />
+                    </label>
+                    <label>
                       <span>Preço compra</span>
                       <input
                         type="text"
@@ -2280,130 +5345,52 @@ const Admin: React.FC = () => {
           </section>
         )}
 
-        {activeTab === 'costs' && (
+        {activeTab === 'documentacao-api' && (
           <section>
-            <h2>Custos</h2>
-            {costsLoading && <p>Carregando custos...</p>}
-            {costsError && <p>{costsError}</p>}
-            <div className="report-summary">
-              <div className="report-card">
-                <span>Custos mensais</span>
-                <strong>R$ {totalCostsMonthly.toFixed(2).replace('.', ',')}</strong>
-              </div>
-              <div className="report-card">
-                <span>Custos anuais</span>
-                <strong>R$ {totalCostsAnnual.toFixed(2).replace('.', ',')}</strong>
-              </div>
-              <div className="report-card">
-                <span>Total de itens</span>
-                <strong>{costs.length}</strong>
-              </div>
+            <h2>API Docs</h2>
+            <p>Documentação OpenAPI gerada automaticamente.</p>
+            {docsLoading.api && <p>Carregando documentação...</p>}
+            {docsError.api && <p>{docsError.api}</p>}
+            <div className="admin-actions" style={{ marginBottom: 12 }}>
+              <a className="admin-btn" href={swaggerUrl} target="_blank" rel="noreferrer">Abrir Swagger UI</a>
             </div>
-            <div className="admin-user-actions">
-              <input
-                type="text"
-                placeholder="Nome do custo"
-                value={newCost.name}
-                onChange={(e) => setNewCost((prev) => ({ ...prev, name: e.target.value }))}
-              />
-              <input
-                type="text"
-                placeholder="Valor (opcional)"
-                value={newCost.costValue}
-                onChange={(e) => setNewCost((prev) => ({ ...prev, costValue: e.target.value }))}
-              />
-              <select
-                value={newCost.billingCycle}
-                onChange={(e) => setNewCost((prev) => ({ ...prev, billingCycle: e.target.value as 'monthly' | 'annual' }))}
-              >
-                <option value="monthly">Mensal</option>
-                <option value="annual">Anual</option>
-              </select>
-              <button className="admin-btn" onClick={handleCreateCost}>Adicionar custo</button>
-            </div>
-
-            <table className="admin-table admin-table--costs">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Valor</th>
-                  <th>Ciclo</th>
-                  <th>Mensal eq.</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!costsLoading && costs.length === 0 && (
-                  <tr>
-                    <td colSpan={5}>Nenhum custo encontrado.</td>
-                  </tr>
-                )}
-                {costs.map((cost) => (
-                  <tr key={cost.id}>
-                    <td>{cost.name}</td>
-                    <td>{cost.costValue || '-'}</td>
-                    <td>{cost.billingCycle === 'annual' ? 'Anual' : 'Mensal'}</td>
-                    <td>R$ {getMonthlyCost(cost).toFixed(2).replace('.', ',')}</td>
-                    <td className="admin-actions">
-                      <button className="admin-btn" onClick={() => handleEditCost(cost)} aria-label="Editar">
-                        <span className="admin-action-icon">✏️</span>
-                        <span className="admin-action-text">Editar</span>
-                      </button>
-                      <button className="admin-btn admin-btn--danger" onClick={() => handleDeleteCost(cost)} aria-label="Excluir">
-                        <span className="admin-action-icon">🗑️</span>
-                        <span className="admin-action-text">Excluir</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {isEditCostModalOpen && (
-              <div className="admin-modal-backdrop" onClick={() => setIsEditCostModalOpen(false)}>
-                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-                  <div className="admin-modal__header">
-                    <h3>Editar custo</h3>
-                    <button className="admin-btn admin-btn--ghost" onClick={() => setIsEditCostModalOpen(false)}>Fechar</button>
-                  </div>
-                  {costsError && <p className="admin-modal__error">{costsError}</p>}
-                  <div className="admin-modal__form">
-                    <label>
-                      <span>Nome</span>
-                      <input
-                        type="text"
-                        value={editCostData.name}
-                        onChange={(e) => setEditCostData({ ...editCostData, name: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>Valor</span>
-                      <input
-                        type="text"
-                        value={editCostData.costValue}
-                        onChange={(e) => setEditCostData({ ...editCostData, costValue: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>Ciclo</span>
-                      <select
-                        value={editCostData.billingCycle}
-                        onChange={(e) => setEditCostData({ ...editCostData, billingCycle: e.target.value as 'monthly' | 'annual' })}
-                      >
-                        <option value="monthly">Mensal</option>
-                        <option value="annual">Anual</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="admin-modal__footer">
-                    <button className="admin-btn admin-btn--ghost" onClick={() => setIsEditCostModalOpen(false)}>Cancelar</button>
-                    <button className="admin-btn" onClick={handleSaveCostEdit}>Salvar</button>
-                  </div>
-                </div>
+            {!docsLoading.api && !docsError.api && (
+              <div className="admin-table-wrapper" style={{ padding: 0, height: 600 }}>
+                <iframe title="Swagger UI" src={swaggerUrl} style={{ width: '100%', height: '600px', border: 'none' }} />
               </div>
             )}
           </section>
         )}
+
+        {activeTab === 'documentacao-ui' && (
+          <section>
+            <h2>UI Components</h2>
+            <p>Storybook com os principais componentes de interface.</p>
+            {docsLoading.ui && <p>Carregando documentação...</p>}
+            {docsError.ui && <p>{docsError.ui}</p>}
+            <div className="admin-actions" style={{ marginBottom: 12 }}>
+              <a className="admin-btn" href={storybookUrl} target="_blank" rel="noreferrer">Abrir Storybook</a>
+            </div>
+            {!docsLoading.ui && !docsError.ui && (
+              <div className="admin-table-wrapper" style={{ padding: 0, height: 600 }}>
+                <iframe title="Storybook" src={storybookUrl} style={{ width: '100%', height: '600px', border: 'none' }} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'documentacao-architecture' && (
+          <section>
+            <h2>Architecture</h2>
+            <p>Documentos de arquitetura e visão geral do sistema.</p>
+            {docsLoading.architecture && <p>Carregando documentação...</p>}
+            {docsError.architecture && <p>{docsError.architecture}</p>}
+            <div className="admin-actions" style={{ marginBottom: 12 }}>
+              <a className="admin-btn" href={architectureUrl} target="_blank" rel="noreferrer">Abrir documento</a>
+            </div>
+          </section>
+        )}
+
         </main>
       </div>
     </LayoutPrivate>

@@ -1,33 +1,52 @@
-import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { createProductCheckout, type ProductCheckoutResponse } from '../../services/checkoutApi';
+import CheckoutSummary from '../../components/CheckoutSummary/CheckoutSummary';
 import './Checkout.css';
 
 const Checkout: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const checkoutData = location.state?.checkoutData; // Captura os dados enviados pelo navigate
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ProductCheckoutResponse | null>(null);
+
+  const userId = (localStorage.getItem('email') || '').toLowerCase();
+  const productId = String(checkoutData?.productId || '');
 
   useEffect(() => {
-    console.log('Dados recebidos no Checkout:', checkoutData);
-  }, [checkoutData]);
+    if (!productId || !userId) return;
+    const runCheckout = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await createProductCheckout({ productId, userId });
+        setResult(response);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Falha ao concluir checkout.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    runCheckout();
+  }, [productId, userId]);
 
   return (
     <div className="checkout-container">
       <h2>Finalizar Compra</h2>
-      
-      {checkoutData ? (
-        <div className="checkout-info">
-          <p><strong>ID da Transação:</strong> {checkoutData.transactionId}</p>
-          <p><strong>Valor:</strong> R$ {checkoutData.amount}</p>
-          <p><strong>Método de Pagamento:</strong> {checkoutData.paymentMethod}</p>
-          {checkoutData.paymentMethod === 'pix' && (
-            <div className="pix-info">
-              <p><strong>Chave Pix:</strong> {checkoutData.pixKey}</p>
-              <img src={checkoutData.qrCodeUrl} alt="QR Code Pix" />
-            </div>
-          )}
-        </div>
-      ) : (
-        <p>Não há dados de checkout disponíveis.</p>
+
+      {!checkoutData && <p>Não há dados de checkout disponíveis.</p>}
+      {checkoutData && !userId && <p>Faça login para concluir o checkout.</p>}
+
+      {loading && <p>Processando seu pedido...</p>}
+      {error && <p>{error}</p>}
+
+      {result && (
+        <CheckoutSummary
+          result={result}
+          onOpenProject={(projectId) => navigate(`/manager?projectId=${encodeURIComponent(projectId)}`)}
+        />
       )}
     </div>
   );

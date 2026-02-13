@@ -1,0 +1,12 @@
+node_modules
+coverage
+dist
+functions/lib
+public/JS/ace
+public/JS/editor.js
+public/JS/script.js
+public/JS/timeline.js
+src/JS/ace
+src/JS/editor.js
+src/JS/script.js
+src/JS/timeline.js

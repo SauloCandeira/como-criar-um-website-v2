@@ -7,6 +7,7 @@ import eBookImg from './../../assets/img/e-book.png';
 import videoImg from './../../assets/img/video.png';
 import packageImg from './../../assets/img/package.png';
 import './Ticket.css';
+import { logger } from '../../lib/logger';
 
 const Ticket: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -42,17 +43,19 @@ const Ticket: React.FC = () => {
   ];
 
   const loadCheckouts = async () => {
-    console.log('Carregando checkouts...');
+    logger.info('Carregando checkouts');
     try {
       const response = await listCheckouts();
-      console.log('Resposta da API de checkouts:', response);
+      logger.info('Resposta da API de checkouts recebida', { hasResponse: Boolean(response) });
       if (response && response.checkouts) {
         const pending = response.checkouts.filter((checkout: CheckoutResponse) => checkout.status === 'PENDING');
-        console.log('Checkouts pendentes:', pending);
+        logger.info('Checkouts pendentes', { total: pending.length });
         setPendingCheckouts(pending);
       }
     } catch (error) {
-      console.error('Erro ao carregar checkouts:', error);
+      logger.error('Erro ao carregar checkouts', {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -63,12 +66,12 @@ const Ticket: React.FC = () => {
   const getCurrencySymbol = () => (i18n.language === 'pt' ? 'R$' : '$');
 
   const handleReserve = async (product: Product) => {
-    console.log(`Iniciando reserva para o produto: ${product.name}`);
+    logger.info('Iniciando reserva para o produto', { productName: product.name });
     setLoadingProductId(product.id);
 
     try {
       const paymentLink = await createCheckout(product.price, 'BRL', product.name);
-      console.log('Link de pagamento gerado:', paymentLink);
+      logger.info('Link de pagamento gerado', { hasLink: Boolean(paymentLink) });
 
       setLoadingProductId(null);
 
@@ -79,7 +82,9 @@ const Ticket: React.FC = () => {
         alert('Erro ao gerar o link de pagamento. Tente novamente.');
       }
     } catch (error) {
-      console.error('Erro ao criar o checkout:', error);
+      logger.error('Erro ao criar o checkout', {
+        message: error instanceof Error ? error.message : String(error),
+      });
       setLoadingProductId(null);
     }
   };

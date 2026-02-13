@@ -60,6 +60,16 @@
   font-size: 13px;
 }
 
+.todo-edit {
+  background: transparent;
+  border: none;
+  color: #9ae6b4;
+  cursor: pointer;
+  margin-left: auto;
+  margin-right: 6px;
+  font-size: 12px;
+}
+
 /* FECHAR */
 .close {
   cursor: pointer;

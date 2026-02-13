@@ -1,14 +1,14 @@
 import './MarketPlaceCard.css';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPurchase, fetchPurchases, PurchaseDTO, redeemFreeProduct } from '../../services/purchasesApi';
+import { fetchPurchases, PurchaseDTO } from '../../services/purchasesApi';
 import { fetchProducts, ProductDTO } from '../../services/productsApi';
+import { logger } from '../../lib/logger';
 
 const MarketPlaceCard = () => {
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [purchaseLoadingId, setPurchaseLoadingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [purchases, setPurchases] = useState<PurchaseDTO[]>([]);
 
@@ -39,7 +39,9 @@ const MarketPlaceCard = () => {
         const data = await fetchPurchases(userId);
         setPurchases(data);
       } catch (err) {
-        console.error('Erro ao carregar compras/resgates:', err);
+        logger.error('Erro ao carregar compras/resgates', {
+          message: err instanceof Error ? err.message : String(err),
+        });
       }
     };
     loadPurchases();
@@ -65,23 +67,14 @@ const MarketPlaceCard = () => {
       }
       return;
     }
-    setPurchaseLoadingId(product.id);
-    setFeedback(null);
-    try {
-      const rawPrice = Number(String(product.salePrice || product.price || '0').replace(',', '.')) || 0;
-      if (rawPrice <= 0) {
-        await redeemFreeProduct({ userId, productId: product.id });
-        setFeedback('Resgate concluído! Seu projeto já está disponível no dashboard.');
-      } else {
-        await createPurchase({ userId, productId: product.id });
-        setFeedback('Compra registrada! Seu projeto já está disponível no dashboard.');
-      }
-      window.dispatchEvent(new Event('marketplace:purchase'));
-    } catch (err) {
-      setFeedback(err instanceof Error ? err.message : 'Falha ao registrar compra.');
-    } finally {
-      setPurchaseLoadingId(null);
-    }
+    navigate('/checkout', {
+      state: {
+        checkoutData: {
+          productId: product.id,
+          productName: product.name,
+        },
+      },
+    });
   };
 
   const sortedProducts = useMemo(() => products.filter((product) => product.showOnMarketplace), [products]);
@@ -118,7 +111,8 @@ const MarketPlaceCard = () => {
         {!loading && sortedProducts.length === 0 && <p>Nenhum produto disponível no marketplace.</p>}
         {sortedProducts.map((product) => {
           const rawPrice = Number(String(product.salePrice || product.price || '0').replace(',', '.')) || 0;
-          const isFree = rawPrice <= 0;
+          const finalPrice = Number(product.finalPrice ?? rawPrice) || 0;
+          const isFree = finalPrice <= 0;
           const purchase = latestPurchasesByProduct.get(product.id);
           const hasProject = Boolean(purchase?.projectId);
           const isRedeemed = Boolean(purchase) && (purchase?.purchaseType || '').toLowerCase() === 'free';
@@ -140,7 +134,7 @@ const MarketPlaceCard = () => {
                 <p className="marketplace-description">{product.description || 'Produto pronto para entrega imediata.'}</p>
                 <div className="marketplace-price">
                   <span className="marketplace-price-original">{formatCurrency(product.price)}</span>
-                  <span className="marketplace-price-sale">{formatCurrency(product.salePrice || product.price)}</span>
+                  <span className="marketplace-price-sale">{formatCurrency(finalPrice)}</span>
                 </div>
                 {showStatus && (
                   <div className="marketplace-status">
@@ -150,15 +144,9 @@ const MarketPlaceCard = () => {
                 <button
                   className="marketplace-action-btn"
                   onClick={() => handlePurchase(product)}
-                  disabled={purchaseLoadingId === product.id || (Boolean(purchase) && !hasProject)}
+                  disabled={Boolean(purchase) && !hasProject}
                 >
-                  {purchaseLoadingId === product.id
-                    ? 'Processando...'
-                    : purchase
-                      ? actionLabel
-                      : isFree
-                        ? 'Resgatar'
-                        : 'Comprar'}
+                  {purchase ? actionLabel : isFree ? 'Resgatar' : 'Comprar'}
                 </button>
               </div>
             </div>

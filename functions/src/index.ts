@@ -2,13 +2,129 @@ import * as admin from "firebase-admin";
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import express from "express";
+import type { Request, Response } from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
+const archiver = require("archiver");
+const AdmZip = require("adm-zip");
+const Busboy = require("busboy");
 import { Pool } from "pg";
 import { Connector, IpAddressTypes } from "@google-cloud/cloud-sql-connector";
 import crypto from "crypto";
+import swaggerUi from "swagger-ui-express";
+import logger from "./lib/logger";
+import {
+  fetchSonarIssues,
+  fetchSonarSummary,
+  runAutonomousFix,
+  type SonarConfig,
+  classifyRisk,
+} from "./services/hktechAI.service";
+import { applyCoupon, calculateOrderTotal } from "./services/commerce";
+import { cloneTemplate as cloneTemplateService } from "./services/templateCloner";
+import { swaggerSpec } from "./docs/openapi";
 
 admin.initializeApp();
 setGlobalOptions({ region: "us-central1" });
+
+const formatConsoleArgs = (args: unknown[]) =>
+  args
+    .map((arg) => {
+      if (typeof arg === "string") return arg;
+      if (arg instanceof Error) return arg.message;
+      try {
+        return JSON.stringify(arg);
+      } catch (error) {
+        return String(arg);
+      }
+    })
+    .join(" ");
+
+const bootstrapLogger = () => {
+  const original = console;
+  (globalThis as any).console = {
+    ...original,
+    log: (...args: unknown[]) => logger.info({ msg: formatConsoleArgs(args) }),
+    info: (...args: unknown[]) => logger.info({ msg: formatConsoleArgs(args) }),
+    warn: (...args: unknown[]) => logger.warn({ msg: formatConsoleArgs(args) }),
+    error: (...args: unknown[]) => {
+      const err = args.find((arg) => arg instanceof Error) as Error | undefined;
+      logger.error({ err, msg: formatConsoleArgs(args) });
+    },
+  };
+};
+
+const loadEnvFile = (filePath: string) => {
+  if (!fs.existsSync(filePath)) return;
+  const raw = fs.readFileSync(filePath, "utf8");
+  raw.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) return;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  });
+};
+
+const validateEnv = () => {
+  if (process.env.NODE_ENV === "test") return;
+  const missing: string[] = [];
+  const isCi = Boolean(process.env.CI);
+
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+  const hasCloudSql = Boolean(
+    process.env.INSTANCE_CONNECTION_NAME &&
+      process.env.DB_USER &&
+      process.env.DB_PASS &&
+      process.env.DB_NAME
+  );
+
+  if (!hasDatabaseUrl && !hasCloudSql) {
+    if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
+    if (!process.env.INSTANCE_CONNECTION_NAME) missing.push("INSTANCE_CONNECTION_NAME");
+    if (!process.env.DB_USER) missing.push("DB_USER");
+    if (!process.env.DB_PASS) missing.push("DB_PASS");
+    if (!process.env.DB_NAME) missing.push("DB_NAME");
+  }
+
+  if (isCi && !process.env.SONARCLOUD_TOKEN) {
+    missing.push("SONARCLOUD_TOKEN");
+  }
+
+  const requireOpenAi = process.env.HKTECH_AI_ENABLED !== "false";
+  if (requireOpenAi && !process.env.OPENAI_API_KEY) {
+    missing.push("OPENAI_API_KEY");
+  }
+
+  if (missing.length) {
+    logger.fatal(
+      {
+        missing,
+        hint: "Set required variables in runtime/CI environment. OPENAI_API_KEY can be skipped only when HKTECH_AI_ENABLED=false.",
+      },
+      "Missing required environment variables"
+    );
+    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+  }
+};
+
+bootstrapLogger();
+loadEnvFile(path.join(__dirname, "..", ".env"));
+loadEnvFile(path.join(__dirname, "..", "..", ".env"));
+validateEnv();
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
+
+process.on("uncaughtException", (error) => {
+  logger.fatal({ err: error }, "Uncaught exception");
+});
 
 const DEPLOY_VERSION = "2026-01-28-4";
 
@@ -18,7 +134,17 @@ const LANDINGPAGE_TEMPLATE_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <title>Página Institucional</title>
-  <style id="dynamicCSS"></style>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; }
+    header { padding: 24px; background-color: #0f3c62; color: #fff; text-align: center; }
+    header p { font-size: 1.2em; }
+    section { padding: 20px; margin: 10px; }
+    section h2 { color: #1e8bff; }
+    ul { list-style-type: none; padding: 0; }
+    ul li { background-color: #1e8bff; margin: 10px 0; padding: 10px; border-radius: 5px; color: #fff; }
+    footer { background-color: #0f3c62; padding: 10px; text-align: center; color: #fff; }
+    footer p { margin: 0; }
+  </style>
 </head>
 <body>
   <header>
@@ -38,59 +164,273 @@ const LANDINGPAGE_TEMPLATE_HTML = `<!DOCTYPE html>
     </ul>
   </section>
   <footer>
-    <p>&copy; 2025 Nossa Empresa. Todos os direitos reservados.</p>
+    <p>© 2026 Holding Kapital Technology</p>
   </footer>
-  <script id="dynamicJS"></script>
 </body>
 </html>`;
-const LANDINGPAGE_TEMPLATE_CSS = `body {
-  background-color: #092554;
-  color: white;
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-}
-header {
-  background-color: #0f3c62;
-  padding: 20px;
-  text-align: center;
-}
-header h1 {
-  font-size: 2.5em;
-  margin: 0;
-}
-header p {
-  font-size: 1.2em;
-}
-section {
-  padding: 20px;
-  margin: 10px;
-}
-section h2 {
-  color: #1e8bff;
-}
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-ul li {
-  background-color: #1e8bff;
-  margin: 10px 0;
-  padding: 10px;
-  border-radius: 5px;
-}
-footer {
-  background-color: #0f3c62;
-  padding: 10px;
-  text-align: center;
-}
-footer p {
-  margin: 0;
-}`;
 
-const app = express();
+const LANDINGPAGE_TEMPLATE_CSS = `body { font-family: Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; }
+header { padding: 24px; background-color: #0f3c62; color: #fff; text-align: center; }
+header p { font-size: 1.2em; }
+section { padding: 20px; margin: 10px; }
+section h2 { color: #1e8bff; }
+ul { list-style-type: none; padding: 0; }
+ul li { background-color: #1e8bff; margin: 10px 0; padding: 10px; border-radius: 5px; color: #fff; }
+footer { background-color: #0f3c62; padding: 10px; text-align: center; color: #fff; }
+footer p { margin: 0; }`;
+
+const DEFAULT_TEMPLATE_FILES = [
+  {
+    fileName: "index.html",
+    fileType: "html",
+    content: "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>Novo Template</title>\n</head>\n<body>\n  <main>\n    <h1>Novo Template</h1>\n    <p>Edite o HTML, CSS e JS para personalizar este projeto.</p>\n  </main>\n</body>\n</html>",
+  },
+  { fileName: "style.css", fileType: "css", content: "body { font-family: Arial, sans-serif; }" },
+  { fileName: "script.js", fileType: "js", content: "// Template pronto" },
+];
+
+const normalizeStorageUserId = (value: string) => String(value || "").trim().toLowerCase();
+
+const sanitizeFileName = (value: string) => {
+  const cleaned = String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/\s+/g, " ")
+    .trim();
+  const segments = cleaned.split("/").filter((segment) => segment && segment !== "." && segment !== "..");
+  return segments.join("/");
+};
+
+const parseStorageUrl = (storageUrl: string) => {
+  const trimmed = String(storageUrl || "").trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("gs://")) {
+    const withoutScheme = trimmed.replace("gs://", "");
+    const [bucket, ...rest] = withoutScheme.split("/");
+    return bucket ? { bucket, path: rest.join("/") } : null;
+  }
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname.includes("firebasestorage.googleapis.com")) {
+      const match = url.pathname.match(/\/b\/([^/]+)\/o\/(.+)$/);
+      if (!match) return null;
+      const bucket = match[1];
+      const objectPath = decodeURIComponent(match[2]);
+      return { bucket, path: objectPath };
+    }
+    if (url.hostname === "storage.googleapis.com") {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const bucket = parts.shift();
+      if (!bucket) return null;
+      return { bucket, path: parts.join("/") };
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
+};
+
+const readStorageText = async (storageUrl: string) => {
+  const parsed = parseStorageUrl(storageUrl);
+  if (parsed) {
+    const bucket = admin.storage().bucket(parsed.bucket);
+    const [buffer] = await bucket.file(parsed.path).download();
+    return buffer.toString("utf8");
+  }
+  const res = await fetch(storageUrl);
+  if (!res.ok) {
+    throw httpError(502, "Falha ao ler arquivo no Storage.");
+  }
+  return res.text();
+};
+
+const saveStorageText = async (storagePath: string, content: string) => {
+  const bucket = admin.storage().bucket();
+  await bucket.file(storagePath).save(content, { contentType: "text/markdown" });
+  return `gs://${bucket.name}/${storagePath}`;
+};
+
+const resolveContentType = (fileName: string, fileType?: string) => {
+  const ext = fileName.toLowerCase().split(".").pop() || "";
+  const type = (fileType || ext).toLowerCase();
+  switch (type) {
+    case "html":
+      return "text/html; charset=utf-8";
+    case "css":
+      return "text/css; charset=utf-8";
+    case "js":
+
+    case "javascript":
+      return "application/javascript; charset=utf-8";
+    case "json":
+      return "application/json; charset=utf-8";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "svg":
+      return "image/svg+xml";
+    default:
+      return "text/plain; charset=utf-8";
+  }
+};
+
+const promptCategoryRules = [
+  { match: "orchestrator", category: "orchestrator" },
+  { match: "context", category: "system" },
+  { match: "architecture", category: "architecture" },
+  { match: "security", category: "security" },
+  { match: "workflow", category: "workflow" },
+  { match: "bootstrap", category: "bootstrap" },
+  { match: "mybot", category: "mybot" },
+];
+
+const inferPromptCategory = (value: string, fallback = "governance") => {
+  const lower = String(value || "").toLowerCase();
+  const rule = promptCategoryRules.find((entry) => lower.includes(entry.match));
+  return rule?.category ?? fallback;
+};
+
+const toPromptTitle = (filename: string) => {
+  const base = String(filename || "").replace(/\.md$/i, "");
+  return base
+    .replace(/[-_.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const hashContent = (content: string) => {
+  return crypto.createHash("sha256").update(content).digest("hex");
+};
+
+const ensureUserStorageRoot = async (userId: string) => {
+  const normalizedUserId = normalizeStorageUserId(userId);
+  if (!normalizedUserId) return;
+  const bucket = admin.storage().bucket();
+  await bucket.file(`users/${normalizedUserId}/mybot/.keep`).save("", { contentType: "text/plain" });
+};
+
+const ensureProjectStorageFolders = async (userId: string, projectId: string) => {
+  const normalizedUserId = normalizeStorageUserId(userId);
+  if (!normalizedUserId || !projectId) return;
+  const bucket = admin.storage().bucket();
+  await Promise.all([
+    bucket.file(`users/${normalizedUserId}/projects/${projectId}/.keep`).save("", { contentType: "text/plain" }),
+    bucket.file(`users/${normalizedUserId}/projects/${projectId}/assets/.keep`).save("", { contentType: "text/plain" }),
+  ]);
+};
+
+const saveProjectFileToStorage = async (params: {
+  userId: string;
+  projectId: string;
+  fileName: string;
+  fileType?: string;
+  content: string;
+}) => {
+  const normalizedUserId = normalizeStorageUserId(params.userId);
+  if (!normalizedUserId) throw httpError(400, "userId inválido para storage.");
+  const safeName = sanitizeFileName(params.fileName);
+  if (!safeName) throw httpError(400, "fileName inválido.");
+  const storagePath = `users/${normalizedUserId}/projects/${params.projectId}/${safeName}`;
+  const bucket = admin.storage().bucket();
+  await bucket.file(storagePath).save(String(params.content ?? ""), {
+    contentType: resolveContentType(safeName, params.fileType),
+    resumable: false,
+    metadata: {
+      cacheControl: "no-store",
+    },
+  });
+  return storagePath;
+};
+
+const deleteProjectFileFromStorage = async (storagePath?: string | null) => {
+  if (!storagePath) return;
+  const bucket = admin.storage().bucket();
+  await bucket.file(storagePath).delete({ ignoreNotFound: true });
+};
+
+const buildPreviewHtml = (files: Array<{ file_name?: string; file_type?: string; content?: string }>) => {
+  const normalized = files.map((file) => ({
+    name: String(file.file_name || ""),
+    type: String(file.file_type || ""),
+    content: String(file.content || ""),
+  }));
+  const htmlFile = normalized.find((file) => file.name.toLowerCase() === "index.html")
+    ?? normalized.find((file) => file.type.toLowerCase() === "html")
+    ?? null;
+  const cssContent = normalized
+    .filter((file) => file.type.toLowerCase() === "css" || file.name.toLowerCase().endsWith(".css"))
+    .map((file) => file.content)
+    .join("\n\n");
+  const jsContent = normalized
+    .filter((file) => file.type.toLowerCase() === "js" || file.type.toLowerCase() === "javascript" || file.name.toLowerCase().endsWith(".js"))
+    .map((file) => file.content)
+    .join("\n\n");
+
+  let html = htmlFile?.content || "";
+  if (!html.trim()) {
+    html = "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" /><title>Preview</title></head><body><div id=\"app\">Preview do projeto</div></body></html>";
+  }
+
+  if (cssContent) {
+    if (html.includes("</head>")) {
+      html = html.replace("</head>", `<style>${cssContent}</style></head>`);
+    } else {
+      html = `<style>${cssContent}</style>${html}`;
+    }
+  }
+
+  if (jsContent) {
+    if (html.includes("</body>")) {
+      html = html.replace("</body>", `<script>${jsContent}</script></body>`);
+    } else {
+      html = `${html}<script>${jsContent}</script>`;
+    }
+  }
+
+  return html;
+};
+
+export const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - start;
+    logger.info({
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      durationMs,
+    }, "http_request");
+  });
+  next();
+});
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+app.get("/health", async (_req, res) => {
+  let dbConnected = false;
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("SELECT 1");
+      dbConnected = true;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error({ err: error }, "Health check database connection failed");
+  }
+
+  res.json({
+    status: "ok",
+    database: dbConnected ? "connected" : "disconnected",
+    version: process.env.APP_VERSION,
+  });
+});
 
 let pool: Pool | null = null;
 let connector: Connector | null = null;
@@ -100,6 +440,145 @@ function httpError(status: number, message: string) {
   error.status = status;
   return error;
 }
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getSonarConfig(): SonarConfig {
+  const token = process.env.SONARCLOUD_TOKEN || "";
+  const projectKey = process.env.SONARCLOUD_PROJECT_KEY || "";
+  const organization = process.env.SONARCLOUD_ORG || "";
+  if (!token || !projectKey) {
+    throw httpError(500, "Configuração do SonarCloud ausente.");
+  }
+  return { token, projectKey, organization };
+}
+
+function getGithubRepo() {
+  const repoEnv = process.env.GITHUB_REPOSITORY || "";
+  if (repoEnv.includes("/")) {
+    const [owner, repo] = repoEnv.split("/");
+    return { owner, repo };
+  }
+  const owner = process.env.GITHUB_OWNER || "";
+  const repo = process.env.GITHUB_REPO || "";
+  if (!owner || !repo) {
+    throw httpError(500, "Configuração do GitHub ausente.");
+  }
+  return { owner, repo };
+}
+
+async function logHKTechAiReport(payload: {
+  issueKeys: string[];
+  filesModified: string[];
+  risk: string;
+  prLink?: string;
+  qualityGate?: string;
+  buildResult?: string;
+  testResult?: string;
+  durationMs?: number;
+  confidenceScore?: number;
+  status: string;
+  reason?: string;
+  createTask?: boolean;
+}) {
+  const reportSummary = payload.reason ? `Autofix ${payload.status}: ${payload.reason}` : `Autofix ${payload.status}`;
+  const pool = await getPool();
+  const client = await pool.connect();
+  try {
+    await ensureAiReportsTable(client);
+    await ensureProjectTasksTable(client);
+
+    const reportInsert = await client.query(
+      "INSERT INTO ai_reports (domain, status, summary, decisions, risks, next_actions, issue_keys, files_modified, risk_classification, pr_link, quality_gate, build_result, test_result, execution_duration_ms, confidence_score) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14, $15) RETURNING id",
+      [
+        "IA",
+        payload.status,
+        reportSummary,
+        JSON.stringify([
+          `Issues: ${payload.issueKeys.join(", ") || "—"}`,
+          `Arquivos: ${payload.filesModified.join(", ") || "—"}`,
+        ]),
+        JSON.stringify([payload.risk || "indefinido"]),
+        JSON.stringify(payload.prLink ? [`PR: ${payload.prLink}`] : []),
+        JSON.stringify(payload.issueKeys || []),
+        JSON.stringify(payload.filesModified || []),
+        payload.risk || "",
+        payload.prLink ?? "",
+        payload.qualityGate ?? "",
+        payload.buildResult ?? "not_run",
+        payload.testResult ?? "not_run",
+        payload.durationMs ?? null,
+        payload.confidenceScore ?? null,
+      ]
+    );
+
+    if (payload.createTask !== false) {
+      const taskInsert = await client.query(
+        "INSERT INTO project_tasks (project_id, title, description, status, position, generated_by_ai, domain, risk_level, pr_link, confidence_score, execution_result, origin, report_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
+        [
+          null,
+          reportSummary,
+          "",
+          payload.status,
+          0,
+          true,
+          "IA",
+          payload.risk ?? "",
+          payload.prLink ?? "",
+          payload.confidenceScore ?? null,
+          payload.reason ?? payload.status,
+          payload.issueKeys?.length ? "Sonar" : "Automation",
+          reportInsert.rows[0]?.id ?? null,
+        ]
+      );
+      await tryStoreIaMemory(client, {
+        content: reportSummary,
+        contextType: "ai_report",
+        relatedTaskId: taskInsert.rows[0]?.id ?? null,
+      });
+    }
+  } finally {
+    client.release();
+  }
+}
+
+app.get("/ci/status", async (_req, res) => {
+  try {
+    const token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN || "";
+    if (!token) {
+      throw httpError(500, "Token GitHub ausente.");
+    }
+    const { owner, repo } = getGithubRepo();
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/runs?per_page=5`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw httpError(502, text || "Falha ao consultar GitHub Actions.");
+    }
+    const data = await response.json();
+    const runs = (data.workflow_runs ?? []).map((run: any) => ({
+      id: run.id,
+      name: run.name,
+      status: run.status,
+      conclusion: run.conclusion,
+      htmlUrl: run.html_url,
+      updatedAt: run.updated_at,
+      runNumber: run.run_number,
+      headBranch: run.head_branch,
+    }));
+    res.json({ repository: `${owner}/${repo}`, runs });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao carregar status CI.";
+    res.status(500).json({ message });
+  }
+});
 
 async function ensureCostsBillingCycleColumn(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query("ALTER TABLE costs ADD COLUMN IF NOT EXISTS billing_cycle TEXT DEFAULT 'monthly'");
@@ -113,11 +592,16 @@ async function ensureProductsColumns(client: { query: (sql: string, params?: any
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS show_on_marketplace BOOLEAN DEFAULT false");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type TEXT DEFAULT 'digital'");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS base_project_id UUID");
+  await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS template_id UUID");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
   await client.query(
     "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_base_project_id_fkey') THEN ALTER TABLE products ADD CONSTRAINT products_base_project_id_fkey FOREIGN KEY (base_project_id) REFERENCES projects(id) ON DELETE SET NULL; END IF; END $$;"
   );
+  await client.query(
+    "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_template_id_fkey') THEN ALTER TABLE products ADD CONSTRAINT products_template_id_fkey FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE SET NULL; END IF; END $$;"
+  );
+  await client.query("CREATE INDEX IF NOT EXISTS products_template_id_idx ON products (template_id)");
 }
 
 async function ensureProductTypesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -155,12 +639,140 @@ async function ensureProductTypeConstraint(client: { query: (sql: string, params
 
 async function ensureProjectsTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await client.query(
-    "CREATE TABLE IF NOT EXISTS projects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', project_type TEXT DEFAULT '', sale_price TEXT DEFAULT '', production_cost TEXT DEFAULT '', purchase_count INTEGER DEFAULT 0, repository TEXT DEFAULT '', domain TEXT DEFAULT '', hosting TEXT DEFAULT '', status TEXT DEFAULT 'Ativo', paid BOOLEAN DEFAULT false, is_public BOOLEAN DEFAULT true, owner_user_id TEXT DEFAULT '', product_id UUID, base_project_id UUID, purchase_id UUID, created_from_purchase BOOLEAN DEFAULT false, is_template BOOLEAN DEFAULT false, html_content TEXT DEFAULT '', css_content TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+    "CREATE TABLE IF NOT EXISTS projects (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', project_type TEXT DEFAULT '', sale_price TEXT DEFAULT '', production_cost TEXT DEFAULT '', purchase_count INTEGER DEFAULT 0, repository TEXT DEFAULT '', domain TEXT DEFAULT '', hosting TEXT DEFAULT '', status TEXT DEFAULT 'Ativo', paid BOOLEAN DEFAULT false, is_public BOOLEAN DEFAULT true, owner_user_id TEXT DEFAULT '', product_id UUID, base_project_id UUID, purchase_id UUID, created_from_purchase BOOLEAN DEFAULT false, is_template BOOLEAN DEFAULT false, html_content TEXT DEFAULT '', css_content TEXT DEFAULT '', version INTEGER DEFAULT 1, template_id UUID, template_version INTEGER, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+}
+
+async function ensureTemplatesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS templates (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, description TEXT DEFAULT '', blog_content TEXT DEFAULT '', level VARCHAR(50) DEFAULT '', category VARCHAR(100) DEFAULT '', version INTEGER DEFAULT 1, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE templates ADD COLUMN IF NOT EXISTS blog_content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE templates ADD COLUMN IF NOT EXISTS level VARCHAR(50) DEFAULT ''");
+  await client.query("ALTER TABLE templates ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT ''");
+  await client.query("CREATE INDEX IF NOT EXISTS templates_is_active_idx ON templates (is_active)");
+}
+
+async function ensureTemplateTasksTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS template_tasks (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT DEFAULT '', status TEXT DEFAULT 'TODO', position INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE template_tasks ADD COLUMN IF NOT EXISTS title TEXT");
+  await client.query("ALTER TABLE template_tasks ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''");
+  await client.query("ALTER TABLE template_tasks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'TODO'");
+  await client.query("ALTER TABLE template_tasks ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0");
+  await client.query("CREATE INDEX IF NOT EXISTS template_tasks_template_id_idx ON template_tasks (template_id)");
+  await client.query(
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='template_tasks' AND column_name='text') THEN UPDATE template_tasks SET title = COALESCE(title, text) WHERE title IS NULL; END IF; END $$;"
+  );
+  await client.query(
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='template_tasks' AND column_name='task_order') THEN UPDATE template_tasks SET position = COALESCE(position, task_order) WHERE position IS NULL; END IF; END $$;"
+  );
+}
+
+async function ensureTemplateResourcesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS template_resources (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE, title VARCHAR(150) NOT NULL, type VARCHAR(50) DEFAULT 'link', content TEXT DEFAULT '', position INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE template_resources ADD COLUMN IF NOT EXISTS title VARCHAR(150)");
+  await client.query("ALTER TABLE template_resources ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'link'");
+  await client.query("ALTER TABLE template_resources ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE template_resources ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0");
+  await client.query("CREATE INDEX IF NOT EXISTS template_resources_template_id_idx ON template_resources (template_id)");
+}
+
+async function ensureTemplateFilesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS template_files (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE, file_name VARCHAR(150) NOT NULL, file_type VARCHAR(20) DEFAULT 'html', content TEXT DEFAULT '', position INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE template_files ADD COLUMN IF NOT EXISTS file_name VARCHAR(150)");
+  await client.query("ALTER TABLE template_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(20) DEFAULT 'html'");
+  await client.query("ALTER TABLE template_files ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE template_files ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0");
+  await client.query("CREATE INDEX IF NOT EXISTS template_files_template_id_idx ON template_files (template_id)");
+}
+
+async function ensureProjectFilesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await client.query(
+    "CREATE TABLE IF NOT EXISTS project_files (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE, file_name VARCHAR(150) NOT NULL, file_type VARCHAR(20) DEFAULT 'html', content TEXT DEFAULT '', storage_path TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW())"
+  );
+  await client.query("ALTER TABLE project_files ADD COLUMN IF NOT EXISTS file_name VARCHAR(150)");
+  await client.query("ALTER TABLE project_files ADD COLUMN IF NOT EXISTS file_type VARCHAR(20) DEFAULT 'html'");
+  await client.query("ALTER TABLE project_files ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE project_files ADD COLUMN IF NOT EXISTS storage_path TEXT DEFAULT ''");
+  await client.query("ALTER TABLE project_files ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()");
+  await client.query("CREATE INDEX IF NOT EXISTS project_files_project_id_idx ON project_files (project_id)");
+}
+
+async function ensureProjectTasksTable(_client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  return;
+}
+
+async function ensureAiReportsTable(_client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  return;
+}
+
+async function ensureSystemConfigTable(_client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  return;
+}
+
+async function ensureIaConfig(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  const result = await client.query("SELECT value FROM system_config WHERE key = 'IA_CONFIG' LIMIT 1");
+  if (result.rows[0]?.value) {
+    return result.rows[0].value;
+  }
+  return {
+    managedByAI: true,
+    taskCreationPolicy: "AI_ALLOWED",
+    allowAutoBacklogIfEmpty: true,
+    maxTasksPerRun: 5,
+    maxExecutionsPerHour: 2,
+  };
+}
+
+async function ensureDefaultTemplate(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureTemplatesTable(client);
+  const existing = await client.query(
+    "SELECT id, version FROM templates WHERE lower(name) = lower($1) LIMIT 1",
+    ["Default"]
+  );
+  if (existing.rows[0]) {
+    return { id: existing.rows[0].id, version: Number(existing.rows[0].version ?? 1) };
+  }
+  const created = await client.query(
+    "INSERT INTO templates (name, description, version, is_active) VALUES ($1, $2, 1, true) RETURNING id, version",
+    ["Default", "Template padrão do sistema"]
+  );
+  return { id: created.rows[0].id, version: Number(created.rows[0].version ?? 1) };
+}
+
+async function cloneTemplateForPurchase(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  templateId: string,
+  userId: string,
+  productId: string,
+  purchaseId: string
+) {
+  const cloned = await cloneTemplate(client, templateId, userId);
+  if (cloned?.id) {
+    await client.query(
+      "UPDATE projects SET product_id = $1, purchase_id = $2, created_from_purchase = true, paid = true, updated_at = NOW() WHERE id = $3",
+      [productId, purchaseId, cloned.id]
+    );
+  }
+  return cloned;
+}
+
+async function bumpTemplateVersion(client: { query: (sql: string, params?: any[]) => Promise<any> }, templateId: string) {
+  await client.query(
+    "UPDATE templates SET version = COALESCE(version, 1) + 1, updated_at = NOW() WHERE id = $1",
+    [templateId]
   );
 }
 
 async function ensureProjectsColumns(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
   await ensureProjectsTable(client);
+  const defaultTemplate = await ensureDefaultTemplate(client);
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS sale_price TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS production_cost TEXT DEFAULT ''");
@@ -173,7 +785,17 @@ async function ensureProjectsColumns(client: { query: (sql: string, params?: any
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT false");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS html_content TEXT DEFAULT ''");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS css_content TEXT DEFAULT ''");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_id UUID");
+  await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_version INTEGER");
   await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()");
+  await client.query("UPDATE projects SET template_id = COALESCE(template_id, $1), template_version = COALESCE(template_version, $2) WHERE template_id IS NULL OR template_version IS NULL", [defaultTemplate.id, defaultTemplate.version]);
+  await client.query(
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='template_id') THEN ALTER TABLE projects ALTER COLUMN template_id SET NOT NULL; END IF; END $$;"
+  );
+  await client.query(
+    "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='template_version') THEN ALTER TABLE projects ALTER COLUMN template_version SET NOT NULL; END IF; END $$;"
+  );
   await client.query(
     "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'projects_product_id_fkey') THEN ALTER TABLE projects ADD CONSTRAINT projects_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL; END IF; END $$;"
   );
@@ -182,6 +804,25 @@ async function ensureProjectsColumns(client: { query: (sql: string, params?: any
   await client.query("CREATE INDEX IF NOT EXISTS projects_base_project_id_idx ON projects (base_project_id)");
   await client.query("CREATE INDEX IF NOT EXISTS projects_is_template_idx ON projects (is_template)");
   await client.query("CREATE INDEX IF NOT EXISTS projects_purchase_id_idx ON projects (purchase_id)");
+  await client.query("CREATE INDEX IF NOT EXISTS projects_template_id_idx ON projects (template_id)");
+}
+
+async function cloneTemplate(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  templateId: string,
+  userId: string
+) {
+  return cloneTemplateService(client, templateId, userId, {
+    ensureProjectsColumns,
+    ensureTemplateTasksTable,
+    ensureProjectTasksTable,
+    ensureTemplateFilesTable,
+    ensureProjectFilesTable,
+    ensureUserStorageRoot,
+    ensureProjectStorageFolders,
+    saveProjectFileToStorage,
+    httpError,
+  });
 }
 
 async function ensurePurchasesTable(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -224,6 +865,53 @@ async function ensureCommerceOrdersTable(client: { query: (sql: string, params?:
   await client.query(
     "CREATE TABLE IF NOT EXISTS commerce_orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT NOT NULL, item_type TEXT NOT NULL, item_id TEXT NOT NULL, amount NUMERIC(12,2) DEFAULT 0, currency TEXT DEFAULT 'BRL', status TEXT DEFAULT 'completed', payment_method TEXT DEFAULT 'pix', payment_reference TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW())"
   );
+}
+
+type AutoCoupon = { code: string; discount: number; productId?: string | null };
+
+async function fetchAutoCouponsByProduct(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  productIds: string[]
+) {
+  const map = new Map<string, AutoCoupon>();
+  if (productIds.length === 0) return map;
+  try {
+    const columnsResult = await client.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'coupons'"
+    );
+    const columns = new Set<string>(columnsResult.rows.map((row: { column_name: string }) => row.column_name));
+    if (columns.size === 0) return map;
+
+    const hasProductId = columns.has("product_id");
+    const query = hasProductId
+      ? "SELECT code, discount_value, product_id FROM coupons WHERE active = true AND auto_apply = true AND (product_id = ANY($1) OR product_id IS NULL)"
+      : "SELECT code, discount_value FROM coupons WHERE active = true AND auto_apply = true";
+    const result = await client.query(query, hasProductId ? [productIds] : []);
+    for (const row of result.rows) {
+      const discount = Number(row.discount_value ?? 0);
+      const couponProductId = row.product_id ?? null;
+      if (hasProductId && couponProductId) {
+        const current = map.get(couponProductId);
+        if (!current || discount > current.discount) {
+          map.set(couponProductId, { code: row.code, discount, productId: couponProductId });
+        }
+        continue;
+      }
+      for (const productId of productIds) {
+        const current = map.get(productId);
+        if (!current || (!current.productId && discount > current.discount)) {
+          map.set(productId, { code: row.code, discount, productId: couponProductId });
+        }
+      }
+    }
+  } catch (error) {
+    const typed = error as { code?: string };
+    if (typed.code === "42P01") {
+      return map;
+    }
+    throw error;
+  }
+  return map;
 }
 
 async function ensureMyBotTables(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
@@ -1442,17 +2130,45 @@ app.get("/products", async (_req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        "SELECT id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+        "SELECT id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
       );
-      res.json(result.rows);
+      const productIds = result.rows.map((row: { id: string }) => row.id);
+      const couponsMap = await fetchAutoCouponsByProduct(client, productIds);
+      const enriched = result.rows.map((row: any) => {
+        const priceValue = Number(String(row.sale_price ?? row.price ?? "0").replace(",", ".")) || 0;
+        const coupon = couponsMap.get(row.id);
+        const discount = coupon?.discount ?? 0;
+          const final = calculateOrderTotal(priceValue, discount);
+        return {
+          ...row,
+          auto_coupon_code: coupon?.code ?? null,
+          auto_coupon_discount: discount,
+          final_price: final,
+        };
+      });
+      res.json(enriched);
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "SELECT id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
+          "SELECT id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price FROM products ORDER BY created_at DESC"
         );
-        res.json(retry.rows);
+        const productIds = retry.rows.map((row: { id: string }) => row.id);
+        const couponsMap = await fetchAutoCouponsByProduct(client, productIds);
+        const enriched = retry.rows.map((row: any) => {
+          const priceValue = Number(String(row.sale_price ?? row.price ?? "0").replace(",", ".")) || 0;
+          const coupon = couponsMap.get(row.id);
+          const discount = coupon?.discount ?? 0;
+          const final = calculateOrderTotal(priceValue, discount);
+          return {
+            ...row,
+            auto_coupon_code: coupon?.code ?? null,
+            auto_coupon_discount: discount,
+            final_price: final,
+          };
+        });
+        res.json(enriched);
       } else {
         throw error;
       }
@@ -1466,7 +2182,7 @@ app.get("/products", async (_req, res) => {
 });
 
 app.post("/products", async (req, res) => {
-  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId } = req.body ?? {};
+  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId, templateId } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -1476,8 +2192,8 @@ app.post("/products", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "INSERT INTO products (name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
+        "INSERT INTO products (name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, templateId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
       );
       res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -1485,8 +2201,8 @@ app.post("/products", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "INSERT INTO products (name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
+          "INSERT INTO products (name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, templateId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice]
         );
         res.status(201).json(retry.rows[0]);
       } else {
@@ -1503,7 +2219,7 @@ app.post("/products", async (req, res) => {
 
 app.put("/products/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId } = req.body ?? {};
+  const { name, price, description, showOnHome, showOnMarketplace, purchasePrice, salePrice, productType, baseProjectId, templateId } = req.body ?? {};
   if (!name || !price) {
     return res.status(400).json({ message: "Nome e preço são obrigatórios." });
   }
@@ -1513,8 +2229,8 @@ app.put("/products/:id", async (req, res) => {
     const finalSalePrice = salePrice ?? price;
     try {
       const result = await client.query(
-        "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, show_on_home = $6, show_on_marketplace = $7, purchase_price = $8, sale_price = $9 WHERE id = $10 RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
-        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
+        "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, template_id = $6, show_on_home = $7, show_on_marketplace = $8, purchase_price = $9, sale_price = $10 WHERE id = $11 RETURNING id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+        [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, templateId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
       );
       res.json(result.rows[0]);
     } catch (error) {
@@ -1522,8 +2238,8 @@ app.put("/products/:id", async (req, res) => {
       if (pgError.code === "42703") {
         await ensureProductsColumns(client);
         const retry = await client.query(
-          "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, show_on_home = $6, show_on_marketplace = $7, purchase_price = $8, sale_price = $9 WHERE id = $10 RETURNING id, name, price, description, product_type, base_project_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
-          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
+          "UPDATE products SET name = $1, price = $2, description = $3, product_type = $4, base_project_id = $5, template_id = $6, show_on_home = $7, show_on_marketplace = $8, purchase_price = $9, sale_price = $10 WHERE id = $11 RETURNING id, name, price, description, product_type, base_project_id, template_id, show_on_home, show_on_marketplace, purchase_price, sale_price",
+          [name, finalSalePrice, description ?? "", productType ?? "digital", baseProjectId ?? null, templateId ?? null, !!showOnHome, !!showOnMarketplace, purchasePrice ?? "", finalSalePrice, id]
         );
         res.json(retry.rows[0]);
       } else {
@@ -1639,6 +2355,187 @@ app.post("/commerce-orders", async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Erro ao registrar compra geral." });
   }
+});
+
+const handleCheckoutProduct = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "productId e userId são obrigatórios." });
+  }
+  if (!isUuid(id)) {
+    return res.status(400).json({ message: "productId inválido." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureCommerceOrdersTable(client);
+      await ensureProductsColumns(client);
+      await ensurePurchasesTable(client);
+      await ensureProjectsColumns(client);
+      await ensureTemplatesTable(client);
+      await ensureTemplateTasksTable(client);
+      await ensureProjectTasksTable(client);
+      await ensureTemplateFilesTable(client);
+      await ensureProjectFilesTable(client);
+
+      await client.query("BEGIN");
+
+      const productResult = await client.query(
+        "SELECT id, name, price, sale_price, description, product_type, template_id FROM products WHERE id = $1",
+        [id]
+      );
+
+      const product = productResult.rows[0];
+      if (!product) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Produto não encontrado." });
+      }
+
+      const templateId = product.template_id as string | null;
+      if (!templateId) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto sem template vinculado." });
+      }
+
+      const isDigitalProject = product.product_type === "digital" || product.product_type === "projeto";
+      if (!isDigitalProject) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Produto não exige resgate de projeto." });
+      }
+
+      const templateResult = await client.query(
+        "SELECT id, version, is_active FROM templates WHERE id = $1",
+        [templateId]
+      );
+      if (!templateResult.rows[0] || !templateResult.rows[0].is_active) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "Template vinculado inválido ou inativo." });
+      }
+
+      const originalAmount = Number(String(product.sale_price ?? product.price ?? "0").replace(",", ".")) || 0;
+      const couponMap = await fetchAutoCouponsByProduct(client, [product.id]);
+      const coupon = couponMap.get(product.id);
+      const couponResult = applyCoupon(originalAmount, { code: coupon?.code ?? null, discount: coupon?.discount ?? 0 });
+      const { discount, finalAmount, couponApplied } = couponResult;
+
+      const order = await client.query(
+        "INSERT INTO commerce_orders (user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, item_type, item_id, amount, currency, status, payment_method, payment_reference, created_at",
+        [
+          userId,
+          "product",
+          product.id,
+          finalAmount,
+          "BRL",
+          "completed",
+          couponApplied ? "coupon" : "pix",
+          couponApplied ? couponResult.code ?? "" : "",
+        ]
+      );
+
+      const existingPurchase = await client.query(
+        "SELECT id, project_id FROM purchases WHERE user_id = $1 AND product_id = $2 AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+        [userId, product.id]
+      );
+
+      let purchaseId = existingPurchase.rows[0]?.id as string | undefined;
+      let projectId = existingPurchase.rows[0]?.project_id as string | undefined;
+
+      const purchaseType = finalAmount === 0 && couponApplied ? "paid" : finalAmount === 0 ? "free" : "paid";
+      if (!purchaseId) {
+        const createdPurchase = await client.query(
+          "INSERT INTO purchases (user_id, product_id, price, purchase_type, status) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+          [userId, product.id, originalAmount, purchaseType, "completed"]
+        );
+        purchaseId = createdPurchase.rows[0]?.id as string | undefined;
+      } else {
+        await client.query(
+          "UPDATE purchases SET purchase_type = $1 WHERE id = $2",
+          [purchaseType, purchaseId]
+        );
+      }
+
+      if (projectId) {
+        const existingProject = await client.query(
+          "SELECT id FROM projects WHERE id = $1 AND created_from_purchase = true AND is_template = false AND owner_user_id = $2",
+          [projectId, userId]
+        );
+        if (!existingProject.rows[0]) {
+          projectId = undefined;
+        }
+      }
+
+      if (!projectId && purchaseId) {
+        const existingClone = await client.query(
+          "SELECT id FROM projects WHERE purchase_id = $1 AND created_from_purchase = true AND is_template = false",
+          [purchaseId]
+        );
+        if (existingClone.rows[0]) {
+          projectId = existingClone.rows[0].id;
+        }
+      }
+
+      if (!projectId && purchaseId) {
+        const ownerProductClone = await client.query(
+          "SELECT id FROM projects WHERE owner_user_id = $1 AND product_id = $2 AND created_from_purchase = true AND is_template = false LIMIT 1",
+          [userId, product.id]
+        );
+        if (ownerProductClone.rows[0]) {
+          projectId = ownerProductClone.rows[0].id;
+        }
+      }
+
+      if (!projectId && purchaseId) {
+        const cloned = await cloneTemplateForPurchase(client, templateId, String(userId), product.id, purchaseId);
+        projectId = cloned?.id as string | undefined;
+      }
+
+      if (purchaseId && projectId) {
+        await client.query("UPDATE purchases SET project_id = $1 WHERE id = $2", [projectId, purchaseId]);
+      }
+
+      await client.query("COMMIT");
+
+      res.status(201).json({
+        order: order.rows[0],
+        product: {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+        },
+        coupon: couponApplied
+          ? {
+              code: couponResult.code ?? "",
+              discount,
+              autoApply: true,
+            }
+          : null,
+        amounts: {
+          original: originalAmount,
+          discount,
+          final: finalAmount,
+        },
+        projectId,
+        purchaseId,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao concluir checkout.";
+    console.error(error);
+    res.status(500).json({ message });
+  }
+};
+
+app.post("/checkout/products/:id", handleCheckoutProduct);
+app.post("/checkout", async (req, res) => {
+  req.params = { ...(req.params || {}), id: String(req.body?.productId || "") } as any;
+  return handleCheckoutProduct(req, res);
 });
 
 app.post("/purchases", async (req, res) => {
@@ -3701,8 +4598,8 @@ app.get("/projects", async (req, res) => {
       await ensurePurchasesTable(client);
       const result = await client.query(
         userId && scope !== "all"
-          ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
-          : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id FROM projects ORDER BY created_at DESC",
+          ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id, p.version, p.template_id, p.template_version FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
+          : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id, version, template_id, template_version FROM projects ORDER BY created_at DESC",
         userId && scope !== "all" ? [userId] : []
       );
       res.json(result.rows);
@@ -3715,8 +4612,8 @@ app.get("/projects", async (req, res) => {
         await ensurePurchasesTable(client);
         const retry = await client.query(
           userId && scope !== "all"
-            ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
-            : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id FROM projects ORDER BY created_at DESC",
+            ? "SELECT p.id, p.name, p.description, p.project_type, p.sale_price, p.production_cost, p.purchase_count, p.repository, p.domain, p.hosting, p.status, p.paid, p.is_public, p.owner_user_id, p.product_id, p.base_project_id, p.created_from_purchase, p.is_template, p.purchase_id, p.version, p.template_id, p.template_version FROM projects p JOIN purchases pu ON pu.id = p.purchase_id AND pu.user_id = $1 AND pu.status = 'completed' WHERE p.is_template = false AND p.created_from_purchase = true AND p.owner_user_id = $1 ORDER BY p.created_at DESC"
+            : "SELECT id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, purchase_id, version, template_id, template_version FROM projects ORDER BY created_at DESC",
           userId && scope !== "all" ? [userId] : []
         );
         res.json(retry.rows);
@@ -3729,6 +4626,506 @@ app.get("/projects", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao listar projetos." });
+  }
+});
+
+app.get("/templates", async (req, res) => {
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureTemplatesTable(client);
+      const includeInactive = String(req.query.includeInactive || "") === "true";
+      const result = await client.query(
+        includeInactive
+          ? "SELECT id, name, description, blog_content, level, category, version, is_active, created_at, updated_at FROM templates ORDER BY created_at DESC"
+          : "SELECT id, name, description, blog_content, level, category, version, is_active, created_at, updated_at FROM templates WHERE is_active = true ORDER BY created_at DESC"
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar templates." });
+  }
+});
+
+app.get("/templates/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureTemplatesTable(client);
+      const result = await client.query(
+        "SELECT id, name, description, blog_content, level, category, version, is_active, created_at, updated_at FROM templates WHERE id = $1",
+        [id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Template não encontrado." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao buscar template." });
+  }
+});
+
+app.post("/templates", async (req, res) => {
+  const { name, description, blogContent, level, category, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name) {
+    return res.status(400).json({ message: "Nome é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplatesTable(client);
+      await ensureTemplateFilesTable(client);
+      const result = await client.query(
+        "INSERT INTO templates (name, description, blog_content, level, category, version, is_active) VALUES ($1, $2, $3, $4, $5, 1, true) RETURNING id, name, description, blog_content, level, category, version, is_active, created_at, updated_at",
+        [name, description ?? "", blogContent ?? "", level ?? "", category ?? ""]
+      );
+      const templateId = result.rows[0]?.id;
+      if (templateId) {
+        for (const file of DEFAULT_TEMPLATE_FILES) {
+          await client.query(
+            "INSERT INTO template_files (template_id, file_name, file_type, content, position) VALUES ($1, $2, $3, $4, $5)",
+            [templateId, file.fileName, file.fileType, file.content, DEFAULT_TEMPLATE_FILES.indexOf(file)]
+          );
+        }
+      }
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao criar template." });
+  }
+});
+
+app.put("/templates/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, description, blogContent, level, category, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name) {
+    return res.status(400).json({ message: "Nome é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplatesTable(client);
+      const result = await client.query(
+        "UPDATE templates SET name = $1, description = $2, blog_content = $3, level = $4, category = $5, version = COALESCE(version, 1) + 1, updated_at = NOW() WHERE id = $6 RETURNING id, name, description, blog_content, level, category, version, is_active, created_at, updated_at",
+        [name, description ?? "", blogContent ?? "", level ?? "", category ?? "", id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Template não encontrado." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao editar template." });
+  }
+});
+
+app.post("/templates/:id/deactivate", async (req, res) => {
+  const { id } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplatesTable(client);
+      const result = await client.query(
+        "UPDATE templates SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id, name, description, version, is_active, created_at, updated_at",
+        [id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Template não encontrado." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao desativar template." });
+  }
+});
+
+app.get("/templates/:id/tasks", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureTemplateTasksTable(client);
+      const result = await client.query(
+        "SELECT id, template_id, title, description, status, position, created_at, updated_at FROM template_tasks WHERE template_id = $1 ORDER BY position ASC, created_at ASC",
+        [id]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar tarefas do template." });
+  }
+});
+
+app.post("/templates/:id/tasks", async (req, res) => {
+  const { id } = req.params;
+  const { title, description, status, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "Título é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateTasksTable(client);
+      const result = await client.query(
+        "INSERT INTO template_tasks (template_id, title, description, status, position) VALUES ($1, $2, $3, $4, $5) RETURNING id, template_id, title, description, status, position, created_at, updated_at",
+        [id, title, description ?? "", status ?? "TODO", Number(position ?? 0)]
+      );
+      await bumpTemplateVersion(client, id);
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao criar tarefa do template." });
+  }
+});
+
+app.put("/templates/:id/tasks/:taskId", async (req, res) => {
+  const { id, taskId } = req.params;
+  const { title, description, status, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "Título é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateTasksTable(client);
+      const result = await client.query(
+        "UPDATE template_tasks SET title = $1, description = $2, status = $3, position = $4, updated_at = NOW() WHERE id = $5 AND template_id = $6 RETURNING id, template_id, title, description, status, position, created_at, updated_at",
+        [title, description ?? "", status ?? "TODO", Number(position ?? 0), taskId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Tarefa não encontrada." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao atualizar tarefa do template." });
+  }
+});
+
+app.delete("/templates/:id/tasks/:taskId", async (req, res) => {
+  const { id, taskId } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateTasksTable(client);
+      const result = await client.query(
+        "DELETE FROM template_tasks WHERE id = $1 AND template_id = $2 RETURNING id",
+        [taskId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Tarefa não encontrada." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.status(204).send();
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao remover tarefa do template." });
+  }
+});
+
+app.get("/templates/:id/resources", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureTemplateResourcesTable(client);
+      const result = await client.query(
+        "SELECT id, template_id, title, type, content, position, created_at, updated_at FROM template_resources WHERE template_id = $1 ORDER BY position ASC, created_at ASC",
+        [id]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar recursos do template." });
+  }
+});
+
+app.post("/templates/:id/resources", async (req, res) => {
+  const { id } = req.params;
+  const { title, type, content, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "Título é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateResourcesTable(client);
+      const result = await client.query(
+        "INSERT INTO template_resources (template_id, title, type, content, position) VALUES ($1, $2, $3, $4, $5) RETURNING id, template_id, title, type, content, position, created_at, updated_at",
+        [id, title, type ?? "link", content ?? "", Number(position ?? 0)]
+      );
+      await bumpTemplateVersion(client, id);
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao criar recurso do template." });
+  }
+});
+
+app.put("/templates/:id/resources/:resourceId", async (req, res) => {
+  const { id, resourceId } = req.params;
+  const { title, type, content, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "Título é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateResourcesTable(client);
+      const result = await client.query(
+        "UPDATE template_resources SET title = $1, type = $2, content = $3, position = $4, updated_at = NOW() WHERE id = $5 AND template_id = $6 RETURNING id, template_id, title, type, content, position, created_at, updated_at",
+        [title, type ?? "link", content ?? "", Number(position ?? 0), resourceId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Recurso não encontrado." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao atualizar recurso do template." });
+  }
+});
+
+app.delete("/templates/:id/resources/:resourceId", async (req, res) => {
+  const { id, resourceId } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateResourcesTable(client);
+      const result = await client.query(
+        "DELETE FROM template_resources WHERE id = $1 AND template_id = $2 RETURNING id",
+        [resourceId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Recurso não encontrado." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.status(204).send();
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao remover recurso do template." });
+  }
+});
+
+app.get("/templates/:id/files", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await ensureTemplateFilesTable(client);
+      const result = await client.query(
+        "SELECT id, template_id, file_name, file_type, content, position, created_at, updated_at FROM template_files WHERE template_id = $1 ORDER BY position ASC, created_at ASC",
+        [id]
+      );
+      if (result.rows.length === 0) {
+        const seeded: any[] = [];
+        for (let index = 0; index < DEFAULT_TEMPLATE_FILES.length; index += 1) {
+          const file = DEFAULT_TEMPLATE_FILES[index];
+          const inserted = await client.query(
+            "INSERT INTO template_files (template_id, file_name, file_type, content, position) VALUES ($1, $2, $3, $4, $5) RETURNING id, template_id, file_name, file_type, content, position, created_at, updated_at",
+            [id, file.fileName, file.fileType, file.content, index]
+          );
+          seeded.push(inserted.rows[0]);
+        }
+        res.json(seeded);
+      } else {
+        res.json(result.rows);
+      }
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao listar arquivos do template." });
+  }
+});
+
+app.post("/templates/:id/files", async (req, res) => {
+  const { id } = req.params;
+  const { fileName, fileType, content, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!fileName) {
+    return res.status(400).json({ message: "fileName é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateFilesTable(client);
+      const result = await client.query(
+        "INSERT INTO template_files (template_id, file_name, file_type, content, position) VALUES ($1, $2, $3, $4, $5) RETURNING id, template_id, file_name, file_type, content, position, created_at, updated_at",
+        [id, fileName, fileType ?? "html", content ?? "", Number(position ?? 0)]
+      );
+      await bumpTemplateVersion(client, id);
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao criar arquivo do template." });
+  }
+});
+
+app.put("/templates/:id/files/:fileId", async (req, res) => {
+  const { id, fileId } = req.params;
+  const { fileName, fileType, content, position, adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!fileName) {
+    return res.status(400).json({ message: "fileName é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateFilesTable(client);
+      const result = await client.query(
+        "UPDATE template_files SET file_name = $1, file_type = $2, content = $3, position = $4, updated_at = NOW() WHERE id = $5 AND template_id = $6 RETURNING id, template_id, file_name, file_type, content, position, created_at, updated_at",
+        [fileName, fileType ?? "html", content ?? "", Number(position ?? 0), fileId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Arquivo não encontrado." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao atualizar arquivo do template." });
+  }
+});
+
+app.delete("/templates/:id/files/:fileId", async (req, res) => {
+  const { id, fileId } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureTemplateFilesTable(client);
+      const result = await client.query(
+        "DELETE FROM template_files WHERE id = $1 AND template_id = $2 RETURNING id",
+        [fileId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Arquivo não encontrado." });
+      }
+      await bumpTemplateVersion(client, id);
+      res.status(204).send();
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Erro ao remover arquivo do template." });
   }
 });
 
@@ -3782,7 +5179,7 @@ app.get("/menu-visibility", async (req, res) => {
 });
 
 app.post("/projects", async (req, res) => {
-  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId, productId, baseProjectId, createdFromPurchase, isTemplate, htmlContent, cssContent } = req.body ?? {};
+  const { name, description, projectType, salePrice, productionCost, purchaseCount, repository, domain, hosting, status, paid, isPublic, ownerUserId, productId, baseProjectId, createdFromPurchase, isTemplate, htmlContent, cssContent, templateId } = req.body ?? {};
   if (!name) {
     return res.status(400).json({ message: "Nome é obrigatório." });
   }
@@ -3797,6 +5194,19 @@ app.post("/projects", async (req, res) => {
       if (!confirmed) {
         return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
       }
+      await ensureTemplatesTable(client);
+      const defaultTemplate = await ensureDefaultTemplate(client);
+      let resolvedTemplateId = String(templateId || "").trim();
+      if (!resolvedTemplateId) resolvedTemplateId = defaultTemplate.id;
+      const templateRow = await client.query(
+        "SELECT id, version, is_active FROM templates WHERE id = $1",
+        [resolvedTemplateId]
+      );
+      if (!templateRow.rows[0] || !templateRow.rows[0].is_active) {
+        return res.status(400).json({ message: "Template inválido ou inativo." });
+      }
+      const resolvedTemplateVersion = Number(templateRow.rows[0].version ?? 1);
+
       const templateHtml = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !htmlContent
         ? LANDINGPAGE_TEMPLATE_HTML
         : String(htmlContent ?? "");
@@ -3805,7 +5215,7 @@ app.post("/projects", async (req, res) => {
         : String(cssContent ?? "");
 
       const result = await client.query(
-        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
+        "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at",
         [
           name,
           description ?? "",
@@ -3826,9 +5236,25 @@ app.post("/projects", async (req, res) => {
           !!isTemplate,
           templateHtml,
           templateCss,
+          resolvedTemplateId,
+          resolvedTemplateVersion,
         ]
       );
-      res.status(201).json(result.rows[0]);
+      let created = result.rows[0];
+      if (!!isTemplate && created?.id) {
+        await ensureTemplatesTable(client);
+        const templateUpsert = await client.query(
+          "INSERT INTO templates (id, name, description, version, is_active) VALUES ($1, $2, $3, 1, true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_active = true, updated_at = NOW() RETURNING id, version",
+          [created.id, created.name, created.description ?? ""]
+        );
+        const templateVersion = Number(templateUpsert.rows[0]?.version ?? 1);
+        const projectUpdate = await client.query(
+          "UPDATE projects SET template_id = $1, template_version = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at",
+          [created.id, templateVersion, created.id]
+        );
+        created = projectUpdate.rows[0] ?? created;
+      }
+      res.status(201).json(created);
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
@@ -3837,6 +5263,18 @@ app.post("/projects", async (req, res) => {
         if (!confirmed) {
           return res.status(403).json({ message: "Confirme a conta com PIX de R$ 1,00 para criar projetos." });
         }
+        await ensureTemplatesTable(client);
+        const defaultTemplate = await ensureDefaultTemplate(client);
+        let resolvedTemplateId = String(templateId || "").trim();
+        if (!resolvedTemplateId) resolvedTemplateId = defaultTemplate.id;
+        const templateRow = await client.query(
+          "SELECT id, version, is_active FROM templates WHERE id = $1",
+          [resolvedTemplateId]
+        );
+        if (!templateRow.rows[0] || !templateRow.rows[0].is_active) {
+          return res.status(400).json({ message: "Template inválido ou inativo." });
+        }
+        const resolvedTemplateVersion = Number(templateRow.rows[0].version ?? 1);
         const templateHtml = !!isTemplate && String(name).trim().toLowerCase() === LANDINGPAGE_TEMPLATE_NAME.toLowerCase() && !htmlContent
           ? LANDINGPAGE_TEMPLATE_HTML
           : String(htmlContent ?? "");
@@ -3845,7 +5283,7 @@ app.post("/projects", async (req, res) => {
           : String(cssContent ?? "");
 
         const retry = await client.query(
-          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
+          "INSERT INTO projects (name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW()) RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at",
           [
             name,
             description ?? "",
@@ -3866,9 +5304,25 @@ app.post("/projects", async (req, res) => {
             !!isTemplate,
             templateHtml,
             templateCss,
+            resolvedTemplateId,
+            resolvedTemplateVersion,
           ]
         );
-        res.status(201).json(retry.rows[0]);
+        let created = retry.rows[0];
+        if (!!isTemplate && created?.id) {
+          await ensureTemplatesTable(client);
+          const templateUpsert = await client.query(
+            "INSERT INTO templates (id, name, description, version, is_active) VALUES ($1, $2, $3, 1, true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_active = true, updated_at = NOW() RETURNING id, version",
+            [created.id, created.name, created.description ?? ""]
+          );
+          const templateVersion = Number(templateUpsert.rows[0]?.version ?? 1);
+          const projectUpdate = await client.query(
+            "UPDATE projects SET template_id = $1, template_version = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, template_id, template_version, updated_at",
+            [created.id, templateVersion, created.id]
+          );
+          created = projectUpdate.rows[0] ?? created;
+        }
+        res.status(201).json(created);
       } else {
         throw error;
       }
@@ -3878,6 +5332,93 @@ app.post("/projects", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erro ao criar projeto." });
+  }
+});
+
+app.post("/projects/clone", async (req, res) => {
+  const { templateId, userId } = req.body ?? {};
+  if (!templateId || !userId) {
+    return res.status(400).json({ message: "templateId e userId são obrigatórios." });
+  }
+  if (!isUuid(String(templateId))) {
+    return res.status(400).json({ message: "templateId inválido." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cloned = await cloneTemplate(client, String(templateId), String(userId));
+      await client.query("COMMIT");
+      res.status(201).json(cloned);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao clonar projeto." });
+  }
+});
+
+app.post("/templates/:id/clone", async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id) {
+    return res.status(400).json({ message: "templateId é obrigatório." });
+  }
+  if (!userId) {
+    return res.status(400).json({ message: "userId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, String(userId));
+      await client.query("BEGIN");
+      const cloned = await cloneTemplate(client, id, String(userId));
+      await client.query("COMMIT");
+      res.status(201).json(cloned);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao clonar template." });
+  }
+});
+
+app.post("/templates/:id/clone", async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "templateId e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const clone = await cloneTemplate(client, id, String(userId));
+      await client.query("COMMIT");
+      res.status(201).json(clone);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao clonar template." });
   }
 });
 
@@ -4211,6 +5752,1927 @@ app.get("/mybot/ecosystem", async (req, res) => {
   }
 });
 
+app.post("/admin-tools/reset-ia-tasks", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectTasksTable(client);
+      await ensureAiReportsTable(client);
+      const result = await client.query(
+        "DELETE FROM project_tasks WHERE domain = 'IA' AND project_id IS NULL RETURNING id"
+      );
+      const deleted = result.rowCount ?? 0;
+      await logAdminAction(client, adminId, `reset_ia_tasks:${deleted}`);
+      await client.query(
+        "INSERT INTO ai_reports (domain, status, summary, decisions, risks, next_actions, issue_keys, files_modified) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb)",
+        [
+          "IA",
+          "reset",
+          `Reset IA tasks: ${deleted}`,
+          JSON.stringify([]),
+          JSON.stringify([]),
+          JSON.stringify([]),
+          JSON.stringify([]),
+          JSON.stringify([]),
+        ]
+      );
+      res.json({ deleted });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao resetar IA tasks." });
+  }
+});
+
+app.post("/admin-tools/migrate-ia-tasks", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectTasksTable(client);
+      await ensureAiReportsTable(client);
+      await ensureProjectsColumns(client);
+
+      await client.query("BEGIN");
+      const hktechProjects = await client.query(
+        "SELECT id FROM projects WHERE lower(name) = lower('HKTECH') OR lower(name) LIKE 'hktech%'"
+      );
+      const hktechIds = hktechProjects.rows.map((row: { id: string }) => row.id);
+
+      const migrateResult = await client.query(
+        "UPDATE project_tasks SET domain = 'IA', generated_by_ai = true, project_id = NULL WHERE (project_id = ANY($1::uuid[]) OR project_id::text = 'HKTECH' OR domain = 'IA')",
+        [hktechIds]
+      );
+      const migrated = migrateResult.rowCount ?? 0;
+
+      if (hktechIds.length > 0) {
+        await client.query(
+          "UPDATE projects SET status = 'Inativo', is_public = false, updated_at = NOW() WHERE id = ANY($1::uuid[])",
+          [hktechIds]
+        );
+      }
+
+      await client.query("COMMIT");
+
+      await logAdminAction(client, adminId, `migrate_ia_tasks:${migrated}`);
+      res.json({ migrated, reportsMigrated: 0 });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    try {
+      const pool = await getPool();
+      const client = await pool.connect();
+      await client.query("ROLLBACK");
+      client.release();
+    } catch (rollbackError) {
+      console.error("Erro ao rollback migração IA:", rollbackError);
+    }
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao migrar IA tasks." });
+  }
+});
+
+app.get("/ia/config", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const config = await ensureIaConfig(client);
+      res.json(config);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar configuração IA." });
+  }
+});
+
+const DEFAULT_EXEC_LIMITS = {
+  maxTokens: 800,
+  maxAgentsPerRun: 3,
+  maxMemoryTopK: 5,
+  maxChatPerHour: 60,
+  maxTaskCreatePerHour: 50,
+  maxAgentExecutePerHour: 20,
+};
+
+const DEFAULT_IA_AUTH_FLAGS = {
+  managedByAI: true,
+  taskCreationPolicy: "AI_ALLOWED",
+  allowAutoBacklogIfEmpty: true,
+};
+
+async function getIaExecutionLimits(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureSystemConfigTable(client);
+  const result = await client.query("SELECT value FROM system_config WHERE key = 'IA_EXECUTION_LIMITS' LIMIT 1");
+  const stored = result.rows[0]?.value ?? {};
+  return { ...DEFAULT_EXEC_LIMITS, ...(stored || {}) } as typeof DEFAULT_EXEC_LIMITS;
+}
+
+async function getIaAuthorityFlags(client: { query: (sql: string, params?: any[]) => Promise<any> }) {
+  await ensureSystemConfigTable(client);
+  const result = await client.query("SELECT value FROM system_config WHERE key = 'IA_AUTHORITY_FLAGS' LIMIT 1");
+  const stored = result.rows[0]?.value;
+  return {
+    flags: { ...DEFAULT_IA_AUTH_FLAGS, ...(stored || {}) },
+    isConfigured: Boolean(result.rows[0]),
+  };
+}
+
+app.get("/ia/execution-limits", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const limits = await getIaExecutionLimits(client);
+      res.json(limits);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar limites IA." });
+  }
+});
+
+app.put("/ia/execution-limits", async (req, res) => {
+  const { adminId, maxTokens, maxAgentsPerRun, maxMemoryTopK, maxChatPerHour, maxTaskCreatePerHour, maxAgentExecutePerHour } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureSystemConfigTable(client);
+      const updated = {
+        ...DEFAULT_EXEC_LIMITS,
+        maxTokens: Number(maxTokens ?? DEFAULT_EXEC_LIMITS.maxTokens),
+        maxAgentsPerRun: Number(maxAgentsPerRun ?? DEFAULT_EXEC_LIMITS.maxAgentsPerRun),
+        maxMemoryTopK: Number(maxMemoryTopK ?? DEFAULT_EXEC_LIMITS.maxMemoryTopK),
+        maxChatPerHour: Number(maxChatPerHour ?? DEFAULT_EXEC_LIMITS.maxChatPerHour),
+        maxTaskCreatePerHour: Number(maxTaskCreatePerHour ?? DEFAULT_EXEC_LIMITS.maxTaskCreatePerHour),
+        maxAgentExecutePerHour: Number(maxAgentExecutePerHour ?? DEFAULT_EXEC_LIMITS.maxAgentExecutePerHour),
+      };
+      await client.query(
+        "INSERT INTO system_config (key, value, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+        ["IA_EXECUTION_LIMITS", JSON.stringify(updated)]
+      );
+      await logIaReport(client, {
+        status: "limits_update",
+        summary: "Atualização de limites IA.",
+        decisions: [JSON.stringify(updated)],
+      });
+      res.json(updated);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao salvar limites IA." });
+  }
+});
+
+app.put("/ia/config", async (req, res) => {
+  const { adminId, ...payload } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await ensureIaConfig(client);
+      const updated = {
+        ...current,
+        ...payload,
+      };
+      await ensureSystemConfigTable(client);
+      await client.query(
+        "INSERT INTO system_config (key, value, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+        ["IA_CONFIG", JSON.stringify(updated)]
+      );
+      res.json(updated);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar configuração IA." });
+  }
+});
+
+app.get("/ia/tasks", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectTasksTable(client);
+      const result = await client.query(
+        "SELECT id, title, description, status, position, domain, generated_by_ai, risk_level, pr_link, confidence_score, execution_result, origin, report_id, project_id, created_at, updated_at FROM project_tasks WHERE domain = 'IA' AND project_id IS NULL ORDER BY created_at DESC"
+      );
+      const tasks = result.rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description ?? "",
+        status: row.status ?? "",
+        origin: row.origin ?? "Automation",
+        riskLevel: row.risk_level ?? "",
+        prLink: row.pr_link ?? "",
+        confidenceScore: row.confidence_score ?? null,
+        executionResult: row.execution_result ?? "",
+        generatedByAI: row.generated_by_ai ?? false,
+        domain: row.domain ?? (row.generated_by_ai ? "IA" : null),
+        reportId: row.report_id ?? undefined,
+        projectId: row.project_id ?? undefined,
+        createdAt: row.created_at?.toISOString?.() ?? row.created_at,
+        updatedAt: row.updated_at?.toISOString?.() ?? row.updated_at,
+      }));
+      res.json(tasks);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar tarefas IA." });
+  }
+});
+
+app.get("/ia/reports", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureAiReportsTable(client);
+      const result = await client.query(
+        "SELECT id, status, summary, decisions, risks, next_actions, issue_keys, files_modified, risk_classification, pr_link, quality_gate, build_result, test_result, execution_duration_ms, confidence_score, created_at, updated_at FROM ai_reports WHERE domain = 'IA' ORDER BY created_at DESC"
+      );
+      const reports = result.rows.map((row) => ({
+        id: row.id,
+        projectId: "IA",
+        kanbanItemId: "",
+        agent: "HKTECH-IA",
+        summary: row.summary ?? "",
+        decisions: row.decisions ?? [],
+        risks: row.risks ?? [],
+        nextActions: row.next_actions ?? [],
+        issueKeys: row.issue_keys ?? [],
+        filesModified: row.files_modified ?? [],
+        riskClassification: row.risk_classification ?? "",
+        prLink: row.pr_link ?? "",
+        qualityGate: row.quality_gate ?? "",
+        status: row.status ?? "",
+        buildResult: row.build_result ?? "",
+        testResult: row.test_result ?? "",
+        executionDurationMs: row.execution_duration_ms ?? null,
+        confidenceScore: row.confidence_score ?? null,
+        createdAt: row.created_at?.toISOString?.() ?? row.created_at,
+        updatedAt: row.updated_at?.toISOString?.() ?? row.updated_at,
+      }));
+      res.json(reports);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar relatórios IA." });
+  }
+});
+
+const IA_CHAT_MAX_CONTENT = 8000;
+const IA_MEMORY_MAX_CONTENT = 12000;
+const IA_MEMORY_MAX_TOPK = 10;
+const IA_CHAT_MAX_TOKENS = 800;
+const IA_RATE_LIMITS = {
+  chatPerHour: 60,
+  taskCreatePerHour: 50,
+  agentExecutePerHour: 20,
+};
+
+const iaRateState = new Map<string, { count: number; resetAt: number }>();
+
+function assertRateLimit(key: string, limit: number, windowMs: number) {
+  const now = Date.now();
+  const entry = iaRateState.get(key);
+  if (!entry || entry.resetAt <= now) {
+    iaRateState.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+  if (entry.count >= limit) {
+    throw httpError(429, "Rate limit excedido.");
+  }
+  entry.count += 1;
+}
+
+async function assertOpenAiKey() {
+  const apiKey = process.env.OPENAI_API_KEY || "";
+  if (!apiKey) {
+    throw httpError(500, "OPENAI_API_KEY ausente.");
+  }
+  return apiKey;
+}
+
+async function logIaReport(client: { query: (sql: string, params?: any[]) => Promise<any> }, payload: { status: string; summary: string; decisions?: string[]; risks?: string[]; nextActions?: string[] }) {
+  await ensureAiReportsTable(client);
+  await client.query(
+    "INSERT INTO ai_reports (domain, status, summary, decisions, risks, next_actions, issue_keys, files_modified) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb)",
+    [
+      "IA",
+      payload.status,
+      payload.summary,
+      JSON.stringify(payload.decisions ?? []),
+      JSON.stringify(payload.risks ?? []),
+      JSON.stringify(payload.nextActions ?? []),
+      JSON.stringify([]),
+      JSON.stringify([]),
+    ]
+  );
+}
+
+async function tryEmbedText(content: string): Promise<number[] | null> {
+  const apiKey = process.env.OPENAI_API_KEY || "";
+  if (!apiKey) return null;
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input: content,
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const embedding = json?.data?.[0]?.embedding;
+  return Array.isArray(embedding) ? (embedding as number[]) : null;
+}
+
+async function tryStoreIaMemory(client: { query: (sql: string, params?: any[]) => Promise<any> }, payload: { content: string; contextType: string; relatedTaskId?: string | null }) {
+  try {
+    const embedding = await tryEmbedText(payload.content);
+    if (!embedding) return;
+    await client.query(
+      "INSERT INTO ia_memory (content, embedding, context_type, related_task_id, created_at) VALUES ($1, $2::vector, $3, $4, NOW())",
+      [payload.content, toVectorLiteral(embedding), payload.contextType, payload.relatedTaskId ?? null]
+    );
+  } catch (error) {
+    console.error("Falha ao registrar memória IA:", error);
+  }
+}
+
+async function embedText(content: string): Promise<number[]> {
+  const apiKey = await assertOpenAiKey();
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input: content,
+    }),
+  });
+  if (!res.ok) {
+    throw httpError(502, "Falha ao gerar embedding.");
+  }
+  const json = await res.json();
+  const embedding = json?.data?.[0]?.embedding;
+  if (!Array.isArray(embedding)) {
+    throw httpError(502, "Embedding inválido.");
+  }
+  return embedding as number[];
+}
+
+function toVectorLiteral(embedding: number[]) {
+  return `[${embedding.join(",")}]`;
+}
+
+app.get("/ia/conversations", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, title, created_at, updated_at FROM ia_conversations ORDER BY updated_at DESC"
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar conversas IA." });
+  }
+});
+
+app.post("/ia/conversations", async (req, res) => {
+  const { adminId, title } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "INSERT INTO ia_conversations (title, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id, title, created_at, updated_at",
+        [String(title ?? "")]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao criar conversa IA." });
+  }
+});
+
+app.get("/ia/conversations/:id/messages", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  const { id } = req.params;
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, conversation_id, role, content, created_at FROM ia_messages WHERE conversation_id = $1 ORDER BY created_at ASC",
+        [id]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar mensagens IA." });
+  }
+});
+
+app.post("/ia/conversations/:id/messages", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, role, content } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!role || !content) {
+    return res.status(400).json({ message: "role e content são obrigatórios." });
+  }
+  const trimmed = String(content).trim();
+  if (!trimmed || trimmed.length > IA_CHAT_MAX_CONTENT) {
+    return res.status(400).json({ message: "content inválido ou muito longo." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "INSERT INTO ia_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id, conversation_id, role, content, created_at",
+        [id, String(role), trimmed]
+      );
+      await client.query("UPDATE ia_conversations SET updated_at = NOW() WHERE id = $1", [id]);
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao registrar mensagem IA." });
+  }
+});
+
+app.get("/ia/agents", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, name, description, specialty, system_prompt, autonomy_level, is_active, created_at FROM ia_agents ORDER BY created_at DESC"
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar agentes IA." });
+  }
+});
+
+app.post("/ia/agents", async (req, res) => {
+  const { adminId, name, description, specialty, system_prompt, autonomy_level, is_active } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name) {
+    return res.status(400).json({ message: "name é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "INSERT INTO ia_agents (name, description, specialty, system_prompt, autonomy_level, is_active, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id, name, description, specialty, system_prompt, autonomy_level, is_active, created_at",
+        [
+          String(name),
+          String(description ?? ""),
+          String(specialty ?? ""),
+          String(system_prompt ?? ""),
+          String(autonomy_level ?? ""),
+          typeof is_active === "boolean" ? is_active : true,
+        ]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao criar agente IA." });
+  }
+});
+
+app.put("/ia/agents/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, name, description, specialty, system_prompt, autonomy_level, is_active } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name) {
+    return res.status(400).json({ message: "name é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "UPDATE ia_agents SET name = $1, description = $2, specialty = $3, system_prompt = $4, autonomy_level = $5, is_active = $6 WHERE id = $7 RETURNING id, name, description, specialty, system_prompt, autonomy_level, is_active, created_at",
+        [
+          String(name),
+          String(description ?? ""),
+          String(specialty ?? ""),
+          String(system_prompt ?? ""),
+          String(autonomy_level ?? ""),
+          typeof is_active === "boolean" ? is_active : true,
+          id,
+        ]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Agente não encontrado." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar agente IA." });
+  }
+});
+
+app.get("/ia/contexts", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, title, content, context_type, related_agent_id, created_at FROM ia_contexts ORDER BY created_at DESC"
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar contextos IA." });
+  }
+});
+
+app.post("/ia/contexts", async (req, res) => {
+  const { adminId, title, content, context_type, related_agent_id } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title || !content) {
+    return res.status(400).json({ message: "title e content são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "INSERT INTO ia_contexts (title, content, context_type, related_agent_id, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING id, title, content, context_type, related_agent_id, created_at",
+        [String(title), String(content), String(context_type ?? ""), related_agent_id ?? null]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao criar contexto IA." });
+  }
+});
+
+app.put("/ia/contexts/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, title, content, context_type, related_agent_id } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title || !content) {
+    return res.status(400).json({ message: "title e content são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "UPDATE ia_contexts SET title = $1, content = $2, context_type = $3, related_agent_id = $4 WHERE id = $5 RETURNING id, title, content, context_type, related_agent_id, created_at",
+        [String(title), String(content), String(context_type ?? ""), related_agent_id ?? null, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Contexto não encontrado." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar contexto IA." });
+  }
+});
+
+app.delete("/ia/contexts/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query("DELETE FROM ia_contexts WHERE id = $1 RETURNING id", [id]);
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Contexto não encontrado." });
+      }
+      res.json({ id });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao remover contexto IA." });
+  }
+});
+
+app.get("/ia/prompts", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  const category = String(req.query.category || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const params: any[] = [];
+      let sql =
+        "SELECT p.id, p.title, p.file_name, p.category, p.description, p.storage_url, p.is_active, p.version, p.created_at, p.updated_at, COUNT(m.id)::int AS memory_count FROM ia_prompts p LEFT JOIN ia_memory m ON m.prompt_id = p.id";
+      if (category) {
+        sql += " WHERE p.category = $1";
+        params.push(category);
+      }
+      sql += " GROUP BY p.id ORDER BY p.updated_at DESC";
+      const result = await client.query(sql, params);
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar prompts IA." });
+  }
+});
+
+app.get("/ia/prompts/:id", async (req, res) => {
+  const { id } = req.params;
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, title, file_name, category, description, storage_url, is_active, version, created_at, updated_at FROM ia_prompts WHERE id = $1",
+        [id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Prompt não encontrado." });
+      }
+      const prompt = result.rows[0];
+      const content = prompt.storage_url ? await readStorageText(prompt.storage_url) : "";
+      res.json({ ...prompt, content });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar prompt IA." });
+  }
+});
+
+app.put("/ia/prompts/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, title, category, description, content, is_active, reembed } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title || !category || !content) {
+    return res.status(400).json({ message: "title, category e content são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await client.query(
+        "SELECT id, file_name, version FROM ia_prompts WHERE id = $1",
+        [id]
+      );
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Prompt não encontrado." });
+      }
+      const nextVersion = Number(current.rows[0].version ?? 1) + 1;
+      const fileName = current.rows[0].file_name as string;
+      const storagePath = `ia/prompts/${category}/${fileName}`;
+      const storageUrl = await saveStorageText(storagePath, String(content));
+      const versionedPath = `ia/prompts/${category}/${fileName.replace(/\.md$/i, "")}.v${nextVersion}.md`;
+      const versionedUrl = await saveStorageText(versionedPath, String(content));
+
+      await client.query(
+        "UPDATE ia_prompts SET title = $1, category = $2, description = $3, storage_url = $4, is_active = $5, version = $6, updated_at = NOW() WHERE id = $7",
+        [String(title), String(category), String(description ?? ""), storageUrl, is_active !== false, nextVersion, id]
+      );
+
+      await client.query(
+        "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
+        [id, nextVersion, versionedUrl]
+      );
+
+      if (reembed) {
+        const embedding = await embedText(String(content));
+        await client.query(
+          "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
+          [id, String(content), toVectorLiteral(embedding), "prompt"]
+        );
+      }
+
+      res.json({ id, version: nextVersion, storage_url: storageUrl });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar prompt IA." });
+  }
+});
+
+app.post("/ia/prompts/:id/re-embed", async (req, res) => {
+  const { id } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await client.query(
+        "SELECT id, storage_url FROM ia_prompts WHERE id = $1",
+        [id]
+      );
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Prompt não encontrado." });
+      }
+      const storageUrl = String(current.rows[0].storage_url ?? "");
+      const content = storageUrl ? await readStorageText(storageUrl) : "";
+      if (!content.trim()) {
+        return res.status(400).json({ message: "Prompt sem conteúdo." });
+      }
+      const embedding = await embedText(content);
+      await client.query(
+        "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
+        [id, content, toVectorLiteral(embedding), "prompt"]
+      );
+      res.json({ ok: true });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao re-embutir prompt IA." });
+  }
+});
+
+app.get("/ia/prompts/:id/versions", async (req, res) => {
+  const { id } = req.params;
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, prompt_id, version, storage_url, created_at FROM ia_prompt_versions WHERE prompt_id = $1 ORDER BY version DESC",
+        [id]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar versões do prompt IA." });
+  }
+});
+
+app.post("/ia/prompts/:id/activate-version", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, version, reembed } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  const targetVersion = Number(version);
+  if (!targetVersion || targetVersion < 1) {
+    return res.status(400).json({ message: "version inválida." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await client.query("SELECT id, version FROM ia_prompts WHERE id = $1", [id]);
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Prompt não encontrado." });
+      }
+      const versionRow = await client.query(
+        "SELECT storage_url FROM ia_prompt_versions WHERE prompt_id = $1 AND version = $2 LIMIT 1",
+        [id, targetVersion]
+      );
+      if (!versionRow.rows[0]) {
+        return res.status(404).json({ message: "Versão não encontrada." });
+      }
+      const nextVersion = Number(current.rows[0].version ?? 1) + 1;
+      const storageUrl = String(versionRow.rows[0].storage_url || "");
+      await client.query(
+        "UPDATE ia_prompts SET storage_url = $1, version = $2, updated_at = NOW() WHERE id = $3",
+        [storageUrl, nextVersion, id]
+      );
+      await client.query(
+        "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
+        [id, nextVersion, storageUrl]
+      );
+      if (reembed) {
+        const content = storageUrl ? await readStorageText(storageUrl) : "";
+        if (content.trim()) {
+          const embedding = await embedText(content);
+          await client.query(
+            "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
+            [id, content, toVectorLiteral(embedding), "prompt"]
+          );
+        }
+      }
+      res.json({ id, version: nextVersion, storage_url: storageUrl });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao ativar versão do prompt IA." });
+  }
+});
+
+app.get("/ia/prompts/export", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, file_name, category, storage_url, version FROM ia_prompts WHERE is_active = true ORDER BY category, file_name"
+      );
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", "attachment; filename=ia-prompts-backup.zip");
+
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      archive.on("error", (err: Error) => {
+        console.error("Erro ao gerar zip de prompts:", err);
+        res.status(500).end();
+      });
+      archive.pipe(res);
+
+      for (const prompt of result.rows) {
+        const filename = prompt.file_name || `prompt-${prompt.id}.md`;
+        const category = prompt.category || "uncategorized";
+        const storageUrl = String(prompt.storage_url || "");
+        if (!storageUrl) continue;
+        const parsed = parseStorageUrl(storageUrl);
+        if (parsed) {
+          const bucket = admin.storage().bucket(parsed.bucket);
+          const stream = bucket.file(parsed.path).createReadStream();
+          archive.append(stream, { name: `prompts/${category}/${filename}` });
+        } else {
+          const content = await readStorageText(storageUrl);
+          archive.append(content, { name: `prompts/${category}/${filename}` });
+        }
+      }
+
+      await archive.finalize();
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao exportar prompts IA." });
+  }
+});
+
+app.post("/ia/prompts/import", async (req, res) => {
+  const contentType = req.headers["content-type"] || "";
+  if (!contentType.includes("multipart/form-data")) {
+    return res.status(400).json({ message: "Conteúdo inválido. Use multipart/form-data." });
+  }
+  const busboy = Busboy({ headers: req.headers });
+  let adminId = "";
+  const chunks: Buffer[] = [];
+
+  busboy.on("field", (fieldname: string, value: string) => {
+    if (fieldname === "adminId") {
+      adminId = String(value || "").trim();
+    }
+  });
+
+  busboy.on("file", (_name: string, file: NodeJS.ReadableStream, info: { filename: string }) => {
+    if (!info.filename.toLowerCase().endsWith(".zip")) {
+      file.resume();
+      return;
+    }
+    file.on("data", (data: Buffer) => chunks.push(data));
+  });
+
+  busboy.on("finish", async () => {
+    if (!adminId) {
+      return res.status(400).json({ message: "adminId é obrigatório." });
+    }
+    if (chunks.length === 0) {
+      return res.status(400).json({ message: "Arquivo ZIP não encontrado." });
+    }
+    try {
+      const pool = await getPool();
+      const client = await pool.connect();
+      try {
+        await assertAdmin(client, adminId);
+        const zipBuffer = Buffer.concat(chunks);
+        const zip = new AdmZip(zipBuffer);
+        const entries = zip.getEntries();
+        const summary: { inserted: number; updated: number; skipped: number } = { inserted: 0, updated: 0, skipped: 0 };
+
+        for (const entry of entries) {
+          if (entry.isDirectory) continue;
+          const name = entry.entryName.replace(/\\/g, "/");
+          if (!name.toLowerCase().endsWith(".md")) continue;
+          const parts = name.split("/").filter(Boolean);
+          const filename = parts[parts.length - 1];
+          const category = parts.length >= 2 ? parts[parts.length - 2] : inferPromptCategory(filename);
+          const content = entry.getData().toString("utf8");
+          if (!content.trim()) {
+            summary.skipped += 1;
+            continue;
+          }
+
+          const existing = await client.query(
+            "SELECT id, version, storage_url FROM ia_prompts WHERE file_name = $1 LIMIT 1",
+            [filename]
+          );
+
+          let promptId = existing.rows[0]?.id;
+          const currentVersion = existing.rows[0]?.version ? Number(existing.rows[0].version) : 0;
+          const existingUrl = String(existing.rows[0]?.storage_url || "");
+          let isDifferent = true;
+
+          if (existingUrl) {
+            const existingContent = await readStorageText(existingUrl);
+            isDifferent = hashContent(existingContent) !== hashContent(content);
+          }
+
+          if (!promptId) {
+            const storagePath = `ia/prompts/${category}/${filename}`;
+            const storageUrl = await saveStorageText(storagePath, content);
+            const versionedPath = `ia/prompts/${category}/${filename.replace(/\.md$/i, "")}.v1.md`;
+            const versionedUrl = await saveStorageText(versionedPath, content);
+            const title = toPromptTitle(filename);
+            const insert = await client.query(
+              "INSERT INTO ia_prompts (title, file_name, category, description, storage_url, is_active, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, true, $6, NOW(), NOW()) RETURNING id",
+              [title, filename, category, "", storageUrl, 1]
+            );
+            promptId = insert.rows[0]?.id;
+            await client.query(
+              "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
+              [promptId, 1, versionedUrl]
+            );
+            const embedding = await embedText(content);
+            await client.query(
+              "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
+              [promptId, content, toVectorLiteral(embedding), "prompt"]
+            );
+            summary.inserted += 1;
+            continue;
+          }
+
+          if (!isDifferent) {
+            summary.skipped += 1;
+            continue;
+          }
+
+          const nextVersion = currentVersion + 1;
+          const storagePath = `ia/prompts/${category}/${filename}`;
+          const storageUrl = await saveStorageText(storagePath, content);
+          const versionedPath = `ia/prompts/${category}/${filename.replace(/\.md$/i, "")}.v${nextVersion}.md`;
+          const versionedUrl = await saveStorageText(versionedPath, content);
+          await client.query(
+            "UPDATE ia_prompts SET title = $1, category = $2, storage_url = $3, version = $4, updated_at = NOW() WHERE id = $5",
+            [toPromptTitle(filename), category, storageUrl, nextVersion, promptId]
+          );
+          await client.query(
+            "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
+            [promptId, nextVersion, versionedUrl]
+          );
+          const embedding = await embedText(content);
+          await client.query(
+            "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
+            [promptId, content, toVectorLiteral(embedding), "prompt"]
+          );
+          summary.updated += 1;
+        }
+
+        res.json({ ok: true, ...summary });
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      const status = (error as { status?: number }).status ?? 500;
+      console.error(error);
+      res.status(status).json({ message: "Erro ao importar prompts IA." });
+    }
+  });
+
+  req.pipe(busboy);
+});
+
+app.get("/ia/orchestrators", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, name, storage_url, execution_flow, is_active, version, created_at, updated_at FROM ia_orchestrators ORDER BY updated_at DESC"
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar orquestradores IA." });
+  }
+});
+
+app.get("/ia/orchestrators/active", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, name, storage_url, execution_flow, is_active, version, created_at, updated_at FROM ia_orchestrators WHERE is_active = true ORDER BY updated_at DESC LIMIT 1"
+      );
+      res.json(result.rows[0] ?? null);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar orquestrador ativo." });
+  }
+});
+
+app.post("/ia/orchestrators", async (req, res) => {
+  const { adminId, name, supremePrompt, executionFlow, isActive } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name || !supremePrompt) {
+    return res.status(400).json({ message: "name e supremePrompt são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const versionResult = await client.query(
+        "SELECT COALESCE(MAX(version), 0) AS version FROM ia_orchestrators WHERE name = $1",
+        [String(name)]
+      );
+      const nextVersion = Number(versionResult.rows[0]?.version ?? 0) + 1;
+      const active = isActive !== false;
+      if (active) {
+        await client.query("UPDATE ia_orchestrators SET is_active = false WHERE is_active = true");
+      }
+      const safeName = String(name).toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
+      const storagePath = `ia/orchestrators/${safeName || "orchestrator"}.v${nextVersion}.md`;
+      const storageUrl = await saveStorageText(storagePath, String(supremePrompt));
+      const result = await client.query(
+        "INSERT INTO ia_orchestrators (name, storage_url, execution_flow, is_active, version, created_at, updated_at) VALUES ($1, $2, $3::jsonb, $4, $5, NOW(), NOW()) RETURNING id, name, storage_url, execution_flow, is_active, version, created_at, updated_at",
+        [String(name), storageUrl, JSON.stringify(executionFlow ?? []), active, nextVersion]
+      );
+      await logIaReport(client, {
+        status: "orchestrator_create",
+        summary: `Novo orquestrador IA criado: ${name} (v${nextVersion}).`,
+      });
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao criar orquestrador IA." });
+  }
+});
+
+app.put("/ia/orchestrators/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, name, supremePrompt, executionFlow, isActive } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!name || !supremePrompt) {
+    return res.status(400).json({ message: "name e supremePrompt são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await client.query(
+        "SELECT id, name, version FROM ia_orchestrators WHERE id = $1",
+        [id]
+      );
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Orquestrador não encontrado." });
+      }
+      const versionResult = await client.query(
+        "SELECT COALESCE(MAX(version), 0) AS version FROM ia_orchestrators WHERE name = $1",
+        [String(name)]
+      );
+      const nextVersion = Number(versionResult.rows[0]?.version ?? 0) + 1;
+      const active = isActive !== false;
+      if (active) {
+        await client.query("UPDATE ia_orchestrators SET is_active = false WHERE is_active = true");
+      }
+      const safeName = String(name).toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
+      const storagePath = `ia/orchestrators/${safeName || "orchestrator"}.v${nextVersion}.md`;
+      const storageUrl = await saveStorageText(storagePath, String(supremePrompt));
+      const result = await client.query(
+        "INSERT INTO ia_orchestrators (name, storage_url, execution_flow, is_active, version, created_at, updated_at) VALUES ($1, $2, $3::jsonb, $4, $5, NOW(), NOW()) RETURNING id, name, storage_url, execution_flow, is_active, version, created_at, updated_at",
+        [String(name), storageUrl, JSON.stringify(executionFlow ?? []), active, nextVersion]
+      );
+      await logIaReport(client, {
+        status: "orchestrator_update",
+        summary: `Orquestrador IA atualizado: ${name} (v${nextVersion}).`,
+      });
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar orquestrador IA." });
+  }
+});
+
+app.post("/ia/orchestrators/:id/activate", async (req, res) => {
+  const { id } = req.params;
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const current = await client.query(
+        "SELECT id, name, version FROM ia_orchestrators WHERE id = $1",
+        [id]
+      );
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Orquestrador não encontrado." });
+      }
+      await client.query("UPDATE ia_orchestrators SET is_active = false WHERE is_active = true");
+      await client.query("UPDATE ia_orchestrators SET is_active = true, updated_at = NOW() WHERE id = $1", [id]);
+      await logIaReport(client, {
+        status: "orchestrator_activate",
+        summary: `Orquestrador IA ativado: ${current.rows[0].name} (v${current.rows[0].version}).`,
+      });
+      res.json({ id, is_active: true });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao ativar orquestrador IA." });
+  }
+});
+
+app.get("/ia/orchestrators/summary", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const active = await client.query(
+        "SELECT id, name, storage_url, execution_flow, is_active, version, created_at, updated_at FROM ia_orchestrators WHERE is_active = true ORDER BY updated_at DESC LIMIT 1"
+      );
+      const contexts = await client.query("SELECT COUNT(*)::int AS count FROM ia_contexts");
+      const agentsCount = await client.query("SELECT COUNT(*)::int AS count FROM ia_agents WHERE is_active = true");
+      const agentsList = await client.query("SELECT id, name, specialty FROM ia_agents WHERE is_active = true ORDER BY name ASC");
+      const { flags } = await getIaAuthorityFlags(client);
+      const lastExecution = await client.query(
+        "SELECT id, orchestrator_id, version, steps_executed, agents_used, memory_retrieved_count, token_usage, execution_time, status, created_at FROM ia_orchestrator_executions ORDER BY created_at DESC LIMIT 1"
+      );
+      res.json({
+        activeOrchestrator: active.rows[0] ?? null,
+        activeContextsCount: contexts.rows[0]?.count ?? 0,
+        activeAgentsCount: agentsCount.rows[0]?.count ?? 0,
+        activeAgents: agentsList.rows,
+        systemFlags: flags,
+        lastExecution: lastExecution.rows[0] ?? null,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar resumo do orquestrador IA." });
+  }
+});
+
+app.get("/ia/orchestrators/executions", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  const orchestratorId = String(req.query.orchestratorId || "").trim();
+  const limit = Math.max(1, Math.min(Number(req.query.limit ?? 20), 100));
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const params: any[] = [];
+      let sql =
+        "SELECT id, orchestrator_id, version, steps_executed, agents_used, memory_retrieved_count, token_usage, execution_time, status, created_at FROM ia_orchestrator_executions";
+      if (orchestratorId) {
+        params.push(orchestratorId);
+        sql += ` WHERE orchestrator_id = $${params.length}`;
+      }
+      params.push(limit);
+      sql += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      const result = await client.query(sql, params);
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar execuções do orquestrador IA." });
+  }
+});
+
+app.get("/ia/orchestrators/:id/content", async (req, res) => {
+  const { id } = req.params;
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "SELECT id, name, storage_url, version, is_active FROM ia_orchestrators WHERE id = $1",
+        [id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Orquestrador não encontrado." });
+      }
+      const orchestrator = result.rows[0];
+      const content = orchestrator.storage_url ? await readStorageText(orchestrator.storage_url) : "";
+      res.json({ ...orchestrator, content });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar conteúdo do orquestrador IA." });
+  }
+});
+
+const IA_TASK_STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "BLOCKED", "DONE"] as const;
+const normalizeIaTaskStatus = (status: string) => {
+  const upper = String(status || "").trim().toUpperCase();
+  return IA_TASK_STATUSES.includes(upper as typeof IA_TASK_STATUSES[number]) ? upper : "TODO";
+};
+
+app.post("/ia/tasks", async (req, res) => {
+  const { adminId, title, description, status, origin, linked_agent_id, context_reference, execution_logs, specialist_type } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "title é obrigatório." });
+  }
+  try {
+    assertRateLimit(`ia:tasks:${adminId}`, IA_RATE_LIMITS.taskCreatePerHour, 60 * 60 * 1000);
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectTasksTable(client);
+      const result = await client.query(
+        "INSERT INTO project_tasks (project_id, title, description, status, position, generated_by_ai, domain, origin, linked_agent_id, context_reference, execution_logs, specialist_type, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, NOW(), NOW()) RETURNING id, title, description, status, position, domain, generated_by_ai, origin, linked_agent_id, context_reference, execution_logs, specialist_type, created_at, updated_at",
+        [
+          null,
+          String(title),
+          String(description ?? ""),
+          normalizeIaTaskStatus(status ?? "TODO"),
+          0,
+          false,
+          "IA",
+          String(origin ?? "Manual"),
+          linked_agent_id ?? null,
+          String(context_reference ?? ""),
+          JSON.stringify(Array.isArray(execution_logs) ? execution_logs : []),
+          String(specialist_type ?? ""),
+        ]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao criar task IA." });
+  }
+});
+
+app.put("/ia/tasks/:id", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, title, description, status, origin, linked_agent_id, context_reference, execution_logs, specialist_type } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  if (!title) {
+    return res.status(400).json({ message: "title é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      await ensureProjectTasksTable(client);
+      const result = await client.query(
+        "UPDATE project_tasks SET title = $1, description = $2, status = $3, origin = $4, linked_agent_id = $5, context_reference = $6, execution_logs = $7::jsonb, specialist_type = $8, updated_at = NOW() WHERE id = $9 AND domain = 'IA' AND project_id IS NULL RETURNING id, title, description, status, origin, linked_agent_id, context_reference, execution_logs, specialist_type, updated_at",
+        [
+          String(title),
+          String(description ?? ""),
+          normalizeIaTaskStatus(status ?? "TODO"),
+          String(origin ?? "Manual"),
+          linked_agent_id ?? null,
+          String(context_reference ?? ""),
+          JSON.stringify(Array.isArray(execution_logs) ? execution_logs : []),
+          String(specialist_type ?? ""),
+          id,
+        ]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Task IA não encontrada." });
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao atualizar task IA." });
+  }
+});
+
+app.post("/ia/agents/:id/execute", async (req, res) => {
+  const { id } = req.params;
+  const { adminId, context_reference } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    assertRateLimit(`ia:agents:${adminId}`, IA_RATE_LIMITS.agentExecutePerHour, 60 * 60 * 1000);
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const agent = await client.query(
+        "SELECT id, name, specialty, system_prompt FROM ia_agents WHERE id = $1",
+        [id]
+      );
+      if (!agent.rows[0]) {
+        return res.status(404).json({ message: "Agente não encontrado." });
+      }
+      await ensureAiReportsTable(client);
+      await ensureProjectTasksTable(client);
+      const reportSummary = `Agent execution requested: ${agent.rows[0].name}`;
+      const report = await client.query(
+        "INSERT INTO ai_reports (domain, status, summary, decisions, risks, next_actions, issue_keys, files_modified) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb) RETURNING id",
+        ["IA", "requested", reportSummary, JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), JSON.stringify([]), JSON.stringify([])]
+      );
+      const task = await client.query(
+        "INSERT INTO project_tasks (project_id, title, description, status, position, generated_by_ai, domain, origin, linked_agent_id, context_reference, execution_logs, specialist_type, report_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, NOW(), NOW()) RETURNING id, title, status, linked_agent_id, specialist_type, created_at",
+        [
+          null,
+          reportSummary,
+          agent.rows[0].system_prompt ?? "",
+          "TODO",
+          0,
+          true,
+          "IA",
+          "Agent",
+          agent.rows[0].id,
+          String(context_reference ?? ""),
+          JSON.stringify([{ event: "requested", at: new Date().toISOString() }]),
+          agent.rows[0].specialty ?? "",
+          report.rows[0]?.id ?? null,
+        ]
+      );
+      await tryStoreIaMemory(client, {
+        content: reportSummary,
+        contextType: "agent_execution",
+        relatedTaskId: task.rows[0]?.id ?? null,
+      });
+      res.status(201).json({ task: task.rows[0], reportId: report.rows[0]?.id });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao acionar agente IA." });
+  }
+});
+
+app.post("/ia/chat", async (req, res) => {
+  const { adminId, conversationId, message } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  const trimmed = String(message ?? "").trim();
+  if (!trimmed || trimmed.length > IA_CHAT_MAX_CONTENT) {
+    return res.status(400).json({ message: "message inválida ou muito longa." });
+  }
+  try {
+    assertRateLimit(`ia:chat:${adminId}`, IA_RATE_LIMITS.chatPerHour, 60 * 60 * 1000);
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const executionStartedAt = Date.now();
+      const defaultFlow = [
+        "load_orchestrator",
+        "validate_system_config",
+        "load_contexts",
+        "retrieve_vector_memory",
+        "validate_authority_flags",
+        "create_or_update_ia_task",
+        "execute_agent",
+        "generate_ai_report",
+        "store_memory",
+      ];
+      const stepState = new Map<string, { step: string; status: string; execution_time_ms: number; token_usage: number }>();
+      const initStep = (name: string) => {
+        if (!stepState.has(name)) {
+          stepState.set(name, { step: name, status: "pending", execution_time_ms: 0, token_usage: 0 });
+        }
+      };
+      const markStep = (name: string, status: string, execution_time_ms: number, token_usage = 0) => {
+        initStep(name);
+        const entry = stepState.get(name)!;
+        entry.status = status;
+        entry.execution_time_ms = execution_time_ms;
+        entry.token_usage = token_usage;
+      };
+      let convoId = conversationId as string | undefined;
+      if (!convoId) {
+        const created = await client.query(
+          "INSERT INTO ia_conversations (title, created_at, updated_at) VALUES ($1, NOW(), NOW()) RETURNING id",
+          [trimmed.slice(0, 120)]
+        );
+        convoId = created.rows[0]?.id;
+      }
+      await client.query(
+        "INSERT INTO ia_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())",
+        [convoId, "user", trimmed]
+      );
+
+      const orchestratorStartedAt = Date.now();
+      const orchestratorResult = await client.query(
+        "SELECT id, name, storage_url, execution_flow, version FROM ia_orchestrators WHERE is_active = true ORDER BY updated_at DESC LIMIT 1"
+      );
+      const orchestrator = orchestratorResult.rows[0] as {
+        id?: string;
+        name?: string;
+        storage_url?: string;
+        execution_flow?: unknown;
+        version?: number;
+      } | undefined;
+      markStep("load_orchestrator", "ok", Date.now() - orchestratorStartedAt);
+
+      const { flags, isConfigured } = await getIaAuthorityFlags(client);
+      markStep("validate_system_config", "ok", 0);
+      const authorityOk =
+        isConfigured &&
+        flags.managedByAI === true &&
+        flags.taskCreationPolicy === "AI_ALLOWED" &&
+        flags.allowAutoBacklogIfEmpty === true;
+      markStep("validate_authority_flags", authorityOk ? "ok" : "blocked", 0);
+      const flowList = Array.isArray(orchestrator?.execution_flow) ? (orchestrator?.execution_flow as string[]) : defaultFlow;
+      flowList.forEach((step) => initStep(step));
+      if (!authorityOk) {
+        const steps = flowList.map((step) => stepState.get(step)!).map((entry) => {
+          if (entry.status === "pending") entry.status = "skipped";
+          return entry;
+        });
+        const executionTime = Date.now() - executionStartedAt;
+        await client.query(
+          "INSERT INTO ia_orchestrator_executions (orchestrator_id, version, steps_executed, agents_used, memory_retrieved_count, token_usage, execution_time, status, created_at) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, NOW())",
+          [
+            orchestrator?.id ?? null,
+            orchestrator?.version ?? 1,
+            JSON.stringify(steps),
+            JSON.stringify([]),
+            0,
+            0,
+            executionTime,
+            "blocked",
+          ]
+        );
+        return res.status(423).json({ message: "Orquestrador bloqueado por flags do sistema." });
+      }
+
+      const contextsStartedAt = Date.now();
+      const contextRows = await client.query(
+        "SELECT title, content, context_type FROM ia_contexts ORDER BY created_at DESC LIMIT 5"
+      );
+      markStep("load_contexts", "ok", Date.now() - contextsStartedAt);
+      const memoryStartedAt = Date.now();
+      const memoryEmbedding = await embedText(trimmed);
+      const memoryRows = await client.query(
+        "SELECT content, context_type FROM ia_memory ORDER BY embedding <=> $1::vector ASC LIMIT 3",
+        [toVectorLiteral(memoryEmbedding)]
+      );
+      markStep("retrieve_vector_memory", "ok", Date.now() - memoryStartedAt, Math.round(trimmed.length / 4));
+
+      const systemParts: string[] = [];
+      if (orchestrator?.storage_url) {
+        const supremePrompt = await readStorageText(orchestrator.storage_url);
+        if (supremePrompt) {
+          systemParts.push(`SUPREME PROMPT:\n${supremePrompt}`);
+        }
+      }
+      if (orchestrator?.execution_flow) {
+        const flowText = JSON.stringify(orchestrator.execution_flow, null, 2);
+        systemParts.push(`EXECUTION FLOW (JSON):\n${flowText}`);
+      }
+      const contextText = contextRows.rows
+        .map((row) => `(${row.context_type || "context"}) ${row.title}: ${row.content}`)
+        .filter(Boolean)
+        .join("\n\n");
+      if (contextText) systemParts.push(`CONTEXTOS:\n${contextText}`);
+      const memoryText = memoryRows.rows
+        .map((row) => `(${row.context_type || "memory"}) ${row.content}`)
+        .filter(Boolean)
+        .join("\n\n");
+      if (memoryText) systemParts.push(`MEMÓRIA SEMÂNTICA:\n${memoryText}`);
+      const systemContext = systemParts.join("\n\n");
+
+      const apiKey = await assertOpenAiKey();
+      const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemContext || "Você é o HK IA da plataforma HKTECH." },
+            { role: "user", content: trimmed },
+          ],
+          temperature: 0.2,
+          max_tokens: IA_CHAT_MAX_TOKENS,
+        }),
+      });
+      if (!chatRes.ok) {
+        throw httpError(502, "Falha ao consultar OpenAI.");
+      }
+      const chatJson = await chatRes.json();
+      const assistantMessage = chatJson?.choices?.[0]?.message?.content ?? "";
+      const estimatedTokens = Math.round((systemContext.length + trimmed.length + assistantMessage.length) / 4);
+      markStep("execute_agent", "ok", 0, estimatedTokens);
+      await client.query(
+        "INSERT INTO ia_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())",
+        [convoId, "assistant", assistantMessage]
+      );
+      await logIaReport(client, {
+        status: "chat_orchestrated",
+        summary: `HK IA respondeu com orquestrador ${orchestrator?.name || "default"}.`,
+      });
+      markStep("generate_ai_report", "ok", 0);
+      await tryStoreIaMemory(client, {
+        content: trimmed,
+        contextType: "chat_user",
+      });
+      if (assistantMessage) {
+        await tryStoreIaMemory(client, {
+          content: assistantMessage,
+          contextType: "chat_assistant",
+        });
+      }
+      markStep("store_memory", "ok", 0);
+      markStep("create_or_update_ia_task", "skipped", 0);
+      const flowOrdered = flowList.map((step) => {
+        const entry = stepState.get(step) ?? { step, status: "skipped", execution_time_ms: 0, token_usage: 0 };
+        if (entry.status === "pending") entry.status = "skipped";
+        return entry;
+      });
+      const executionTime = Date.now() - executionStartedAt;
+      await client.query(
+        "INSERT INTO ia_orchestrator_executions (orchestrator_id, version, steps_executed, agents_used, memory_retrieved_count, token_usage, execution_time, status, created_at) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, NOW())",
+        [
+          orchestrator?.id ?? null,
+          orchestrator?.version ?? 1,
+          JSON.stringify(flowOrdered),
+          JSON.stringify([]),
+          memoryRows.rows.length,
+          estimatedTokens,
+          executionTime,
+          "success",
+        ]
+      );
+      await client.query("UPDATE ia_conversations SET updated_at = NOW() WHERE id = $1", [convoId]);
+      res.json({ conversationId: convoId, assistantMessage });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao conversar com HK IA." });
+  }
+});
+
+app.get("/ia/memory/stats", async (req, res) => {
+  const adminId = String(req.query.adminId || "").trim();
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const total = await client.query("SELECT COUNT(*)::int AS count FROM ia_memory");
+      const chars = await client.query("SELECT COALESCE(SUM(LENGTH(content)), 0)::int AS chars FROM ia_memory");
+      const byType = await client.query(
+        "SELECT context_type, COUNT(*)::int AS count FROM ia_memory GROUP BY context_type ORDER BY count DESC"
+      );
+      const totalChars = chars.rows[0]?.chars ?? 0;
+      const tokenEstimate = Math.round(totalChars / 4);
+      res.json({ total: total.rows[0]?.count ?? 0, byType: byType.rows, tokenEstimate });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao carregar memória IA." });
+  }
+});
+
+app.post("/ia/memory", async (req, res) => {
+  const { adminId, content, context_type, related_task_id } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  const trimmed = String(content ?? "").trim();
+  if (!trimmed || trimmed.length > IA_MEMORY_MAX_CONTENT) {
+    return res.status(400).json({ message: "content inválido ou muito longo." });
+  }
+  try {
+    const embedding = await embedText(trimmed);
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const result = await client.query(
+        "INSERT INTO ia_memory (content, embedding, context_type, related_task_id, created_at) VALUES ($1, $2::vector, $3, $4, NOW()) RETURNING id, content, context_type, related_task_id, created_at",
+        [trimmed, toVectorLiteral(embedding), String(context_type ?? ""), related_task_id ?? null]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao salvar memória IA." });
+  }
+});
+
+app.post("/ia/memory/search", async (req, res) => {
+  const { adminId, query, topK, context_type } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  const trimmed = String(query ?? "").trim();
+  if (!trimmed || trimmed.length > IA_MEMORY_MAX_CONTENT) {
+    return res.status(400).json({ message: "query inválida ou muito longa." });
+  }
+  const limit = Math.max(1, Math.min(Number(topK ?? 5), IA_MEMORY_MAX_TOPK));
+  try {
+    const embedding = await embedText(trimmed);
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await assertAdmin(client, adminId);
+      const params: any[] = [toVectorLiteral(embedding), limit];
+      let sql =
+        "SELECT id, content, context_type, related_task_id, created_at, (embedding <=> $1::vector) AS distance FROM ia_memory";
+      if (context_type) {
+        sql += " WHERE context_type = $3";
+        params.push(String(context_type));
+      }
+      sql += " ORDER BY embedding <=> $1::vector ASC LIMIT $2";
+      const result = await client.query(sql, params);
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    console.error(error);
+    res.status(status).json({ message: "Erro ao buscar memória IA." });
+  }
+});
+
 app.post("/admin-tools/reset-purchases", async (req, res) => {
   const { adminId } = req.body ?? {};
   if (!adminId) {
@@ -4357,7 +7819,7 @@ app.put("/projects/:id", async (req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
+        "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, version = CASE WHEN $17 THEN COALESCE(version, 1) + 1 ELSE version END, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, version, template_id, template_version, updated_at",
         [
           name,
           description ?? "",
@@ -4381,13 +7843,27 @@ app.put("/projects/:id", async (req, res) => {
           id,
         ]
       );
-      res.json(result.rows[0]);
+      let updated = result.rows[0];
+      if (!!isTemplate && updated?.id) {
+        await ensureTemplatesTable(client);
+        const templateUpsert = await client.query(
+          "INSERT INTO templates (id, name, description, version, is_active) VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, version = EXCLUDED.version, is_active = true, updated_at = NOW() RETURNING id, version",
+          [updated.id, updated.name, updated.description ?? "", Number(updated.version ?? 1)]
+        );
+        const templateVersion = Number(templateUpsert.rows[0]?.version ?? updated.version ?? 1);
+        const projectUpdate = await client.query(
+          "UPDATE projects SET template_id = $1, template_version = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, version, template_id, template_version, updated_at",
+          [updated.id, templateVersion, updated.id]
+        );
+        updated = projectUpdate.rows[0] ?? updated;
+      }
+      res.json(updated);
     } catch (error) {
       const pgError = error as { code?: string };
       if (pgError.code === "42703") {
         await ensureProjectsColumns(client);
         const retry = await client.query(
-          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, updated_at",
+          "UPDATE projects SET name = $1, description = $2, project_type = $3, sale_price = $4, production_cost = $5, purchase_count = $6, repository = $7, domain = $8, hosting = $9, status = $10, paid = $11, is_public = $12, owner_user_id = $13, product_id = $14, base_project_id = $15, created_from_purchase = $16, is_template = $17, html_content = $18, css_content = $19, version = CASE WHEN $17 THEN COALESCE(version, 1) + 1 ELSE version END, updated_at = NOW() WHERE id = $20 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, version, template_id, template_version, updated_at",
           [
             name,
             description ?? "",
@@ -4411,7 +7887,21 @@ app.put("/projects/:id", async (req, res) => {
             id,
           ]
         );
-        res.json(retry.rows[0]);
+        let updated = retry.rows[0];
+        if (!!isTemplate && updated?.id) {
+          await ensureTemplatesTable(client);
+          const templateUpsert = await client.query(
+            "INSERT INTO templates (id, name, description, version, is_active) VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, version = EXCLUDED.version, is_active = true, updated_at = NOW() RETURNING id, version",
+            [updated.id, updated.name, updated.description ?? "", Number(updated.version ?? 1)]
+          );
+          const templateVersion = Number(templateUpsert.rows[0]?.version ?? updated.version ?? 1);
+          const projectUpdate = await client.query(
+            "UPDATE projects SET template_id = $1, template_version = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, description, project_type, sale_price, production_cost, purchase_count, repository, domain, hosting, status, paid, is_public, owner_user_id, product_id, base_project_id, created_from_purchase, is_template, html_content, css_content, version, template_id, template_version, updated_at",
+            [updated.id, templateVersion, updated.id]
+          );
+          updated = projectUpdate.rows[0] ?? updated;
+        }
+        res.json(updated);
       } else {
         throw error;
       }
@@ -4464,10 +7954,14 @@ app.put("/projects/:id/content", async (req, res) => {
     try {
       await loadProjectContentForUser(client, id, userId);
       const result = await client.query(
-        "UPDATE projects SET html_content = $1, css_content = $2, updated_at = NOW() WHERE id = $3 RETURNING id, updated_at",
+        "UPDATE projects SET html_content = $1, css_content = $2, version = CASE WHEN is_template THEN COALESCE(version, 1) + 1 ELSE version END, updated_at = NOW() WHERE id = $3 RETURNING id, updated_at, version",
         [String(htmlContent ?? ""), String(cssContent ?? ""), id]
       );
-      res.json({ projectId: result.rows[0]?.id ?? id, updatedAt: result.rows[0]?.updated_at ?? new Date().toISOString() });
+      await client.query(
+        "UPDATE templates SET version = $1, updated_at = NOW() WHERE id = $2",
+        [Number(result.rows[0]?.version ?? 1), id]
+      );
+      res.json({ projectId: result.rows[0]?.id ?? id, updatedAt: result.rows[0]?.updated_at ?? new Date().toISOString(), version: result.rows[0]?.version ?? 1 });
     } finally {
       client.release();
     }
@@ -4475,6 +7969,371 @@ app.put("/projects/:id/content", async (req, res) => {
     const status = (error as { status?: number }).status ?? 500;
     console.error(error);
     res.status(status).json({ message: "Erro ao salvar conteúdo do projeto." });
+  }
+});
+
+app.get("/projects/:id/files", async (req, res) => {
+  const { id } = req.params;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  if (!isUuid(id)) {
+    return res.status(400).json({ message: "projectId inválido." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, id, userId);
+      await ensureProjectFilesTable(client);
+      const result = await client.query(
+        "SELECT id, project_id, file_name, file_type, content, storage_path, created_at, updated_at FROM project_files WHERE project_id = $1 ORDER BY created_at ASC",
+        [id]
+      );
+      res.json(result.rows);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao listar arquivos do projeto.";
+    res.status(500).json({ message });
+  }
+});
+
+app.post("/projects/:id/files", async (req, res) => {
+  const { id } = req.params;
+  const { userId, fileName, fileType, content } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  if (!fileName) {
+    return res.status(400).json({ message: "fileName é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, id, userId);
+      await ensureProjectFilesTable(client);
+      await ensureUserStorageRoot(userId);
+      await ensureProjectStorageFolders(userId, id);
+      const storagePath = await saveProjectFileToStorage({
+        userId,
+        projectId: id,
+        fileName,
+        fileType,
+        content: String(content ?? ""),
+      });
+      const result = await client.query(
+        "INSERT INTO project_files (project_id, file_name, file_type, content, storage_path, updated_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id, project_id, file_name, file_type, content, storage_path, created_at, updated_at",
+        [id, fileName, fileType ?? "html", content ?? "", storagePath]
+      );
+      res.status(201).json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao criar arquivo do projeto.";
+    res.status(500).json({ message });
+  }
+});
+
+app.put("/projects/:id/files/:fileId", async (req, res) => {
+  const { id, fileId } = req.params;
+  const { userId, fileName, fileType, content } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  if (!fileName) {
+    return res.status(400).json({ message: "fileName é obrigatório." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, id, userId);
+      await ensureProjectFilesTable(client);
+      const current = await client.query(
+        "SELECT storage_path FROM project_files WHERE id = $1 AND project_id = $2",
+        [fileId, id]
+      );
+      if (!current.rows[0]) {
+        return res.status(404).json({ message: "Arquivo não encontrado." });
+      }
+      const storagePath = await saveProjectFileToStorage({
+        userId,
+        projectId: id,
+        fileName,
+        fileType,
+        content: String(content ?? ""),
+      });
+      const result = await client.query(
+        "UPDATE project_files SET file_name = $1, file_type = $2, content = $3, storage_path = $4, updated_at = NOW() WHERE id = $5 AND project_id = $6 RETURNING id, project_id, file_name, file_type, content, storage_path, created_at, updated_at",
+        [fileName, fileType ?? "html", content ?? "", storagePath, fileId, id]
+      );
+      const previousPath = current.rows[0]?.storage_path;
+      if (previousPath && previousPath !== storagePath) {
+        await deleteProjectFileFromStorage(previousPath);
+      }
+      res.json(result.rows[0]);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao atualizar arquivo do projeto.";
+    res.status(500).json({ message });
+  }
+});
+
+app.delete("/projects/:id/files/:fileId", async (req, res) => {
+  const { id, fileId } = req.params;
+  const { userId } = req.body ?? {};
+  if (!id || !userId) {
+    return res.status(400).json({ message: "project id e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, id, userId);
+      await ensureProjectFilesTable(client);
+      const current = await client.query(
+        "SELECT storage_path FROM project_files WHERE id = $1 AND project_id = $2",
+        [fileId, id]
+      );
+      const result = await client.query(
+        "DELETE FROM project_files WHERE id = $1 AND project_id = $2 RETURNING id",
+        [fileId, id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ message: "Arquivo não encontrado." });
+      }
+      await deleteProjectFileFromStorage(current.rows[0]?.storage_path);
+      res.status(204).send();
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Erro ao remover arquivo do projeto.";
+    res.status(500).json({ message });
+  }
+});
+
+app.get("/sonarcloud/summary", async (_req, res) => {
+  try {
+    const config = getSonarConfig();
+    const summary = await fetchSonarSummary(config);
+    res.json(summary);
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao buscar resumo do SonarCloud." });
+  }
+});
+
+app.get("/sonarcloud/issues", async (_req, res) => {
+  try {
+    const config = getSonarConfig();
+    const issues = await fetchSonarIssues(config);
+    const withRisk = issues.map((issue) => {
+      const risk = classifyRisk(issue);
+      return { ...issue, riskLevel: risk.level, riskReason: risk.reason };
+    });
+    res.json(withRisk);
+  } catch (error) {
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao buscar issues do SonarCloud." });
+  }
+});
+
+
+app.post("/hktech-ai/run", async (req, res) => {
+  const { adminId } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const startTime = Date.now();
+    const pool = await getPool();
+    const client = await pool.connect();
+    let iaConfig: any = null;
+    try {
+      await assertAdmin(client, adminId);
+      iaConfig = await ensureIaConfig(client);
+    } finally {
+      client.release();
+    }
+    const maxTasksPerRun = Number(iaConfig?.maxTasksPerRun ?? 5) || 5;
+
+    const sonarConfig = getSonarConfig();
+    const result = await runAutonomousFix({
+      sonar: sonarConfig,
+      openai: process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : undefined,
+      maxIssues: maxTasksPerRun,
+    });
+    const summary = await fetchSonarSummary(sonarConfig);
+    await logHKTechAiReport({
+      issueKeys: result.plan?.issueKeys ?? result.issues.map((issue) => issue.key),
+      filesModified: [],
+      risk: result.plan?.risk ?? "indefinido",
+      prLink: result.prLink,
+      qualityGate: summary.qualityGateStatus,
+      buildResult: "not_run",
+      testResult: "not_run",
+      durationMs: Date.now() - startTime,
+      confidenceScore: result.confidenceScore,
+      status: result.status,
+      reason: result.reason,
+    });
+    res.json({
+      ...result,
+      qualityGate: summary.qualityGateStatus,
+    });
+  } catch (error) {
+    console.error(error);
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao executar HKTECH IA." });
+  }
+});
+
+app.post("/hktech-ai/simulate", async (req, res) => {
+  const { adminId, issueKey } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const startTime = Date.now();
+    const pool = await getPool();
+    const client = await pool.connect();
+    let iaConfig: any = null;
+    try {
+      await assertAdmin(client, adminId);
+      iaConfig = await ensureIaConfig(client);
+    } finally {
+      client.release();
+    }
+    const maxTasksPerRun = Number(iaConfig?.maxTasksPerRun ?? 5) || 5;
+
+    const sonarConfig = getSonarConfig();
+    const issues = await fetchSonarIssues(sonarConfig);
+    const targetIssues = issueKey ? issues.filter((issue) => issue.key === issueKey) : issues;
+    const result = await runAutonomousFix({
+      sonar: sonarConfig,
+      openai: process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : undefined,
+      issues: targetIssues,
+      mode: "simulate",
+      maxIssues: maxTasksPerRun,
+    });
+    const summary = await fetchSonarSummary(sonarConfig);
+    await logHKTechAiReport({
+      issueKeys: result.plan?.issueKeys ?? result.issues.map((issue) => issue.key),
+      filesModified: [],
+      risk: result.plan?.risk ?? "indefinido",
+      qualityGate: summary.qualityGateStatus,
+      buildResult: "not_run",
+      testResult: "not_run",
+      durationMs: Date.now() - startTime,
+      confidenceScore: result.confidenceScore,
+      status: "simulated",
+      reason: result.reason,
+    });
+    res.json({
+      ...result,
+      qualityGate: summary.qualityGateStatus,
+    });
+  } catch (error) {
+    console.error(error);
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao simular HKTECH IA." });
+  }
+});
+
+app.post("/hktech-ai/resolve", async (req, res) => {
+  const { adminId, issueKeys, maxIssues } = req.body ?? {};
+  if (!adminId) {
+    return res.status(400).json({ message: "adminId é obrigatório." });
+  }
+  try {
+    const startTime = Date.now();
+    const pool = await getPool();
+    const client = await pool.connect();
+    let iaConfig: any = null;
+    try {
+      await assertAdmin(client, adminId);
+      iaConfig = await ensureIaConfig(client);
+    } finally {
+      client.release();
+    }
+    const maxTasksPerRun = Number(iaConfig?.maxTasksPerRun ?? 5) || 5;
+
+    const sonarConfig = getSonarConfig();
+    const issues = await fetchSonarIssues(sonarConfig);
+    const filtered = Array.isArray(issueKeys) && issueKeys.length > 0
+      ? issues.filter((issue) => issueKeys.includes(issue.key))
+      : issues;
+    const requestedMax = typeof maxIssues === "number" ? maxIssues : maxTasksPerRun;
+    const cappedMax = Math.min(requestedMax, maxTasksPerRun);
+    const result = await runAutonomousFix({
+      sonar: sonarConfig,
+      openai: process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : undefined,
+      issues: filtered,
+      mode: "resolve",
+      maxIssues: cappedMax,
+    });
+    const summary = await fetchSonarSummary(sonarConfig);
+    await logHKTechAiReport({
+      issueKeys: result.plan?.issueKeys ?? result.issues.map((issue) => issue.key),
+      filesModified: [],
+      risk: result.plan?.risk ?? "indefinido",
+      qualityGate: summary.qualityGateStatus,
+      buildResult: "not_run",
+      testResult: "not_run",
+      durationMs: Date.now() - startTime,
+      confidenceScore: result.confidenceScore,
+      status: result.status,
+      reason: result.reason,
+    });
+    res.json({
+      ...result,
+      qualityGate: summary.qualityGateStatus,
+    });
+  } catch (error) {
+    console.error(error);
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao executar resolução HKTECH IA." });
+  }
+});
+
+app.get("/preview/:projectId", async (req, res) => {
+  const { projectId } = req.params;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : null;
+  if (!projectId || !userId) {
+    return res.status(400).json({ message: "projectId e userId são obrigatórios." });
+  }
+  try {
+    const pool = await getPool();
+    const client = await pool.connect();
+    try {
+      await loadProjectContentForUser(client, projectId, userId);
+      await ensureProjectFilesTable(client);
+      const result = await client.query(
+        "SELECT file_name, file_type, content FROM project_files WHERE project_id = $1 ORDER BY created_at ASC",
+        [projectId]
+      );
+      const html = buildPreviewHtml(result.rows);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(html);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    const status = (error as { status?: number }).status ?? 500;
+    res.status(status).json({ message: "Erro ao gerar preview do projeto." });
   }
 });
 
@@ -5544,4 +9403,15 @@ app.get("/mybots", async (req, res) => {
   }
 });
 
-export const api = onRequest(app);
+export const api = onRequest(
+  {
+    secrets: [
+      "SONARCLOUD_TOKEN",
+      "SONARCLOUD_PROJECT_KEY",
+      "SONARCLOUD_ORG",
+      "OPENAI_API_KEY",
+      "GITHUB_API_TOKEN",
+    ],
+  },
+  app
+);

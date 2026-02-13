@@ -35,3 +35,11 @@ export async function resetClonedProjects(adminId: string) {
 export async function resetFull(adminId: string) {
   return postAdminAction("/admin-tools/reset-full", adminId);
 }
+
+export async function resetIaTasks(adminId: string) {
+  return postAdminAction("/admin-tools/reset-ia-tasks", adminId);
+}
+
+export async function migrateIaTasks(adminId: string) {
+  return postAdminAction("/admin-tools/migrate-ia-tasks", adminId);
+}

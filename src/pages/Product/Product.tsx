@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './Product.css';
+import { logger } from '../../lib/logger';
 
 const Product: React.FC = () => {
   const navigate = useNavigate();
@@ -8,7 +9,7 @@ const Product: React.FC = () => {
   const checkoutData = useMemo(() => location.state?.checkoutData || {}, [location.state]);
 
   useEffect(() => {
-    console.log('Dados recebidos no Checkout:', checkoutData);
+    logger.info('Dados recebidos no Checkout', { checkoutData });
   }, [checkoutData]);
 
   const handleEnroll = () => {

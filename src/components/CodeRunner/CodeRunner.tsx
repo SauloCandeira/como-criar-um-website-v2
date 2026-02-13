@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { logger } from '../../lib/logger';
 import './CodeRunner.css';
 
 export default function CodeRunner({ projectId }: { projectId?: string }) {
@@ -11,11 +12,11 @@ export default function CodeRunner({ projectId }: { projectId?: string }) {
       const script = document.createElement('script');
       script.src = src; // ✅ Caminho relativo simples
       script.onload = () => {
-        console.log(`✅ Script carregado: ${script.src}`);
+        logger.info('Script carregado', { src: script.src });
         resolve();
       };
       script.onerror = () => {
-        console.error(`❌ Erro ao carregar script: ${script.src}`);
+        logger.error('Erro ao carregar script', { src: script.src });
         reject(new Error(`Erro ao carregar script: ${script.src}`));
       };
       document.body.appendChild(script);
@@ -33,14 +34,16 @@ export default function CodeRunner({ projectId }: { projectId?: string }) {
           userId,
           projectId: resolvedProjectId,
         };
-        console.log("🔄 Iniciando carregamento do ACE...");
+        logger.info('Iniciando carregamento do ACE');
         await loadScript('JS/ace/ace.js');
         await loadScript('JS/ace/ext-language_tools.js');
         await loadScript('JS/ace/ext-beautify.js');
         await loadScript('JS/editor.js');
         //await loadScript('JS/script.js');
       } catch (error) {
-        console.error("💥 Erro durante carregamento do ACE:", error);
+        logger.error('Erro durante carregamento do ACE', {
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     };
 

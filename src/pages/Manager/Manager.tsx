@@ -8,7 +8,8 @@ import FichaTecnica from '../../components/FichaTecnica/FichaTecnica';
 import ContentCourse from '../../components/ContentCourse/ContentCourse';
 import CodeRunner from '../../components/CodeRunner/CodeRunner';
 import { useLocation } from 'react-router-dom';
-import { fetchProjects, fetchProjectContent, ProjectContentDTO, ProjectDTO } from '../../services/projectsApi';
+import { createProjectFile, deleteProjectFile, fetchProjectContent, fetchProjectFiles, fetchProjects, ProjectContentDTO, ProjectDTO, ProjectFileDTO, updateProjectFile } from '../../services/projectsApi';
+import { fetchTemplateById } from '../../services/templatesApi';
 import { createKanbanItem, deleteKanbanItem, ensureProjectTasksSeed, fetchKanbanSnapshot, updateKanbanItemStatus } from '../../services/kanbanApi';
 import type { KanbanColumn, KanbanItem, KanbanStatus } from '../../services/kanbanTypes';
 import { createReport } from '../../services/aiReportApi';
@@ -24,6 +25,14 @@ const Manager: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<ProjectDTO | null>(null);
   const [projectContent, setProjectContent] = useState<ProjectContentDTO | null>(null);
   const [projectContentError, setProjectContentError] = useState<string | null>(null);
+  const [projectFiles, setProjectFiles] = useState<ProjectFileDTO[]>([]);
+  const [projectFilesLoading, setProjectFilesLoading] = useState(false);
+  const [projectFilesError, setProjectFilesError] = useState<string | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [editorContent, setEditorContent] = useState('');
+  const [newFileDraft, setNewFileDraft] = useState({ fileName: 'index.html', fileType: 'html' });
+  const [templateDocContent, setTemplateDocContent] = useState('');
+  const [templateDocError, setTemplateDocError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [purchases, setPurchases] = useState<PurchaseDTO[]>([]);
   const [kanbanColumns, setKanbanColumns] = useState<KanbanColumn[]>([]);
@@ -44,7 +53,9 @@ const Manager: React.FC = () => {
     'timeline': 'Timeline',
     'analitycs': 'Analytics',
     'course-content': 'Conteúdo',
-    'course-editor': 'Editor'
+    'course-editor': 'Editor',
+    'ide': 'IDE',
+    'documentation': 'Documentação'
   };
 
   useEffect(() => {
@@ -101,6 +112,63 @@ const Manager: React.FC = () => {
       isMounted = false;
     };
   }, [effectiveProjectId, userId]);
+
+  useEffect(() => {
+    if (!effectiveProjectId || !userId) return;
+    let isMounted = true;
+    const loadFiles = async () => {
+      setProjectFilesError(null);
+      setProjectFilesLoading(true);
+      try {
+        const files = await fetchProjectFiles(effectiveProjectId, userId);
+        if (!isMounted) return;
+        setProjectFiles(files);
+        if (files.length > 0) {
+          const nextId = files.find((file) => file.id === selectedFileId)?.id ?? files[0].id;
+          setSelectedFileId(nextId);
+          const nextFile = files.find((file) => file.id === nextId);
+          setEditorContent(nextFile?.content ?? '');
+        } else {
+          setSelectedFileId(null);
+          setEditorContent('');
+        }
+      } catch (error) {
+        if (isMounted) {
+          setProjectFilesError('Não foi possível carregar os arquivos do projeto.');
+        }
+      } finally {
+        if (isMounted) {
+          setProjectFilesLoading(false);
+        }
+      }
+    };
+    loadFiles();
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveProjectId, userId]);
+
+  useEffect(() => {
+    const templateId = selectedProject?.templateId;
+    if (!templateId) {
+      setTemplateDocContent('');
+      return;
+    }
+    let isMounted = true;
+    const loadTemplateContent = async () => {
+      setTemplateDocError(null);
+      try {
+        const template = await fetchTemplateById(templateId);
+        if (isMounted) setTemplateDocContent(template.blogContent ?? '');
+      } catch (error) {
+        if (isMounted) setTemplateDocError('Não foi possível carregar a documentação do template.');
+      }
+    };
+    loadTemplateContent();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProject?.templateId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -212,6 +280,72 @@ const Manager: React.FC = () => {
     } catch (error) {
       setKanbanError('Não foi possível remover a tarefa.');
       await reloadKanban();
+    }
+  };
+
+  const selectedFile = projectFiles.find((file) => file.id === selectedFileId) ?? null;
+
+  const requireProjectAndUser = () => {
+    if (!effectiveProjectId || !userId) return null;
+    return { projectId: effectiveProjectId, userId };
+  };
+
+  const handleSelectFile = (fileId: string) => {
+    const file = projectFiles.find((item) => item.id === fileId);
+    setSelectedFileId(fileId);
+    setEditorContent(file?.content ?? '');
+  };
+
+  const handleCreateFile = async () => {
+    const context = requireProjectAndUser();
+    if (!context) return;
+    if (!newFileDraft.fileName.trim()) return;
+    setProjectFilesError(null);
+    try {
+      const created = await createProjectFile(context.projectId, {
+        userId: context.userId,
+        fileName: newFileDraft.fileName.trim(),
+        fileType: newFileDraft.fileType,
+        content: '',
+      });
+      setProjectFiles((prev) => [...prev, created]);
+      setSelectedFileId(created.id);
+      setEditorContent(created.content ?? '');
+    } catch (error) {
+      setProjectFilesError('Não foi possível criar o arquivo.');
+    }
+  };
+
+  const handleSaveFile = async () => {
+    const context = requireProjectAndUser();
+    if (!context || !selectedFile) return;
+    setProjectFilesError(null);
+    try {
+      const updated = await updateProjectFile(context.projectId, selectedFile.id, {
+        userId: context.userId,
+        fileName: selectedFile.fileName,
+        fileType: selectedFile.fileType,
+        content: editorContent,
+      });
+      setProjectFiles((prev) => prev.map((file) => (file.id === updated.id ? updated : file)));
+      setEditorContent(updated.content ?? '');
+    } catch (error) {
+      setProjectFilesError('Não foi possível salvar o arquivo.');
+    }
+  };
+
+  const handleDeleteFile = async () => {
+    const context = requireProjectAndUser();
+    if (!context || !selectedFile) return;
+    if (!window.confirm(`Excluir o arquivo ${selectedFile.fileName}?`)) return;
+    setProjectFilesError(null);
+    try {
+      await deleteProjectFile(context.projectId, selectedFile.id, context.userId);
+      setProjectFiles((prev) => prev.filter((file) => file.id !== selectedFile.id));
+      setSelectedFileId(null);
+      setEditorContent('');
+    } catch (error) {
+      setProjectFilesError('Não foi possível excluir o arquivo.');
     }
   };
 
@@ -349,6 +483,12 @@ const Manager: React.FC = () => {
             <li className={activeTab === 'course-editor' ? 'active' : ''} onClick={() => setActiveTab('course-editor')}>
               EDITOR
             </li>
+            <li className={activeTab === 'ide' ? 'active' : ''} onClick={() => setActiveTab('ide')}>
+              IDE
+            </li>
+            <li className={activeTab === 'documentation' ? 'active' : ''} onClick={() => setActiveTab('documentation')}>
+              DOCUMENTAÇÃO
+            </li>
           </ul>
         </aside>
 
@@ -429,6 +569,98 @@ const Manager: React.FC = () => {
             <section>
               <h2>🧪 Editor de Código</h2>
               <CodeRunner projectId={effectiveProjectId ?? undefined} />
+            </section>
+          )}
+
+          {activeTab === 'ide' && (
+            <section>
+              <h2>IDE</h2>
+              {projectFilesError && <p>{projectFilesError}</p>}
+              {projectFilesLoading && <p>Carregando arquivos...</p>}
+              <div className="project-ide">
+                <aside className="project-ide__sidebar">
+                  <h4>Arquivos</h4>
+                  <ul>
+                    {projectFiles.map((file) => (
+                      <li
+                        key={file.id}
+                        className={file.id === selectedFileId ? 'active' : ''}
+                        onClick={() => handleSelectFile(file.id)}
+                      >
+                        {file.fileName}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="project-ide__new">
+                    <input
+                      placeholder="Arquivo"
+                      value={newFileDraft.fileName}
+                      onChange={(e) => setNewFileDraft((prev) => ({ ...prev, fileName: e.target.value }))}
+                    />
+                    <select
+                      value={newFileDraft.fileType}
+                      onChange={(e) => setNewFileDraft((prev) => ({ ...prev, fileType: e.target.value }))}
+                    >
+                      <option value="html">HTML</option>
+                      <option value="css">CSS</option>
+                      <option value="js">JS</option>
+                    </select>
+                    <button className="admin-btn" onClick={handleCreateFile}>Adicionar</button>
+                  </div>
+                </aside>
+                <div className="project-ide__editor">
+                  {selectedFile ? (
+                    <>
+                      <div className="project-ide__toolbar">
+                        <input
+                          value={selectedFile.fileName}
+                          onChange={(e) =>
+                            setProjectFiles((prev) => prev.map((file) => (file.id === selectedFile.id ? { ...file, fileName: e.target.value } : file)))
+                          }
+                        />
+                        <select
+                          value={selectedFile.fileType}
+                          onChange={(e) =>
+                            setProjectFiles((prev) => prev.map((file) => (file.id === selectedFile.id ? { ...file, fileType: e.target.value } : file)))
+                          }
+                        >
+                          <option value="html">HTML</option>
+                          <option value="css">CSS</option>
+                          <option value="js">JS</option>
+                        </select>
+                        <button className="admin-btn" onClick={handleSaveFile}>Salvar</button>
+                        {effectiveProjectId && (
+                          <button className="admin-btn admin-btn--ghost" onClick={() => window.open(`/preview/${effectiveProjectId}`, '_blank')}>Preview</button>
+                        )}
+                        <button className="admin-btn admin-btn--danger" onClick={handleDeleteFile}>Excluir</button>
+                      </div>
+                      <textarea
+                        className="project-ide__textarea"
+                        value={editorContent}
+                        onChange={(e) => setEditorContent(e.target.value)}
+                      />
+                    </>
+                  ) : (
+                    <p>Nenhum arquivo selecionado.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'documentation' && (
+            <section>
+              <h2>Documentação</h2>
+              {templateDocError && <p>{templateDocError}</p>}
+              {!templateDocError && (
+                <div className="project-doc">
+                  {templateDocContent ? (
+                    <article className="project-doc__content">{templateDocContent}</article>
+                  ) : (
+                    <p>Sem documentação disponível para este template.</p>
+                  )}
+                </div>
+              )}
             </section>
           )}
 

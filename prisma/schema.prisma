@@ -1,0 +1,779 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model accesses {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source     String?   @default("web")
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model admin_actions {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admin_id   String
+  action     String
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([admin_id])
+}
+
+model assets {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String
+  asset_class      String
+  ticker           String?            @default("")
+  risk_level       String?            @default("Médio")
+  current_price    Decimal?           @default(0) @db.Decimal(12, 2)
+  currency         String?            @default("BRL")
+  created_at       DateTime?          @default(now()) @db.Timestamptz(6)
+  total_supply     Decimal?           @default(0) @db.Decimal(18, 2)
+  available_supply Decimal?           @default(0) @db.Decimal(18, 2)
+  is_primary       Boolean?           @default(false)
+  fund_holdings    fund_holdings[]
+  orders           orders[]
+  price_history    price_history[]
+  wallet_positions wallet_positions[]
+}
+
+model card_listings {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  card_id        String?     @db.Uuid
+  seller_user_id String
+  price          Decimal     @db.Decimal(12, 2)
+  status         String?     @default("active")
+  created_at     DateTime?   @default(now()) @db.Timestamptz(6)
+  user_cards     user_cards? @relation(fields: [card_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model card_transactions {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  card_id        String?     @db.Uuid
+  seller_user_id String
+  buyer_user_id  String
+  price          Decimal     @db.Decimal(12, 2)
+  created_at     DateTime?   @default(now()) @db.Timestamptz(6)
+  user_cards     user_cards? @relation(fields: [card_id], references: [id], onUpdate: NoAction)
+}
+
+model commerce_orders {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String
+  item_type         String
+  item_id           String
+  amount            Decimal?  @default(0) @db.Decimal(12, 2)
+  currency          String?   @default("BRL")
+  status            String?   @default("completed")
+  payment_method    String?   @default("pix")
+  payment_reference String?   @default("")
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model costs {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String    @unique
+  cost_value    String?   @default("")
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  billing_cycle String?   @default("monthly")
+}
+
+model dao_mybot_balances {
+  mybot_id   String    @id
+  user_id    String
+  balance    Decimal?  @default(1000) @db.Decimal(14, 2)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id], map: "dao_mybot_balances_user_idx")
+}
+
+model dao_proposals {
+  id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                String
+  description          String
+  created_by_user_id   String
+  status               String      @default("PENDING_REVIEW")
+  created_at           DateTime?   @default(now()) @db.Timestamptz(6)
+  approved_by_admin_id String?
+  voting_start         DateTime?   @db.Timestamptz(6)
+  voting_end           DateTime?   @db.Timestamptz(6)
+  dao_votes            dao_votes[]
+
+  @@index([created_at(sort: Desc)])
+  @@index([status])
+}
+
+model dao_votes {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  proposal_id   String?        @db.Uuid
+  user_id       String
+  mybot_id      String
+  vote          String
+  amount_bet    Decimal        @db.Decimal(12, 2)
+  created_at    DateTime?      @default(now()) @db.Timestamptz(6)
+  dao_proposals dao_proposals? @relation(fields: [proposal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([proposal_id], map: "dao_votes_proposal_idx")
+  @@index([user_id], map: "dao_votes_user_idx")
+}
+
+model deposit_accounts {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String
+  cpf                  String?                @default("")
+  balance              Decimal?               @default(0) @db.Decimal(14, 2)
+  currency             String?                @default("BRL")
+  created_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?              @default(now()) @db.Timestamptz(6)
+  deposit_transactions deposit_transactions[]
+}
+
+model deposit_transactions {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id       String?           @db.Uuid
+  method           String?           @default("pix")
+  amount           Decimal           @db.Decimal(14, 2)
+  status           String?           @default("confirmed")
+  reference        String?           @default("")
+  created_at       DateTime?         @default(now()) @db.Timestamptz(6)
+  deposit_accounts deposit_accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model fund_holdings {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fund_id    String?   @db.Uuid
+  asset_id   String?   @db.Uuid
+  weight     Decimal?  @default(0) @db.Decimal(5, 2)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  assets     assets?   @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  funds      funds?    @relation(fields: [fund_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model funds {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?         @default("")
+  management_fee Decimal?        @default(0) @db.Decimal(6, 2)
+  nav            Decimal?        @default(0) @db.Decimal(14, 2)
+  created_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  fund_holdings  fund_holdings[]
+}
+
+model internal_accounts {
+  user_id    String    @id
+  balance    Decimal?  @default(20) @db.Decimal(14, 2)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model internal_transactions {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  from_user_id String?
+  to_user_id   String?
+  amount       Decimal   @db.Decimal(14, 2)
+  reason       String?   @default("")
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mybot_activations {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String
+  cpf_hash        String
+  deposit_tx_id   String?   @db.Uuid
+  credits_granted Decimal?  @default(0) @db.Decimal(12, 2)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([cpf_hash], map: "mybot_activations_cpf_idx")
+  @@index([user_id], map: "mybot_activations_user_idx")
+}
+
+model mybot_battle_queue {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String
+  card_id           String    @db.Uuid
+  bet_amount        Decimal   @db.Decimal(12, 2)
+  level             Int?      @default(1)
+  rarity            String?   @default("comum")
+  rarity_rank       Int?      @default(0)
+  status            String?   @default("waiting")
+  matched_battle_id String?   @db.Uuid
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([status, bet_amount, level, rarity_rank], map: "mybot_battle_queue_status_idx")
+}
+
+model mybot_battles {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id_a       String
+  user_id_b       String
+  card_id_a       String    @db.Uuid
+  card_id_b       String    @db.Uuid
+  bet_amount      Decimal   @db.Decimal(12, 2)
+  battle_type     String
+  gas_pct         Decimal   @db.Decimal(5, 4)
+  map_name        String
+  map_weights     Json
+  seed            String
+  power_a         Decimal   @db.Decimal(12, 4)
+  power_b         Decimal   @db.Decimal(12, 4)
+  power_final_a   Decimal   @db.Decimal(12, 4)
+  power_final_b   Decimal   @db.Decimal(12, 4)
+  winner_user_id  String
+  payout_amount   Decimal   @db.Decimal(12, 2)
+  gas_amount      Decimal   @db.Decimal(12, 2)
+  status          String?   @default("resolved")
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  modifiers       Json      @default("[]")
+  random_factor_a Decimal   @default(1) @db.Decimal(6, 4)
+  random_factor_b Decimal   @default(1) @db.Decimal(6, 4)
+  xp_a            Int       @default(0)
+  xp_b            Int       @default(0)
+  reason          String?   @default("")
+
+  @@index([user_id_a, created_at(sort: Desc)], map: "mybot_battles_user_a_idx")
+  @@index([user_id_b, created_at(sort: Desc)], map: "mybot_battles_user_b_idx")
+}
+
+model mybot_bets {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String
+  card_id         String    @db.Uuid
+  battle_id       String?   @db.Uuid
+  bet_amount      Decimal   @db.Decimal(12, 2)
+  possible_return Decimal   @default(0) @db.Decimal(12, 2)
+  gas_amount      Decimal   @default(0) @db.Decimal(12, 2)
+  status          String    @default("PENDENTE")
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  finalized_at    DateTime? @db.Timestamptz(6)
+  redeemed_at     DateTime? @db.Timestamptz(6)
+
+  @@index([battle_id], map: "mybot_bets_battle_idx")
+  @@index([user_id, created_at(sort: Desc)], map: "mybot_bets_user_idx")
+}
+
+model mybot_cpf_registry {
+  cpf_hash   String    @id
+  user_id    String
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mybot_events {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String
+  event_type     String
+  source         String?   @default("")
+  payload        Json      @default("{}")
+  reversible     Boolean?  @default(true)
+  occurred_at    DateTime? @default(now()) @db.Timestamptz(6)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  reverted_at    DateTime? @db.Timestamptz(6)
+  correlation_id String?   @default("")
+  version        Int?      @default(1)
+
+  @@index([user_id, occurred_at(sort: Desc)], map: "mybot_events_user_idx")
+}
+
+model mybot_evolutions {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String
+  card_id      String    @db.Uuid
+  attribute    String
+  before_value Int
+  after_value  Int
+  cost         Decimal   @db.Decimal(12, 2)
+  points_spent Int       @default(1)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mybot_maps {
+  id          String    @id
+  name        String
+  position_x  Decimal   @db.Decimal(5, 2)
+  position_y  Decimal   @db.Decimal(5, 2)
+  icon        String?   @default("")
+  visual_meta Json      @default("{}")
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mybot_memory {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String
+  layer         String
+  memory_key    String
+  value         Json
+  version       Int?      @default(1)
+  is_active     Boolean?  @default(true)
+  last_event_id String?   @db.Uuid
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, layer], map: "mybot_memory_user_layer_idx")
+}
+
+model mybot_movements {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bot_id      String    @db.Uuid
+  user_id     String
+  from_map_id String?
+  to_map_id   String
+  reason      String
+  battle_id   String?   @db.Uuid
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([bot_id, created_at(sort: Desc)], map: "mybot_movements_bot_idx")
+  @@index([created_at(sort: Desc)], map: "mybot_movements_created_idx")
+}
+
+model mybot_profiles {
+  user_id          String    @id
+  card_id          String?   @db.Uuid
+  available_points Int?      @default(0)
+  loss_streak      Int?      @default(0)
+  high_bet_streak  Int?      @default(0)
+  last_high_bet_at DateTime? @db.Timestamptz(6)
+  last_battle_at   DateTime? @db.Timestamptz(6)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  origin_map_id    String?
+  current_map_id   String?
+  origin_pos_x     Decimal?  @db.Decimal(5, 2)
+  origin_pos_y     Decimal?  @db.Decimal(5, 2)
+  current_pos_x    Decimal?  @db.Decimal(5, 2)
+  current_pos_y    Decimal?  @db.Decimal(5, 2)
+  last_movement_at DateTime? @db.Timestamptz(6)
+
+  @@index([card_id], map: "mybot_profiles_card_idx")
+  @@index([current_map_id], map: "mybot_profiles_current_idx")
+  @@index([origin_map_id], map: "mybot_profiles_origin_idx")
+}
+
+model mybot_stats {
+  user_id                        String    @id
+  content_accessed_count         Int?      @default(0)
+  projects_purchased_count       Int?      @default(0)
+  projects_created_count         Int?      @default(0)
+  courses_started_count          Int?      @default(0)
+  courses_completed_count        Int?      @default(0)
+  marketplace_interactions_count Int?      @default(0)
+  tool_usage_count               Int?      @default(0)
+  feedback_score                 Int?      @default(0)
+  last_event_at                  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mybots {
+  user_id         String    @id
+  myalien_user_id String?   @default("")
+  stage           String?   @default("assistant")
+  stage_reason    String?   @default("")
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  image_url       String?   @default("")
+}
+
+model orders {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String
+  asset_id   String?   @db.Uuid
+  order_type String?   @default("buy")
+  price      Decimal?  @default(0) @db.Decimal(12, 2)
+  quantity   Decimal?  @default(0) @db.Decimal(12, 4)
+  status     String?   @default("open")
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  assets     assets?   @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model price_history {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  asset_id    String?   @db.Uuid
+  price       Decimal   @db.Decimal(12, 2)
+  recorded_at DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
+  assets      assets?   @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model product_types {
+  id       String     @id
+  label    String
+  products products[]
+}
+
+model products {
+  id                                          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                                        String
+  price                                       String
+  description                                 String?        @default("")
+  created_at                                  DateTime?      @default(now()) @db.Timestamptz(6)
+  show_on_home                                Boolean?       @default(false)
+  purchase_price                              String?        @default("")
+  sale_price                                  String?        @default("")
+  product_type                                String?        @default("digital")
+  base_project_id                             String?        @db.Uuid
+  show_on_marketplace                         Boolean?       @default(false)
+  projects_products_base_project_idToprojects projects?      @relation("products_base_project_idToprojects", fields: [base_project_id], references: [id], onUpdate: NoAction)
+  product_types                               product_types? @relation(fields: [product_type], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projects_projects_product_idToproducts      projects[]     @relation("projects_product_idToproducts")
+  purchases                                   purchases[]
+}
+
+model project_tasks {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id  String?   @db.Uuid
+  title       String
+  description String?   @default("")
+  status      String?   @default("TODO")
+  position    Int?      @default(0)
+  generated_by_ai Boolean? @default(false)
+  domain      String?   @db.VarChar(50)
+  risk_level  String?
+  pr_link     String?
+  confidence_score Decimal? @db.Decimal
+  execution_result String?
+  origin      String?
+  report_id   String?   @db.Uuid
+  linked_agent_id String? @db.Uuid
+  context_reference String?
+  execution_logs Json? @default("[]")
+  specialist_type String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  projects    projects? @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ia_agents   ia_agents? @relation(fields: [linked_agent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([project_id])
+  @@index([domain])
+  @@index([generated_by_ai])
+  @@index([created_at(sort: Desc)], map: "project_tasks_ia_created_at_idx", where: raw("(domain = 'IA'::text AND project_id IS NULL)"))
+  @@index([linked_agent_id])
+  @@index([specialist_type])
+}
+
+model ia_conversations {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title      String?      @default("")
+  created_at DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?    @default(now()) @db.Timestamptz(6)
+  ia_messages ia_messages[]
+}
+
+model ia_messages {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id String           @db.Uuid
+  role            String
+  content         String
+  created_at      DateTime?        @default(now()) @db.Timestamptz(6)
+  ia_conversations ia_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([conversation_id, created_at(sort: Desc)], map: "ia_messages_conversation_idx")
+}
+
+model ia_agents {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?       @default("")
+  specialty      String?       @default("")
+  system_prompt  String?       @default("")
+  autonomy_level String?       @default("")
+  is_active      Boolean?      @default(true)
+  created_at     DateTime?     @default(now()) @db.Timestamptz(6)
+  ia_contexts    ia_contexts[]
+  project_tasks  project_tasks[]
+
+  @@index([is_active], map: "ia_agents_active_idx")
+  @@index([specialty], map: "ia_agents_specialty_idx")
+}
+
+model ia_contexts {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String
+  content          String
+  context_type     String?    @default("")
+  related_agent_id String?    @db.Uuid
+  created_at       DateTime?  @default(now()) @db.Timestamptz(6)
+  ia_agents        ia_agents? @relation(fields: [related_agent_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([context_type], map: "ia_contexts_type_idx")
+  @@index([related_agent_id], map: "ia_contexts_agent_idx")
+}
+
+model ia_memory {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content         String
+  embedding       Unsupported("vector")
+  context_type    String?   @default("")
+  related_task_id String?   @db.Uuid
+  prompt_id       String?   @db.Uuid
+  source_type     String?
+  source_id       String?
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  project_tasks   project_tasks? @relation(fields: [related_task_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  ia_prompts      ia_prompts? @relation(fields: [prompt_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([context_type], map: "ia_memory_context_type_idx")
+  @@index([related_task_id], map: "ia_memory_related_task_idx")
+  @@index([prompt_id], map: "ia_memory_prompt_idx")
+  @@index([source_type], map: "ia_memory_source_type_idx")
+  @@index([source_id], map: "ia_memory_source_id_idx")
+}
+
+model ia_orchestrators {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  storage_url    String?  @default("")
+  execution_flow Json     @default("[]")
+  is_active      Boolean? @default(true)
+  version        Int      @default(1)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
+  ia_orchestrator_executions ia_orchestrator_executions[]
+
+  @@index([is_active], map: "ia_orchestrators_active_idx")
+  @@index([updated_at(sort: Desc)], map: "ia_orchestrators_updated_idx")
+}
+
+model ia_orchestrator_executions {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orchestrator_id        String?   @db.Uuid
+  version                Int       @default(1)
+  steps_executed         Json      @default("[]")
+  agents_used            Json      @default("[]")
+  memory_retrieved_count Int       @default(0)
+  token_usage            Int       @default(0)
+  execution_time         Int?
+  status                 String?   @default("")
+  created_at             DateTime? @default(now()) @db.Timestamptz(6)
+  ia_orchestrators       ia_orchestrators? @relation(fields: [orchestrator_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([orchestrator_id], map: "ia_orchestrator_exec_orchestrator_idx")
+  @@index([created_at(sort: Desc)], map: "ia_orchestrator_exec_created_idx")
+}
+
+model ia_prompts {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String
+  file_name       String               @unique
+  category        String
+  description     String?              @default("")
+  storage_url     String
+  is_active       Boolean?             @default(true)
+  version         Int                  @default(1)
+  created_at      DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?            @default(now()) @db.Timestamptz(6)
+  ia_memory       ia_memory[]
+  ia_prompt_versions ia_prompt_versions[]
+
+  @@index([category], map: "ia_prompts_category_idx")
+  @@index([is_active], map: "ia_prompts_active_idx")
+}
+
+model ia_prompt_versions {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  prompt_id   String    @db.Uuid
+  version     Int
+  storage_url String
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  ia_prompts  ia_prompts @relation(fields: [prompt_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([prompt_id, version(sort: Desc)], map: "ia_prompt_versions_prompt_idx")
+}
+
+model ai_reports {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain                String?   @default("IA") @db.VarChar(50)
+  status                String?   @default("")
+  summary               String?   @default("")
+  decisions             Json?     @default("[]")
+  risks                 Json?     @default("[]")
+  next_actions          Json?     @default("[]")
+  issue_keys            Json?     @default("[]")
+  files_modified        Json?     @default("[]")
+  risk_classification   String?   @default("")
+  pr_link               String?   @default("")
+  quality_gate          String?   @default("")
+  build_result          String?   @default("")
+  test_result           String?   @default("")
+  execution_duration_ms Int?
+  confidence_score      Decimal?  @db.Decimal
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([domain])
+  @@index([created_at(sort: Desc)])
+}
+
+model system_config {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key        String   @unique
+  value      Json
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model projects {
+  id                                          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                                        String
+  description                                 String?         @default("")
+  repository                                  String?         @default("")
+  domain                                      String?         @default("")
+  hosting                                     String?         @default("")
+  status                                      String?         @default("Ativo")
+  paid                                        Boolean?        @default(false)
+  created_at                                  DateTime?       @default(now()) @db.Timestamptz(6)
+  is_public                                   Boolean?        @default(true)
+  project_type                                String?         @default("")
+  sale_price                                  String?         @default("")
+  production_cost                             String?         @default("")
+  purchase_count                              Int?            @default(0)
+  owner_user_id                               String?         @default("")
+  managed_by_ai                               Boolean?        @default(false)
+  task_creation_policy                        String?         @db.VarChar(32)
+  allow_auto_backlog_if_empty                 Boolean?        @default(false)
+  backlog_bootstrap                           Boolean?        @default(false)
+  ai_autonomy_level                           String?         @db.VarChar(32)
+  last_backlog_bootstrap_at                   DateTime?       @db.Timestamp(6)
+  product_id                                  String?         @db.Uuid
+  base_project_id                             String?         @db.Uuid
+  purchase_id                                 String?         @db.Uuid
+  created_from_purchase                       Boolean?        @default(false)
+  is_template                                 Boolean?        @default(false)
+  html_content                                String?         @default("")
+  css_content                                 String?         @default("")
+  updated_at                                  DateTime?       @default(now()) @db.Timestamptz(6)
+  version                                     Int?            @default(1)
+  template_id                                 String          @db.Uuid
+  template_version                            Int
+  products_products_base_project_idToprojects products[]      @relation("products_base_project_idToprojects")
+  project_tasks                               project_tasks[]
+  products_projects_product_idToproducts      products?       @relation("projects_product_idToproducts", fields: [product_id], references: [id], onUpdate: NoAction)
+  purchases                                   purchases[]
+
+  @@unique([owner_user_id, product_id], map: "projects_owner_product_uidx", where: raw("((owner_user_id <> ''::text) AND (product_id IS NOT NULL) AND (is_template = false))"))
+  @@index([base_project_id])
+  @@index([is_template])
+  @@index([owner_user_id])
+  @@index([product_id])
+  @@index([purchase_id])
+  @@index([template_id])
+}
+
+model purchases {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String
+  product_id    String?   @db.Uuid
+  price         Decimal?  @default(0) @db.Decimal(12, 2)
+  status        String?   @default("completed")
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  project_id    String?   @db.Uuid
+  purchase_type String?   @default("paid")
+  products      products? @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects      projects? @relation(fields: [project_id], references: [id], onUpdate: NoAction)
+
+  @@unique([user_id, product_id], map: "purchases_user_product_active_uidx", where: raw("(status = 'completed'::text)"))
+  @@index([product_id])
+  @@index([project_id])
+  @@index([user_id])
+}
+
+model sales {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_name String
+  amount        Decimal   @db.Decimal(12, 2)
+  currency      String?   @default("BRL")
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model settings {
+  key   String @id
+  value String
+}
+
+model template_tasks {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  template_id String    @db.Uuid
+  title       String
+  description String?   @default("")
+  status      String?   @default("TODO")
+  position    Int?      @default(0)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  templates   templates @relation(fields: [template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([template_id])
+}
+
+model templates {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?          @default("")
+  version        Int?             @default(1)
+  is_active      Boolean?         @default(true)
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  template_tasks template_tasks[]
+
+  @@index([is_active])
+}
+
+model user_cards {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String              @unique
+  seed              BigInt
+  name              String
+  species           String
+  class             String
+  rarity            String
+  attributes        Json
+  level             Int?                @default(1)
+  xp                Int?                @default(0)
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  hash_seed         String              @default("")
+  visual_meta       Json                @default("{}")
+  market_value      Decimal?            @default(10) @db.Decimal(12, 2)
+  image_url         String?             @default("")
+  card_listings     card_listings[]
+  card_transactions card_transactions[]
+}
+
+model user_gamification {
+  user_id     String    @id
+  plan        String?   @default("free")
+  usage_score Int?      @default(0)
+  xp          Int?      @default(0)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model users {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  auth_uid         String?   @default("")
+  name             String?   @default("")
+  email            String    @unique
+  photo_url        String?   @default("")
+  auth_provider    String?   @default("")
+  permission_level String?   @default("A")
+  status           String?   @default("Ativo")
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  last_login_at    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model wallet_positions {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wallet_id  String?   @db.Uuid
+  asset_id   String?   @db.Uuid
+  quantity   Decimal?  @default(0) @db.Decimal(12, 4)
+  avg_price  Decimal?  @default(0) @db.Decimal(12, 2)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  assets     assets?   @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  wallets    wallets?  @relation(fields: [wallet_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model wallets {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String
+  cash_balance     Decimal?           @default(0) @db.Decimal(12, 2)
+  currency         String?            @default("BRL")
+  created_at       DateTime?          @default(now()) @db.Timestamptz(6)
+  wallet_positions wallet_positions[]
+}

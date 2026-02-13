@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOwner(userId) {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.toLowerCase() == userId.toLowerCase();
+    }
+
+    match /users/{userId}/mybot/{allPaths=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /users/{userId}/projects/{projectId}/{allPaths=**} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

@@ -190,6 +190,76 @@
   background-clip: content-box;
 }
 
+.project-ide {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+
+.project-ide__sidebar {
+  background: var(--surface-2);
+  padding: 12px;
+  border-radius: 10px;
+  height: fit-content;
+}
+
+.project-ide__sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-ide__sidebar li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.project-ide__sidebar li.active {
+  background: var(--surface-3);
+}
+
+.project-ide__new {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-ide__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-ide__toolbar {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.project-ide__textarea {
+  min-height: 320px;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 12px;
+  font-family: "Fira Code", monospace;
+}
+
+.project-doc__content {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  background: var(--surface-2);
+  padding: 16px;
+  border-radius: 10px;
+}
+
 /* Responsividade */
 @media (max-width: 768px) {
   .admin-container {

@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { logger } from '../lib/logger';
 
 // Configurações da API SumUp
 const CLIENT_ID = 'cc_classic_4v9jN2dj5Xh2WhECrQydPM9tpnW1C'; // Novo CLIENT_ID
@@ -54,7 +55,7 @@ export interface CheckoutResponse {
 
 // Função para obter o token de acesso OAuth2
 export const getAccessToken = async (): Promise<string | null> => {
-  console.log('Iniciando o processo de obtenção do token de acesso...');
+  logger.info('Iniciando o processo de obtenção do token de acesso');
   try {
     const response = await axios.post<AccessTokenResponse>(
       `${SUMUP_API_URL}/token`,
@@ -70,27 +71,29 @@ export const getAccessToken = async (): Promise<string | null> => {
       }
     );
     
-    console.log('Token de acesso obtido com sucesso:', response.data.access_token);
+    logger.info('Token de acesso obtido com sucesso');
     return response.data.access_token;
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
-    console.error('Erro ao obter token de acesso:', axiosError.response?.data || error);
+    logger.error('Erro ao obter token de acesso', {
+      message: axiosError.response?.data || (error instanceof Error ? error.message : String(error)),
+    });
     return null;
   }
 };
 
 // Função para criar um link de pagamento
 export const createCheckout = async (amount: number, currency: string, productName: string): Promise<CheckoutResponse | null> => {
-  console.log('Iniciando a criação do checkout...');
+  logger.info('Iniciando a criação do checkout', { amount, currency, productName });
   const accessToken = await getAccessToken();
 
   if (!accessToken) {
-    console.error('Token de acesso não obtido. Não é possível criar o checkout.');
+    logger.error('Token de acesso não obtido. Não é possível criar o checkout.');
     return null;
   }
 
   try {
-    console.log('Enviando requisição para criar checkout...');
+    logger.info('Enviando requisição para criar checkout');
     const response = await axios.post<CheckoutResponse>(
       `${SUMUP_API_URL}/v0.1/checkouts`,
       {
@@ -110,39 +113,45 @@ export const createCheckout = async (amount: number, currency: string, productNa
     );
 
     // Logar resposta completa
-    console.log('Resposta completa da API:', response.data);
+    logger.info('Resposta completa da API recebida');
 
     // Verificar se o campo status é 'PENDING'
     if (response.data.status !== 'PENDING') {
-      console.log(`Status do pedido: ${response.data.status}`);
+      logger.info('Status do pedido', { status: response.data.status });
     }
 
     // Verificar transações
     response.data.transactions.forEach((transaction) => {
-      console.log(`Transação ${transaction.id} - Status: ${transaction.status}, Montante: ${transaction.amount}`);
+      logger.info('Transação registrada', {
+        id: transaction.id,
+        status: transaction.status,
+        amount: transaction.amount,
+      });
     });
 
     // Retornar dados do checkout
     return response.data;
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
-    console.error('Erro ao criar checkout:', axiosError.response?.data || error);
+    logger.error('Erro ao criar checkout', {
+      message: axiosError.response?.data || (error instanceof Error ? error.message : String(error)),
+    });
     return null;
   }
 };
 
 // Função para listar os checkouts
 export const listCheckouts = async (): Promise<{ checkouts: CheckoutResponse[] } | null> => {
-  console.log('Iniciando o processo para listar os checkouts...');
+  logger.info('Iniciando o processo para listar os checkouts');
   const accessToken = await getAccessToken();
 
   if (!accessToken) {
-    console.error('Token de acesso não obtido. Não é possível listar os checkouts.');
+    logger.error('Token de acesso não obtido. Não é possível listar os checkouts.');
     return null;
   }
 
   try {
-    console.log('Enviando requisição para listar checkouts...');
+    logger.info('Enviando requisição para listar checkouts');
     const response = await axios.get<{ checkouts: CheckoutResponse[] }>(
       `${SUMUP_API_URL}/v0.1/checkouts`,
       {
@@ -152,11 +161,13 @@ export const listCheckouts = async (): Promise<{ checkouts: CheckoutResponse[] }
       }
     );
 
-    console.log('Lista de checkouts recebida com sucesso:', response.data);
+    logger.info('Lista de checkouts recebida com sucesso', { total: response.data.checkouts?.length ?? 0 });
     return response.data;
   } catch (error: unknown) {
     const axiosError = error as AxiosError;
-    console.error('Erro ao listar checkouts:', axiosError.response?.data || error);
+    logger.error('Erro ao listar checkouts', {
+      message: axiosError.response?.data || (error instanceof Error ? error.message : String(error)),
+    });
     return null;
   }
 };

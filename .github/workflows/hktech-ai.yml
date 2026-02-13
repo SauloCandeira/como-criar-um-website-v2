@@ -1,0 +1,38 @@
+name: HKTECH IA Autofix
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [hktech-ai]
+  workflow_run:
+    workflows: ["SonarCloud"]
+    types:
+      - completed
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run HKTECH IA
+        env:
+          SONARCLOUD_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+          SONARCLOUD_PROJECT_KEY: ${{ secrets.SONARCLOUD_PROJECT_KEY }}
+          SONARCLOUD_ORG: ${{ secrets.SONARCLOUD_ORG }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_BASE_BRANCH: main
+        run: node scripts/hktech-ai-runner.cjs
