@@ -45,6 +45,7 @@ import { fetchAdminMyBotBattles, AdminMyBotBattleDTO } from '../../services/admi
 import AdminSidebarMenu, { MenuGroupConfig, MenuItemConfig } from '../../components/Admin/AdminSidebarMenu';
 import TemplateEditor from '../../components/Admin/TemplateEditor';
 import { FinanceiroCustos, FinanceiroResgates, FinanceiroVendas } from './Financeiro';
+import CronsPage from './CronsPage';
 
 // Registrar os componentes necessários do Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -108,12 +109,36 @@ interface UserItem {
   permissionLevel?: 'A' | 'B' | 'C';
 }
 
+interface AiTeamAgent {
+  name: string;
+  role: string;
+  status: string;
+}
+
+interface AiTeamResponse {
+  platform?: string;
+  system?: string;
+  timestamp?: string;
+  agents: AiTeamAgent[];
+}
+
+interface OpenClawReport {
+  id: number;
+  filename: string;
+  created_at: string;
+  content: string;
+  source?: string;
+}
+
 const Admin: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const swaggerUrl = '/api-docs';
   const storybookUrl = import.meta.env.VITE_STORYBOOK_URL || '/storybook';
   const architectureUrl = import.meta.env.VITE_ARCHITECTURE_DOC_URL || '/docs/hktech.architecture.action-plan.md';
+  const aiTeamUrl = 'http://147.93.33.246:3001/api/ai-team';
+  const aiTeamBaseUrl = aiTeamUrl.replace('/api/ai-team', '');
+  const openClawReportsUrl = import.meta.env.VITE_OPENCLAW_REPORTS_URL || '/api/openclaw/reports';
   const templatePathMatch = location.pathname.match(/^\/admin\/projetos\/templates\/(.+)$/);
   const templateEditorId = templatePathMatch ? templatePathMatch[1] : null;
   const isTemplateCreateRoute = templateEditorId === 'novo';
@@ -214,6 +239,10 @@ const Admin: React.FC = () => {
   const [aiReports, setAiReports] = useState<AiReport[]>([]);
   const [aiReportsLoading, setAiReportsLoading] = useState(false);
   const [aiReportsError, setAiReportsError] = useState<string | null>(null);
+  const [openClawReports, setOpenClawReports] = useState<OpenClawReport[]>([]);
+  const [openClawReportsLoading, setOpenClawReportsLoading] = useState(false);
+  const [openClawReportsError, setOpenClawReportsError] = useState<string | null>(null);
+  const [openClawReportModal, setOpenClawReportModal] = useState<OpenClawReport | null>(null);
   const [aiTasks, setAiTasks] = useState<AiTask[]>([]);
   const [aiTasksLoading, setAiTasksLoading] = useState(false);
   const [aiTasksError, setAiTasksError] = useState<string | null>(null);
@@ -233,6 +262,16 @@ const Admin: React.FC = () => {
   const [iaAgents, setIaAgents] = useState<IaAgent[]>([]);
   const [iaAgentsLoading, setIaAgentsLoading] = useState(false);
   const [iaAgentsError, setIaAgentsError] = useState<string | null>(null);
+  const [aiTeamAgents, setAiTeamAgents] = useState<AiTeamAgent[]>([]);
+  const [aiTeamLoading, setAiTeamLoading] = useState(false);
+  const [aiTeamError, setAiTeamError] = useState<string | null>(null);
+  const [soulText, setSoulText] = useState('');
+  const [soulLoading, setSoulLoading] = useState(false);
+  const [soulError, setSoulError] = useState<string | null>(null);
+  const [isSoulModalOpen, setIsSoulModalOpen] = useState(false);
+  const [soulMode, setSoulMode] = useState<'view' | 'edit'>('view');
+  const [soulAgentName, setSoulAgentName] = useState('');
+  const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [agentForm, setAgentForm] = useState({ name: '', description: '', specialty: '', system_prompt: '', autonomy_level: 'manual', is_active: true });
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [agentExecutionResult, setAgentExecutionResult] = useState<IaAgentExecutionResult | null>(null);
@@ -384,13 +423,10 @@ const Admin: React.FC = () => {
       id: 'ia',
       label: 'IA',
       items: [
-        { id: 'ia-hktech', label: 'HK IA', adminOnly: true },
-        { id: 'ia-tasks', label: 'Tasks IA', adminOnly: true },
+        { id: 'ia-reports', label: 'Reports' },
+        { id: 'ia-crons', label: 'Crons' },
+        { id: 'ia-tasks', label: 'Tasks', adminOnly: true },
         { id: 'ia-agents', label: 'Agentes IA', adminOnly: true },
-        { id: 'ia-orchestrator', label: 'Orquestrador IA', adminOnly: true },
-        { id: 'ia-context', label: 'Contextos IA', adminOnly: true },
-        { id: 'ia-memory', label: 'Memória IA', adminOnly: true },
-        { id: 'ia-reports', label: 'AI Reports' },
       ],
     },
     {
@@ -474,6 +510,7 @@ const Admin: React.FC = () => {
     'ia-context': '/admin/ia/context',
     'ia-memory': '/admin/ia/memory',
     'ia-reports': '/admin/ia/reports',
+    'ia-crons': '/admin/ia/crons',
     'monitoramento-overview': '/admin/monitoramento/overview',
     'monitoramento-sonar': '/admin/monitoramento/sonar',
     'monitoramento-coverage': '/admin/monitoramento/coverage',
@@ -539,14 +576,11 @@ const Admin: React.FC = () => {
       const allowed = ['templates', 'clonados'] as const;
       itemId = allowed.includes(page as typeof allowed[number]) ? page : projectsSubTab;
     } else if (section === 'ia') {
-      if (page === 'hktech') itemId = 'ia-hktech';
+      if (page === 'reports') itemId = 'ia-reports';
+      else if (page === 'crons') itemId = 'ia-crons';
       else if (page === 'tasks') itemId = 'ia-tasks';
       else if (page === 'agents') itemId = 'ia-agents';
-      else if (page === 'orchestrator') itemId = 'ia-orchestrator';
-      else if (page === 'context') itemId = 'ia-context';
-      else if (page === 'memory') itemId = 'ia-memory';
-      else if (page === 'reports') itemId = 'ia-reports';
-      else itemId = 'ia-hktech';
+      else itemId = 'ia-reports';
     } else if (section === 'monitoramento') {
       if (page === 'sonar') itemId = 'monitoramento-sonar';
       else if (page === 'coverage') itemId = 'monitoramento-coverage';
@@ -704,6 +738,32 @@ const Admin: React.FC = () => {
     }
   };
 
+  const loadOpenClawReports = async () => {
+    setOpenClawReportsLoading(true);
+    setOpenClawReportsError(null);
+    try {
+      const res = await fetch(openClawReportsUrl);
+      if (!res.ok) {
+        throw new Error('Falha ao carregar OpenClaw reports.');
+      }
+      const payload = (await res.json()) as unknown;
+      const list = Array.isArray(payload)
+        ? (payload as OpenClawReport[])
+        : Array.isArray((payload as { reports?: OpenClawReport[] })?.reports)
+          ? (payload as { reports: OpenClawReport[] }).reports
+          : Array.isArray((payload as { data?: OpenClawReport[] })?.data)
+            ? (payload as { data: OpenClawReport[] }).data
+            : [];
+      setOpenClawReports(list);
+    } catch (error) {
+      console.error('Erro ao buscar OpenClaw reports:', error);
+      setOpenClawReportsError('Não foi possível carregar os relatórios da VPS.');
+      setOpenClawReports([]);
+    } finally {
+      setOpenClawReportsLoading(false);
+    }
+  };
+
   const loadIaConfig = async () => {
     if (!effectiveAdminId) return;
     setIaConfigLoading(true);
@@ -826,6 +886,97 @@ const Admin: React.FC = () => {
     }
   };
 
+  const loadAiTeamAgents = async () => {
+    setAiTeamLoading(true);
+    setAiTeamError(null);
+    try {
+      const response = await fetch(aiTeamUrl);
+      if (!response.ok) {
+        throw new Error('Falha ao carregar IA Team.');
+      }
+      const payload = (await response.json()) as AiTeamResponse;
+      setAiTeamAgents(Array.isArray(payload.agents) ? payload.agents : []);
+    } catch (error) {
+      console.error('Erro ao carregar IA Team:', error);
+      setAiTeamError('Não foi possível carregar a IA Team.');
+      setAiTeamAgents([]);
+    } finally {
+      setAiTeamLoading(false);
+    }
+  };
+
+  const loadSoul = async (agentName: string) => {
+    if (!agentName) return;
+    setSoulLoading(true);
+    setSoulError(null);
+    try {
+      const res = await fetch(`${aiTeamBaseUrl}/api/agents/soul/${encodeURIComponent(agentName)}`);
+      if (!res.ok) {
+        throw new Error('Falha ao carregar SOUL.');
+      }
+      const data = (await res.json()) as { soul?: string };
+      setSoulText(data.soul || '');
+    } catch (error) {
+      console.error('Erro ao carregar SOUL:', error);
+      setSoulError('Não foi possível carregar o SOUL.');
+    } finally {
+      setSoulLoading(false);
+    }
+  };
+
+  const saveSoul = async (agentName: string) => {
+    if (!agentName) return;
+    setSoulLoading(true);
+    setSoulError(null);
+    try {
+      const res = await fetch(`${aiTeamBaseUrl}/api/agents/soul/${encodeURIComponent(agentName)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ soul: soulText }),
+      });
+      if (!res.ok) {
+        throw new Error('Falha ao salvar SOUL.');
+      }
+      alert('SOUL sincronizado com a VPS com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar SOUL:', error);
+      setSoulError('Não foi possível salvar o SOUL.');
+    } finally {
+      setSoulLoading(false);
+    }
+  };
+
+  const deactivateAiTeamAgent = async (agentName: string) => {
+    if (!agentName) return;
+    const confirmed = window.confirm(`Desativar agente ${agentName}?`);
+    if (!confirmed) return;
+    setSoulLoading(true);
+    setSoulError(null);
+    try {
+      const res = await fetch(`${aiTeamBaseUrl}/api/agents/deactivate/${encodeURIComponent(agentName)}`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        throw new Error('Falha ao desativar agente.');
+      }
+      await loadAiTeamAgents();
+    } catch (error) {
+      console.error('Erro ao desativar agente:', error);
+      setSoulError('Não foi possível desativar o agente.');
+    } finally {
+      setSoulLoading(false);
+    }
+  };
+
+  const openSoulModal = async (agentName: string, mode: 'view' | 'edit') => {
+    setSoulAgentName(agentName);
+    setSoulMode(mode);
+    setIsSoulModalOpen(true);
+    await loadSoul(agentName);
+  };
+
   const handleSaveAgent = async () => {
     if (!effectiveAdminId || !agentForm.name.trim()) return;
     try {
@@ -838,6 +989,7 @@ const Admin: React.FC = () => {
       }
       setAgentForm({ name: '', description: '', specialty: '', system_prompt: '', autonomy_level: 'manual', is_active: true });
       setEditingAgentId(null);
+      setIsAgentModalOpen(false);
     } catch (error) {
       console.error('Erro ao salvar agente IA:', error);
       setIaAgentsError('Não foi possível salvar agente IA.');
@@ -1485,7 +1637,7 @@ const Admin: React.FC = () => {
     if (activeTab === 'documentacao-architecture') {
       checkDocUrl('architecture', architectureUrl);
     }
-    if (activeTab === 'ia-hktech' || activeTab === 'ia-tasks' || activeTab === 'ia-reports') {
+    if (activeTab === 'ia-hktech' || activeTab === 'ia-tasks') {
       loadAiReports();
     }
     if (activeTab === 'ia-tasks') {
@@ -1505,6 +1657,10 @@ const Admin: React.FC = () => {
     }
     if (activeTab === 'ia-agents') {
       loadIaAgents();
+      loadAiTeamAgents();
+    }
+    if (activeTab === 'ia-reports') {
+      loadOpenClawReports();
     }
     if (activeTab === 'ia-orchestrator') {
       loadIaOrchestrators();
@@ -1539,6 +1695,15 @@ const Admin: React.FC = () => {
   }, [iaPromptsCategory]);
 
   const normalizeIaStatus = (status?: string) => (status || '').toUpperCase();
+  const getOpenClawTitle = (content: string) => {
+    const line = content.split('\n').find((entry) => entry.trim());
+    if (!line) return 'Relatorio';
+    return line.replace(/^#+\s*/, '').trim();
+  };
+  const getOpenClawExcerpt = (content: string) => {
+    const singleLine = content.replace(/\s+/g, ' ').trim();
+    return singleLine.length > 160 ? `${singleLine.slice(0, 160)}...` : singleLine || '—';
+  };
   const filteredIaTasks = useMemo(() => {
     const domainTasks = aiTasks.filter((task) => (task.domain ?? 'IA') === 'IA');
     if (iaTasksStatusFilter === 'all') return domainTasks;
@@ -1641,19 +1806,16 @@ const Admin: React.FC = () => {
 
     if (section === 'ia') {
       const map: Record<string, string> = {
-        hktech: 'ia-hktech',
+        reports: 'ia-reports',
+        crons: 'ia-crons',
         tasks: 'ia-tasks',
         agents: 'ia-agents',
-        orchestrator: 'ia-orchestrator',
-        context: 'ia-context',
-        memory: 'ia-memory',
-        reports: 'ia-reports',
       };
-      const resolved = map[page] ?? 'ia-hktech';
+      const resolved = map[page] ?? 'ia-reports';
       setActiveTab(resolved);
       setExpandedSectionIds(['ia']);
       if (!map[page]) {
-        navigate('/admin/ia/hktech', { replace: true });
+        navigate('/admin/ia/reports', { replace: true });
       }
       return;
     }
@@ -3096,20 +3258,20 @@ const Admin: React.FC = () => {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Technical Health Score</th>
-                      <th>Total Bugs</th>
-                      <th>Major/Critical</th>
                       <th>Quality Gate</th>
-                      <th>Último Status</th>
+                      <th>Coverage</th>
+                      <th>Bugs</th>
+                      <th>Code Smells</th>
+                      <th>Duplicated Lines</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td>{Math.max(0, 100 - (sonarSummary.metrics.bugs * 5 + sonarSummary.metrics.vulnerabilities * 8 + sonarSummary.metrics.codeSmells * 1 + Number(sonarSummary.metrics.duplicatedLinesDensity || 0) * 2))}</td>
+                      <td>{sonarSummary.qualityGateStatus}</td>
+                      <td>{sonarSummary.metrics.coverage}%</td>
                       <td>{sonarSummary.metrics.bugs}</td>
-                      <td>{sonarIssues.filter((issue) => issue.severity === 'MAJOR' || issue.severity === 'CRITICAL').length}</td>
-                      <td>{sonarSummary.qualityGateStatus}</td>
-                      <td>{sonarSummary.qualityGateStatus}</td>
+                      <td>{sonarSummary.metrics.codeSmells}</td>
+                      <td>{sonarSummary.metrics.duplicatedLinesDensity}%</td>
                     </tr>
                   </tbody>
                 </table>
@@ -3119,7 +3281,7 @@ const Admin: React.FC = () => {
               <h4>Issues (Major/Critical)</h4>
               <div className="admin-actions" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
                 <button className="admin-btn" onClick={handleResolveBatch} disabled={hktechAiLoading}>
-                  Resolve {maxIssuesPerRun} Major Issues
+                  Resolver lote
                 </button>
               </div>
               {!sonarLoading && sonarIssues.length === 0 && <p>Nenhuma issue crítica encontrada.</p>}
@@ -3149,10 +3311,10 @@ const Admin: React.FC = () => {
                           <td>
                             <div className="admin-actions">
                               <button className="admin-btn admin-btn--ghost" onClick={() => handleSimulateIssue(issue)}>
-                                Simulate
+                                Simular
                               </button>
                               <button className="admin-btn" disabled={issue.riskLevel === 'HIGH'} onClick={() => handleResolveIssue(issue)}>
-                                Resolve
+                                Resolver
                               </button>
                             </div>
                           </td>
@@ -3731,43 +3893,105 @@ const Admin: React.FC = () => {
 
         {activeTab === 'ia-agents' && isAdmin && (
           <section>
-            <h2>Agentes IA</h2>
-            {iaAgentsError && <p>{iaAgentsError}</p>}
-            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
-              <h4>{editingAgentId ? 'Editar agente' : 'Criar agente'}</h4>
-              <div className="admin-modal__form">
-                <label>
-                  <span>Nome</span>
-                  <input type="text" value={agentForm.name} onChange={(e) => setAgentForm((prev) => ({ ...prev, name: e.target.value }))} />
-                </label>
-                <label>
-                  <span>Descrição</span>
-                  <textarea rows={3} value={agentForm.description} onChange={(e) => setAgentForm((prev) => ({ ...prev, description: e.target.value }))} />
-                </label>
-                <label>
-                  <span>Especialidade</span>
-                  <input type="text" value={agentForm.specialty} onChange={(e) => setAgentForm((prev) => ({ ...prev, specialty: e.target.value }))} />
-                </label>
-                <label>
-                  <span>System Prompt</span>
-                  <textarea rows={3} value={agentForm.system_prompt} onChange={(e) => setAgentForm((prev) => ({ ...prev, system_prompt: e.target.value }))} />
-                </label>
-                <label>
-                  <span>Autonomia</span>
-                  <input type="text" value={agentForm.autonomy_level} onChange={(e) => setAgentForm((prev) => ({ ...prev, autonomy_level: e.target.value }))} />
-                </label>
-                <label>
-                  <span>Ativo</span>
-                  <select value={agentForm.is_active ? 'true' : 'false'} onChange={(e) => setAgentForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
-                    <option value="true">Ativo</option>
-                    <option value="false">Inativo</option>
-                  </select>
-                </label>
-              </div>
-              <div className="admin-actions" style={{ marginTop: 12 }}>
-                <button className="admin-btn" onClick={handleSaveAgent}>{editingAgentId ? 'Salvar' : 'Criar'}</button>
-              </div>
+            <div className="admin-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Agentes IA</h2>
+              <button
+                className="admin-btn admin-btn--ghost"
+                onClick={() => {
+                  setEditingAgentId(null);
+                  setAgentForm({ name: '', description: '', specialty: '', system_prompt: '', autonomy_level: 'manual', is_active: true });
+                  setIsAgentModalOpen(true);
+                }}
+              >
+                <span className="admin-action-icon">➕</span>
+                Criar agente
+              </button>
             </div>
+            <div className="admin-table-wrapper" style={{ padding: 16, marginBottom: 16 }}>
+              <h4>IA Team (HKTECH)</h4>
+              {aiTeamLoading && <p>Carregando time...</p>}
+              {aiTeamError && <p>{aiTeamError}</p>}
+              {!aiTeamLoading && !aiTeamError && aiTeamAgents.length === 0 && (
+                <p>Sem agentes da IA Team no momento.</p>
+              )}
+              {aiTeamAgents.length > 0 && (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiTeamAgents.map((agent) => (
+                      <tr key={`${agent.name}-${agent.role}`}>
+                        <td>{agent.name}</td>
+                        <td>{agent.role}</td>
+                        <td>{agent.status}</td>
+                        <td>
+                          <div className="admin-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              className="admin-btn admin-btn--ghost"
+                              onClick={() => openSoulModal(agent.name, 'view')}
+                              disabled={soulLoading}
+                            >
+                              <span className="admin-action-icon">👁️</span>
+                              Visualizar
+                            </button>
+                            <button
+                              className="admin-btn"
+                              onClick={() => openSoulModal(agent.name, 'edit')}
+                              disabled={soulLoading}
+                            >
+                              <span className="admin-action-icon">✏️</span>
+                              Editar
+                            </button>
+                            <button
+                              className="admin-btn admin-btn--danger"
+                              onClick={() => deactivateAiTeamAgent(agent.name)}
+                              disabled={soulLoading}
+                            >
+                              <span className="admin-action-icon">⏸️</span>
+                              Desativar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {iaAgentsError && <p>{iaAgentsError}</p>}
+            {isSoulModalOpen && (
+              <div className="admin-modal-backdrop" onClick={() => setIsSoulModalOpen(false)}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>{soulMode === 'view' ? 'Visualizar SOUL' : 'Editar SOUL'} - {soulAgentName}</h3>
+                    <button className="admin-btn admin-btn--ghost" onClick={() => setIsSoulModalOpen(false)}>Fechar</button>
+                  </div>
+                  {soulError && <p className="admin-modal__error">{soulError}</p>}
+                  {soulLoading && <p>Carregando...</p>}
+                  <div className="admin-modal__form">
+                    <textarea
+                      value={soulText}
+                      onChange={(e) => setSoulText(e.target.value)}
+                      style={{ width: '100%', height: 300 }}
+                      readOnly={soulMode === 'view'}
+                    />
+                  </div>
+                  {soulMode === 'edit' && (
+                    <div className="admin-modal__footer">
+                      <button className="admin-btn" onClick={() => saveSoul(soulAgentName)} disabled={soulLoading}>
+                        {soulLoading ? 'Salvando...' : 'Salvar SOUL'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             {iaAgentsLoading && <p>Carregando agentes...</p>}
             {!iaAgentsLoading && iaAgents.length === 0 && <p>Sem agentes cadastrados.</p>}
             {iaAgents.length > 0 && (
@@ -3801,6 +4025,7 @@ const Admin: React.FC = () => {
                                 autonomy_level: agent.autonomy_level || 'manual',
                                 is_active: agent.is_active ?? true,
                               });
+                              setIsAgentModalOpen(true);
                             }}>
                               Editar
                             </button>
@@ -3813,6 +4038,51 @@ const Admin: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {isAgentModalOpen && (
+              <div className="admin-modal-backdrop" onClick={() => setIsAgentModalOpen(false)}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>{editingAgentId ? 'Editar agente' : 'Criar agente'}</h3>
+                    <button className="admin-btn admin-btn--ghost" onClick={() => setIsAgentModalOpen(false)}>Fechar</button>
+                  </div>
+                  {iaAgentsError && <p className="admin-modal__error">{iaAgentsError}</p>}
+                  <div className="admin-modal__form">
+                    <label>
+                      <span>Nome</span>
+                      <input type="text" value={agentForm.name} onChange={(e) => setAgentForm((prev) => ({ ...prev, name: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Descrição</span>
+                      <textarea rows={3} value={agentForm.description} onChange={(e) => setAgentForm((prev) => ({ ...prev, description: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Especialidade</span>
+                      <input type="text" value={agentForm.specialty} onChange={(e) => setAgentForm((prev) => ({ ...prev, specialty: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>System Prompt</span>
+                      <textarea rows={3} value={agentForm.system_prompt} onChange={(e) => setAgentForm((prev) => ({ ...prev, system_prompt: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Autonomia</span>
+                      <input type="text" value={agentForm.autonomy_level} onChange={(e) => setAgentForm((prev) => ({ ...prev, autonomy_level: e.target.value }))} />
+                    </label>
+                    <label>
+                      <span>Ativo</span>
+                      <select value={agentForm.is_active ? 'true' : 'false'} onChange={(e) => setAgentForm((prev) => ({ ...prev, is_active: e.target.value === 'true' }))}>
+                        <option value="true">Ativo</option>
+                        <option value="false">Inativo</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="admin-modal__footer">
+                    <button className="admin-btn" onClick={handleSaveAgent}>
+                      {editingAgentId ? 'Salvar' : 'Criar'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </section>
@@ -5059,34 +5329,65 @@ const Admin: React.FC = () => {
         {activeTab === 'ia-reports' && (
           <section>
             <h2>AI Reports</h2>
-            {aiReportsLoading && <p>Carregando relatórios...</p>}
-            {aiReportsError && <p>{aiReportsError}</p>}
-            {!aiReportsLoading && aiReports.length === 0 && (
-              <p>Nenhum relatório encontrado.</p>
+            {openClawReportsLoading && <p>Carregando relatorios...</p>}
+            {openClawReportsError && <p>{openClawReportsError}</p>}
+            {!openClawReportsLoading && openClawReports.length === 0 && (
+              <p>Nenhum relatorio encontrado.</p>
             )}
-            {aiReports.length > 0 && (
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Agente</th>
-                    <th>Resumo</th>
-                    <th>Kanban</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {aiReports.map((report) => (
-                    <tr key={report.id}>
-                      <td>{report.createdAt ? new Date(report.createdAt).toLocaleString('pt-BR') : '-'}</td>
-                      <td>{report.agent}</td>
-                      <td>{report.summary}</td>
-                      <td>{report.kanbanItemId}</td>
+            {openClawReports.length > 0 && (
+              <div className="admin-table-wrapper">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Arquivo</th>
+                      <th>Fonte</th>
+                      <th>Resumo</th>
+                      <th>Acoes</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {openClawReports.map((report) => (
+                      <tr key={report.id}>
+                        <td>{report.created_at ? new Date(report.created_at).toLocaleString('pt-BR') : '—'}</td>
+                        <td>{report.filename}</td>
+                        <td>{report.source || '—'}</td>
+                        <td>{getOpenClawExcerpt(report.content)}</td>
+                        <td>
+                          <button className="admin-btn admin-btn--ghost" onClick={() => setOpenClawReportModal(report)}>
+                            <span className="admin-action-icon">👁️</span>
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {openClawReportModal && (
+              <div className="admin-modal-backdrop" onClick={() => setOpenClawReportModal(null)}>
+                <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="admin-modal__header">
+                    <h3>{getOpenClawTitle(openClawReportModal.content)}</h3>
+                    <button className="admin-btn admin-btn--ghost" onClick={() => setOpenClawReportModal(null)}>Fechar</button>
+                  </div>
+                  <div className="admin-modal__form">
+                    <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                      <span>Arquivo: {openClawReportModal.filename}</span>
+                      <span>Fonte: {openClawReportModal.source || '—'}</span>
+                      <span>Data: {openClawReportModal.created_at ? new Date(openClawReportModal.created_at).toLocaleString('pt-BR') : '—'}</span>
+                    </div>
+                    <pre style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>{openClawReportModal.content}</pre>
+                  </div>
+                </div>
+              </div>
             )}
           </section>
+        )}
+
+        {activeTab === 'ia-crons' && (
+          <CronsPage />
         )}
 
         {activeTab === 'products' && (

@@ -57,6 +57,7 @@ export function App() {
         <Route path="/product" element={<Product />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/*" element={<Admin />} />
         <Route path="/admin/governanca/relatorios" element={<Admin />} />
         <Route path="/admin/mybots/overview" element={<Admin />} />
         <Route path="/admin/mybots/battles" element={<Admin />} />
@@ -67,6 +68,7 @@ export function App() {
         <Route path="/admin/dao/membros" element={<Admin />} />
         <Route path="/admin/ia/hktech" element={<Admin />} />
         <Route path="/admin/ia/tasks" element={<Admin />} />
+        <Route path="/admin/ia/crons" element={<Admin />} />
         <Route path="/admin/ia/agents" element={<Admin />} />
         <Route path="/admin/ia/orchestrator" element={<Admin />} />
         <Route path="/admin/ia/context" element={<Admin />} />

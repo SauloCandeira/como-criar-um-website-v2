@@ -113,6 +113,10 @@ const iconMap: Record<string, JSX.Element> = {
   templates: IconFolder,
   clonados: IconFolder,
   'admin-tools': IconCog,
+  'ia-reports': IconChart,
+  'ia-crons': IconCog,
+  'ia-tasks': IconGrid,
+  'ia-agents': IconUsers,
 };
 
 const getIcon = (id: string) => iconMap[id] ?? IconGrid;
