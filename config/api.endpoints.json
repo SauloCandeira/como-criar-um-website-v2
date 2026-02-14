@@ -1,0 +1,9 @@
+{
+  "gateway_url": "https://api.hktech.com.br",
+  "metrics_url": "https://api.hktech.com.br/api/metrics",
+  "llm_metrics_endpoint": "/api/metrics/llm",
+  "agents_endpoint": "/api/agents",
+  "contexts_endpoint": "/api/contexts",
+  "system_status_endpoint": "/api/system/status",
+  "reports_endpoint": "/api/reports"
+}
