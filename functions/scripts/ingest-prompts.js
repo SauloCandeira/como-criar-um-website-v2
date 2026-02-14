@@ -62,7 +62,17 @@ const scanPrompts = (dir) => {
   return files;
 };
 
+const { enforceDailyBudgetOrThrow, BudgetExceededError } = require("./costGuard.js");
 async function embedText(content) {
+  try {
+    await enforceDailyBudgetOrThrow();
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      // Block LLM call if budget exceeded
+      return null;
+    }
+    throw err;
+  }
   const apiKey = process.env.OPENAI_API_KEY || "";
   if (!apiKey) return null;
   const res = await fetch("https://api.openai.com/v1/embeddings", {

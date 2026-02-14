@@ -836,5 +836,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS projects_owner_base_uidx ON projects (owner_us
 DROP INDEX IF EXISTS projects_owner_product_uidx;
 CREATE UNIQUE INDEX IF NOT EXISTS projects_owner_product_uidx ON projects (owner_user_id, product_id) WHERE owner_user_id <> '' AND product_id IS NOT NULL AND is_template = false;
 
+CREATE TABLE IF NOT EXISTS llm_telemetry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT,
+  agent TEXT,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  prompt_tokens INT NOT NULL DEFAULT 0,
+  completion_tokens INT NOT NULL DEFAULT 0,
+  total_tokens INT NOT NULL DEFAULT 0,
+  cost_usd NUMERIC(14,6) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ok',
+  source TEXT NOT NULL DEFAULT 'api',
+  latency_ms INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS llm_telemetry_created_at_idx ON llm_telemetry (created_at);
+CREATE INDEX IF NOT EXISTS llm_telemetry_model_idx ON llm_telemetry (model);
+CREATE INDEX IF NOT EXISTS llm_telemetry_agent_idx ON llm_telemetry (agent);
+
 
 

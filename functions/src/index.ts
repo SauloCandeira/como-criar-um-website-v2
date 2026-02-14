@@ -6,9 +6,32 @@ import type { Request, Response } from "express";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import { defineString, defineSecret } from "firebase-functions/params";
 const archiver = require("archiver");
 const AdmZip = require("adm-zip");
 const Busboy = require("busboy");
+
+// Firebase params API definitions for all env vars
+const NODE_ENV = defineString("NODE_ENV", { default: "production" });
+const CI = defineString("CI", { default: "" });
+const DATABASE_URL = defineString("DATABASE_URL", { default: "" });
+const INSTANCE_CONNECTION_NAME = defineString("INSTANCE_CONNECTION_NAME", { default: "" });
+const DB_USER = defineString("DB_USER", { default: "" });
+const DB_PASS = defineSecret("DB_PASS");
+const DB_NAME = defineString("DB_NAME", { default: "" });
+const SONARCLOUD_TOKEN = defineSecret("SONARCLOUD_TOKEN");
+const SONARCLOUD_PROJECT_KEY = defineString("SONARCLOUD_PROJECT_KEY", { default: "" });
+const SONARCLOUD_ORG = defineString("SONARCLOUD_ORG", { default: "" });
+const HKTECH_AI_ENABLED = defineString("HKTECH_AI_ENABLED", { default: "true" });
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const INTERNAL_API_KEY = defineSecret("INTERNAL_API_KEY");
+const APP_VERSION = defineString("APP_VERSION", { default: "" });
+const GITHUB_API_TOKEN = defineSecret("GITHUB_API_TOKEN");
+const GITHUB_TOKEN = defineSecret("GITHUB_TOKEN");
+const GITHUB_REPOSITORY = defineString("GITHUB_REPOSITORY", { default: "" });
+const GITHUB_OWNER = defineString("GITHUB_OWNER", { default: "" });
+const GITHUB_REPO = defineString("GITHUB_REPO", { default: "" });
+const FIREBASE_STORAGE_BUCKET = defineString("FIREBASE_STORAGE_BUCKET", { default: "" });
 import { Pool } from "pg";
 import { Connector, IpAddressTypes } from "@google-cloud/cloud-sql-connector";
 import crypto from "crypto";
@@ -24,6 +47,9 @@ import {
 import { applyCoupon, calculateOrderTotal } from "./services/commerce";
 import { cloneTemplate as cloneTemplateService } from "./services/templateCloner";
 import { swaggerSpec } from "./docs/openapi";
+import { recordLlmTelemetry } from "./services/llmTelemetry.service";
+import type { TelemetryContext } from "./services/llmTelemetry.types";
+import { enforceDailyBudgetOrThrow, BudgetExceededError } from "./services/costGuard.service";
 
 admin.initializeApp();
 setGlobalOptions({ region: "us-central1" });
@@ -55,68 +81,11 @@ const bootstrapLogger = () => {
   };
 };
 
-const loadEnvFile = (filePath: string) => {
-  if (!fs.existsSync(filePath)) return;
-  const raw = fs.readFileSync(filePath, "utf8");
-  raw.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return;
-    const idx = trimmed.indexOf("=");
-    if (idx === -1) return;
-    const key = trimmed.slice(0, idx).trim();
-    const value = trimmed.slice(idx + 1).trim();
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  });
-};
 
-const validateEnv = () => {
-  if (process.env.NODE_ENV === "test") return;
-  const missing: string[] = [];
-  const isCi = Boolean(process.env.CI);
 
-  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
-  const hasCloudSql = Boolean(
-    process.env.INSTANCE_CONNECTION_NAME &&
-      process.env.DB_USER &&
-      process.env.DB_PASS &&
-      process.env.DB_NAME
-  );
-
-  if (!hasDatabaseUrl && !hasCloudSql) {
-    if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
-    if (!process.env.INSTANCE_CONNECTION_NAME) missing.push("INSTANCE_CONNECTION_NAME");
-    if (!process.env.DB_USER) missing.push("DB_USER");
-    if (!process.env.DB_PASS) missing.push("DB_PASS");
-    if (!process.env.DB_NAME) missing.push("DB_NAME");
-  }
-
-  if (isCi && !process.env.SONARCLOUD_TOKEN) {
-    missing.push("SONARCLOUD_TOKEN");
-  }
-
-  const requireOpenAi = process.env.HKTECH_AI_ENABLED !== "false";
-  if (requireOpenAi && !process.env.OPENAI_API_KEY) {
-    missing.push("OPENAI_API_KEY");
-  }
-
-  if (missing.length) {
-    logger.fatal(
-      {
-        missing,
-        hint: "Set required variables in runtime/CI environment. OPENAI_API_KEY can be skipped only when HKTECH_AI_ENABLED=false.",
-      },
-      "Missing required environment variables"
-    );
-    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
-  }
-};
 
 bootstrapLogger();
-loadEnvFile(path.join(__dirname, "..", ".env"));
-loadEnvFile(path.join(__dirname, "..", "..", ".env"));
-validateEnv();
+// No top-level param.value() or validation. All checks must be runtime-only inside handlers/services.
 
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
@@ -546,7 +515,10 @@ async function logHKTechAiReport(payload: {
 
 app.get("/ci/status", async (_req, res) => {
   try {
-    const token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN || "";
+    function getGithubApiToken() {
+      return GITHUB_API_TOKEN.value() || GITHUB_TOKEN.value() || "";
+    }
+    const token = getGithubApiToken();
     if (!token) {
       throw httpError(500, "Token GitHub ausente.");
     }
@@ -2090,16 +2062,17 @@ async function getMasterEmail(client: { query: (sql: string, params?: any[]) => 
 async function getPool() {
   if (pool) return pool;
 
-  const databaseUrl = process.env.DATABASE_URL;
+  // All param.value() calls are runtime-safe here
+  const databaseUrl = DATABASE_URL.value();
   if (databaseUrl) {
     pool = new Pool({ connectionString: databaseUrl });
     return pool;
   }
 
-  const instanceConnectionName = process.env.INSTANCE_CONNECTION_NAME;
-  const dbUser = process.env.DB_USER;
-  const dbPass = process.env.DB_PASS;
-  const dbName = process.env.DB_NAME;
+  const instanceConnectionName = INSTANCE_CONNECTION_NAME.value();
+  const dbUser = DB_USER.value();
+  const dbPass = DB_PASS.value();
+  const dbName = DB_NAME.value();
 
   if (!instanceConnectionName || !dbUser || !dbPass || !dbName) {
     throw new Error("Missing Cloud SQL env vars.");
@@ -6109,12 +6082,38 @@ function assertRateLimit(key: string, limit: number, windowMs: number) {
   entry.count += 1;
 }
 
+
 async function assertOpenAiKey() {
-  const apiKey = process.env.OPENAI_API_KEY || "";
+  const apiKey = OPENAI_API_KEY.value() || "";
   if (!apiKey) {
     throw httpError(500, "OPENAI_API_KEY ausente.");
   }
   return apiKey;
+}
+
+
+async function resolveTelemetryContext(req: Request): Promise<TelemetryContext> {
+  function getInternalApiKey() {
+    return INTERNAL_API_KEY.value() || "";
+  }
+  const internalKey = getInternalApiKey();
+  const internalHeader = String(req.headers["x-internal-key"] || req.headers["x-api-key"] || "");
+  if (internalKey && internalHeader && internalHeader === internalKey) {
+    return { userId: null, source: "internal" };
+  }
+
+  const authHeader = String(req.headers.authorization || "");
+  if (authHeader.startsWith("Bearer ")) {
+    const token = authHeader.replace("Bearer ", "").trim();
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      return { userId: decoded.uid || null, source: "admin" };
+    } catch (error) {
+      return { userId: null, source: "api" };
+    }
+  }
+
+  return { userId: null, source: "api" };
 }
 
 async function logIaReport(client: { query: (sql: string, params?: any[]) => Promise<any> }, payload: { status: string; summary: string; decisions?: string[]; risks?: string[]; nextActions?: string[] }) {
@@ -6134,41 +6133,20 @@ async function logIaReport(client: { query: (sql: string, params?: any[]) => Pro
   );
 }
 
-async function tryEmbedText(content: string): Promise<number[] | null> {
+async function tryEmbedText(content: string, telemetry?: TelemetryContext & { agent?: string; endpoint?: string }): Promise<number[] | null> {
+  try {
+    await enforceDailyBudgetOrThrow();
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      // Block LLM call if budget exceeded
+      return null;
+    }
+    throw err;
+  }
   const apiKey = process.env.OPENAI_API_KEY || "";
   if (!apiKey) return null;
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: content,
-    }),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const embedding = json?.data?.[0]?.embedding;
-  return Array.isArray(embedding) ? (embedding as number[]) : null;
-}
-
-async function tryStoreIaMemory(client: { query: (sql: string, params?: any[]) => Promise<any> }, payload: { content: string; contextType: string; relatedTaskId?: string | null }) {
-  try {
-    const embedding = await tryEmbedText(payload.content);
-    if (!embedding) return;
-    await client.query(
-      "INSERT INTO ia_memory (content, embedding, context_type, related_task_id, created_at) VALUES ($1, $2::vector, $3, $4, NOW())",
-      [payload.content, toVectorLiteral(embedding), payload.contextType, payload.relatedTaskId ?? null]
-    );
-  } catch (error) {
-    console.error("Falha ao registrar memória IA:", error);
-  }
-}
-
-async function embedText(content: string): Promise<number[]> {
-  const apiKey = await assertOpenAiKey();
+  // LLM TELEMETRY HOOK POINT
+  const startedAt = Date.now();
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: {
@@ -6181,9 +6159,118 @@ async function embedText(content: string): Promise<number[]> {
     }),
   });
   if (!res.ok) {
+    await recordLlmTelemetry({
+      userId: telemetry?.userId ?? null,
+      source: telemetry?.source ?? "api",
+      agent: telemetry?.agent ?? "system",
+      model: "text-embedding-3-small",
+      provider: "openai",
+      endpoint: telemetry?.endpoint ?? "openai.embeddings.try",
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      status: "error",
+      latencyMs: Date.now() - startedAt
+    });
+    return null;
+  }
+  const json = await res.json();
+  const usage = json?.usage;
+  const promptTokens = Number(usage?.prompt_tokens ?? 0);
+  const completionTokens = Number(usage?.completion_tokens ?? 0);
+  const totalTokens = Number(usage?.total_tokens ?? promptTokens + completionTokens);
+  await recordLlmTelemetry({
+    userId: telemetry?.userId ?? null,
+    source: telemetry?.source ?? "api",
+    agent: telemetry?.agent ?? "system",
+    model: "text-embedding-3-small",
+    provider: "openai",
+    endpoint: telemetry?.endpoint ?? "openai.embeddings.try",
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    status: "ok",
+    latencyMs: Date.now() - startedAt
+  });
+  const embedding = json?.data?.[0]?.embedding;
+  return Array.isArray(embedding) ? (embedding as number[]) : null;
+}
+
+async function tryStoreIaMemory(
+  client: { query: (sql: string, params?: any[]) => Promise<any> },
+  payload: { content: string; contextType: string; relatedTaskId?: string | null },
+  telemetry?: TelemetryContext & { agent?: string; endpoint?: string }
+) {
+  try {
+    const embedding = await tryEmbedText(payload.content, telemetry);
+    if (!embedding) return;
+    await client.query(
+      "INSERT INTO ia_memory (content, embedding, context_type, related_task_id, created_at) VALUES ($1, $2::vector, $3, $4, NOW())",
+      [payload.content, toVectorLiteral(embedding), payload.contextType, payload.relatedTaskId ?? null]
+    );
+  } catch (error) {
+    console.error("Falha ao registrar memória IA:", error);
+  }
+}
+
+async function embedText(content: string, telemetry?: TelemetryContext & { agent?: string; endpoint?: string }): Promise<number[]> {
+  try {
+    await enforceDailyBudgetOrThrow();
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      // Block LLM call if budget exceeded
+      throw httpError(429, "AI daily budget exceeded");
+    }
+    throw err;
+  }
+  const apiKey = await assertOpenAiKey();
+  // LLM TELEMETRY HOOK POINT
+  const startedAt = Date.now();
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input: content,
+    }),
+  });
+  if (!res.ok) {
+    await recordLlmTelemetry({
+      userId: telemetry?.userId ?? null,
+      source: telemetry?.source ?? "api",
+      agent: telemetry?.agent ?? "system",
+      model: "text-embedding-3-small",
+      provider: "openai",
+      endpoint: telemetry?.endpoint ?? "openai.embeddings",
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      status: "error",
+      latencyMs: Date.now() - startedAt
+    });
     throw httpError(502, "Falha ao gerar embedding.");
   }
   const json = await res.json();
+  const usage = json?.usage;
+  const promptTokens = Number(usage?.prompt_tokens ?? 0);
+  const completionTokens = Number(usage?.completion_tokens ?? 0);
+  const totalTokens = Number(usage?.total_tokens ?? promptTokens + completionTokens);
+  await recordLlmTelemetry({
+    userId: telemetry?.userId ?? null,
+    source: telemetry?.source ?? "api",
+    agent: telemetry?.agent ?? "system",
+    model: "text-embedding-3-small",
+    provider: "openai",
+    endpoint: telemetry?.endpoint ?? "openai.embeddings",
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    status: "ok",
+    latencyMs: Date.now() - startedAt
+  });
   const embedding = json?.data?.[0]?.embedding;
   if (!Array.isArray(embedding)) {
     throw httpError(502, "Embedding inválido.");
@@ -6585,6 +6672,7 @@ app.put("/ia/prompts/:id", async (req, res) => {
     return res.status(400).json({ message: "title, category e content são obrigatórios." });
   }
   try {
+    const telemetryContext = await resolveTelemetryContext(req);
     const pool = await getPool();
     const client = await pool.connect();
     try {
@@ -6614,7 +6702,11 @@ app.put("/ia/prompts/:id", async (req, res) => {
       );
 
       if (reembed) {
-        const embedding = await embedText(String(content));
+        const embedding = await embedText(String(content), {
+          ...telemetryContext,
+          agent: "prompt",
+          endpoint: "ia.prompts.update.reembed"
+        });
         await client.query(
           "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
           [id, String(content), toVectorLiteral(embedding), "prompt"]
@@ -6639,6 +6731,7 @@ app.post("/ia/prompts/:id/re-embed", async (req, res) => {
     return res.status(400).json({ message: "adminId é obrigatório." });
   }
   try {
+    const telemetryContext = await resolveTelemetryContext(req);
     const pool = await getPool();
     const client = await pool.connect();
     try {
@@ -6655,7 +6748,11 @@ app.post("/ia/prompts/:id/re-embed", async (req, res) => {
       if (!content.trim()) {
         return res.status(400).json({ message: "Prompt sem conteúdo." });
       }
-      const embedding = await embedText(content);
+      const embedding = await embedText(content, {
+        ...telemetryContext,
+        agent: "prompt",
+        endpoint: "ia.prompts.reembed"
+      });
       await client.query(
         "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
         [id, content, toVectorLiteral(embedding), "prompt"]
@@ -6708,6 +6805,7 @@ app.post("/ia/prompts/:id/activate-version", async (req, res) => {
     return res.status(400).json({ message: "version inválida." });
   }
   try {
+    const telemetryContext = await resolveTelemetryContext(req);
     const pool = await getPool();
     const client = await pool.connect();
     try {
@@ -6736,7 +6834,11 @@ app.post("/ia/prompts/:id/activate-version", async (req, res) => {
       if (reembed) {
         const content = storageUrl ? await readStorageText(storageUrl) : "";
         if (content.trim()) {
-          const embedding = await embedText(content);
+          const embedding = await embedText(content, {
+            ...telemetryContext,
+            agent: "prompt",
+            endpoint: "ia.prompts.activate_version.reembed"
+          });
           await client.query(
             "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
             [id, content, toVectorLiteral(embedding), "prompt"]
@@ -6835,6 +6937,7 @@ app.post("/ia/prompts/import", async (req, res) => {
       return res.status(400).json({ message: "Arquivo ZIP não encontrado." });
     }
     try {
+      const telemetryContext = await resolveTelemetryContext(req);
       const pool = await getPool();
       const client = await pool.connect();
       try {
@@ -6887,7 +6990,11 @@ app.post("/ia/prompts/import", async (req, res) => {
               "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
               [promptId, 1, versionedUrl]
             );
-            const embedding = await embedText(content);
+            const embedding = await embedText(content, {
+              ...telemetryContext,
+              agent: "prompt",
+              endpoint: "ia.prompts.import"
+            });
             await client.query(
               "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
               [promptId, content, toVectorLiteral(embedding), "prompt"]
@@ -6914,7 +7021,11 @@ app.post("/ia/prompts/import", async (req, res) => {
             "INSERT INTO ia_prompt_versions (prompt_id, version, storage_url, created_at) VALUES ($1, $2, $3, NOW())",
             [promptId, nextVersion, versionedUrl]
           );
-          const embedding = await embedText(content);
+          const embedding = await embedText(content, {
+            ...telemetryContext,
+            agent: "prompt",
+            endpoint: "ia.prompts.import"
+          });
           await client.query(
             "INSERT INTO ia_memory (prompt_id, content, embedding, context_type, created_at) VALUES ($1, $2, $3::vector, $4, NOW())",
             [promptId, content, toVectorLiteral(embedding), "prompt"]
@@ -7379,6 +7490,7 @@ app.post("/ia/chat", async (req, res) => {
     return res.status(400).json({ message: "message inválida ou muito longa." });
   }
   try {
+    const telemetryContext = await resolveTelemetryContext(req);
     assertRateLimit(`ia:chat:${adminId}`, IA_RATE_LIMITS.chatPerHour, 60 * 60 * 1000);
     const pool = await getPool();
     const client = await pool.connect();
@@ -7473,12 +7585,16 @@ app.post("/ia/chat", async (req, res) => {
       );
       markStep("load_contexts", "ok", Date.now() - contextsStartedAt);
       const memoryStartedAt = Date.now();
-      const memoryEmbedding = await embedText(trimmed);
+      const memoryEmbedding = await embedText(trimmed, {
+        ...telemetryContext,
+        agent: "memory",
+        endpoint: "ia.chat.memory_embed"
+      });
       const memoryRows = await client.query(
         "SELECT content, context_type FROM ia_memory ORDER BY embedding <=> $1::vector ASC LIMIT 3",
         [toVectorLiteral(memoryEmbedding)]
       );
-      markStep("retrieve_vector_memory", "ok", Date.now() - memoryStartedAt, Math.round(trimmed.length / 4));
+      markStep("retrieve_vector_memory", "ok", Date.now() - memoryStartedAt, 0);
 
       const systemParts: string[] = [];
       if (orchestrator?.storage_url) {
@@ -7504,6 +7620,8 @@ app.post("/ia/chat", async (req, res) => {
       const systemContext = systemParts.join("\n\n");
 
       const apiKey = await assertOpenAiKey();
+      // LLM TELEMETRY HOOK POINT
+      const chatStartedAt = Date.now();
       const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -7521,12 +7639,43 @@ app.post("/ia/chat", async (req, res) => {
         }),
       });
       if (!chatRes.ok) {
+        await recordLlmTelemetry({
+          userId: telemetryContext.userId,
+          source: telemetryContext.source,
+          agent: orchestrator?.name ?? "hk-ia",
+          model: "gpt-4o-mini",
+          provider: "openai",
+          endpoint: "ia.chat",
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          status: "error",
+          latencyMs: Date.now() - chatStartedAt,
+          client
+        });
         throw httpError(502, "Falha ao consultar OpenAI.");
       }
       const chatJson = await chatRes.json();
+      const usage = chatJson?.usage;
+      const promptTokens = Number(usage?.prompt_tokens ?? 0);
+      const completionTokens = Number(usage?.completion_tokens ?? 0);
+      const totalTokens = Number(usage?.total_tokens ?? promptTokens + completionTokens);
+      await recordLlmTelemetry({
+        userId: telemetryContext.userId,
+        source: telemetryContext.source,
+        agent: orchestrator?.name ?? "hk-ia",
+        model: "gpt-4o-mini",
+        provider: "openai",
+        endpoint: "ia.chat",
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        status: "ok",
+        latencyMs: Date.now() - chatStartedAt,
+        client
+      });
       const assistantMessage = chatJson?.choices?.[0]?.message?.content ?? "";
-      const estimatedTokens = Math.round((systemContext.length + trimmed.length + assistantMessage.length) / 4);
-      markStep("execute_agent", "ok", 0, estimatedTokens);
+      markStep("execute_agent", "ok", 0, totalTokens);
       await client.query(
         "INSERT INTO ia_messages (conversation_id, role, content, created_at) VALUES ($1, $2, $3, NOW())",
         [convoId, "assistant", assistantMessage]
@@ -7539,11 +7688,19 @@ app.post("/ia/chat", async (req, res) => {
       await tryStoreIaMemory(client, {
         content: trimmed,
         contextType: "chat_user",
+      }, {
+        ...telemetryContext,
+        agent: "memory",
+        endpoint: "ia.chat.memory_store"
       });
       if (assistantMessage) {
         await tryStoreIaMemory(client, {
           content: assistantMessage,
           contextType: "chat_assistant",
+        }, {
+          ...telemetryContext,
+          agent: "memory",
+          endpoint: "ia.chat.memory_store"
         });
       }
       markStep("store_memory", "ok", 0);
@@ -7562,7 +7719,7 @@ app.post("/ia/chat", async (req, res) => {
           JSON.stringify(flowOrdered),
           JSON.stringify([]),
           memoryRows.rows.length,
-          estimatedTokens,
+          totalTokens,
           executionTime,
           "success",
         ]
@@ -7617,7 +7774,12 @@ app.post("/ia/memory", async (req, res) => {
     return res.status(400).json({ message: "content inválido ou muito longo." });
   }
   try {
-    const embedding = await embedText(trimmed);
+    const telemetryContext = await resolveTelemetryContext(req);
+    const embedding = await embedText(trimmed, {
+      ...telemetryContext,
+      agent: "memory",
+      endpoint: "ia.memory.insert"
+    });
     const pool = await getPool();
     const client = await pool.connect();
     try {
@@ -7648,7 +7810,12 @@ app.post("/ia/memory/search", async (req, res) => {
   }
   const limit = Math.max(1, Math.min(Number(topK ?? 5), IA_MEMORY_MAX_TOPK));
   try {
-    const embedding = await embedText(trimmed);
+    const telemetryContext = await resolveTelemetryContext(req);
+    const embedding = await embedText(trimmed, {
+      ...telemetryContext,
+      agent: "memory",
+      endpoint: "ia.memory.search"
+    });
     const pool = await getPool();
     const client = await pool.connect();
     try {
@@ -8172,7 +8339,7 @@ app.post("/hktech-ai/run", async (req, res) => {
     const sonarConfig = getSonarConfig();
     const result = await runAutonomousFix({
       sonar: sonarConfig,
-      openai: process.env.OPENAI_API_KEY ? { apiKey: process.env.OPENAI_API_KEY } : undefined,
+      openai: OPENAI_API_KEY.value() ? { apiKey: OPENAI_API_KEY.value() } : undefined,
       maxIssues: maxTasksPerRun,
     });
     const summary = await fetchSonarSummary(sonarConfig);

@@ -1,3 +1,6 @@
+import { recordLlmTelemetry } from "./llmTelemetry.service";
+import { enforceDailyBudgetOrThrow, BudgetExceededError } from "./costGuard.service";
+
 type FetchLike = (input: string, init?: any) => Promise<any>;
 
 export type SonarIssue = {
@@ -227,6 +230,15 @@ export async function generatePatch(
   params: { issue: SonarIssue; filePath: string; fileContent: string },
   fetchImpl: FetchLike = fetch as FetchLike
 ): Promise<string> {
+  try {
+    await enforceDailyBudgetOrThrow();
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      // Block LLM call if budget exceeded
+      throw Object.assign(new Error("AI daily budget exceeded"), { status: 429 });
+    }
+    throw err;
+  }
   if (!config.apiKey) {
     throw new Error("OPENAI_API_KEY ausente.");
   }
@@ -245,7 +257,9 @@ export async function generatePatch(
     ],
   };
 
+  const startedAt = Date.now();
   const res = await fetchImpl("https://api.openai.com/v1/chat/completions", {
+    // LLM TELEMETRY HOOK POINT
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -255,9 +269,39 @@ export async function generatePatch(
   });
 
   if (!res.ok) {
+    await recordLlmTelemetry({
+      userId: null,
+      source: "internal",
+      agent: "sonar-autofix",
+      model: body.model,
+      provider: "openai",
+      endpoint: "sonar.generate_patch",
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      status: "error",
+      latencyMs: Date.now() - startedAt
+    });
     throw new Error("Falha ao gerar patch via OpenAI.");
   }
   const json = await res.json();
+  const usage = json?.usage;
+  const promptTokens = Number(usage?.prompt_tokens ?? 0);
+  const completionTokens = Number(usage?.completion_tokens ?? 0);
+  const totalTokens = Number(usage?.total_tokens ?? promptTokens + completionTokens);
+  await recordLlmTelemetry({
+    userId: null,
+    source: "internal",
+    agent: "sonar-autofix",
+    model: body.model,
+    provider: "openai",
+    endpoint: "sonar.generate_patch",
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    status: "ok",
+    latencyMs: Date.now() - startedAt
+  });
   return json?.choices?.[0]?.message?.content ?? "";
 }
 
