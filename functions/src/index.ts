@@ -513,11 +513,13 @@ async function logHKTechAiReport(payload: {
   }
 }
 
+
+function getGithubApiToken() {
+  return GITHUB_API_TOKEN.value() || GITHUB_TOKEN.value() || "";
+}
+
 app.get("/ci/status", async (_req, res) => {
   try {
-    function getGithubApiToken() {
-      return GITHUB_API_TOKEN.value() || GITHUB_TOKEN.value() || "";
-    }
     const token = getGithubApiToken();
     if (!token) {
       throw httpError(500, "Token GitHub ausente.");

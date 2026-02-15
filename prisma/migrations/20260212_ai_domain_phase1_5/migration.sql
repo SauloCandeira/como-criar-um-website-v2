@@ -1,11 +1,5 @@
 -- AI domain expansion (Phase 1-5)
--- Non-destructive: new tables + nullable columns + indexes
-
-BEGIN;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS vector;
-
+-- Non-destructive: new tables + nullable columns + inde
 -- IA Conversations
 CREATE TABLE IF NOT EXISTS ia_conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,4 +79,3 @@ END $$;
 CREATE INDEX IF NOT EXISTS project_tasks_linked_agent_idx ON project_tasks (linked_agent_id);
 CREATE INDEX IF NOT EXISTS project_tasks_specialist_type_idx ON project_tasks (specialist_type);
 
-COMMIT;

@@ -728,7 +728,9 @@ const Admin: React.FC = () => {
     setAiReportsLoading(true);
     setAiReportsError(null);
     try {
-      const data = await listIaReports(effectiveAdminId);
+      const user = auth.currentUser;
+      const token = user ? await user.getIdToken() : '';
+      const data = await listIaReports(effectiveAdminId, token);
       setAiReports(data);
     } catch (error) {
       console.error('Erro ao buscar AI reports:', error);

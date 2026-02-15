@@ -43,7 +43,17 @@ const CronsPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(cronUrl);
+      // Obter token do usuário autenticado
+      const user = (window as any).auth?.currentUser;
+      let token = '';
+      if (user && user.getIdToken) {
+        token = await user.getIdToken();
+      }
+      const res = await fetch(cronUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (!res.ok) {
         throw new Error('Falha ao carregar crons.');
       }
